@@ -21,18 +21,26 @@ async function main() {
         // 3. Initialize Sync Manager
         const syncManager = new SyncManager();
         
-        // 4. Handle initial and scheduled synchronization
+        // 4. Handle initial synchronization (Sync on Startup)
         if (config.syncSettings.syncOnStartup) {
             console.log("Starting sync on startup...");
             await syncManager.startSync();
         }
 
+        // 5. Handle scheduled synchronization (Auto Sync)
         if (config.syncSettings.autoSyncEnabled) {
-            const intervalMs = config.syncSettings.syncIntervalMinutes * 60 * 1000;
-            console.log(`Auto sync enabled. Running every ${config.syncSettings.syncIntervalMinutes} minutes.`);
-            // TODO: Implement actual scheduling logic (e.g., using setInterval)
-            // Example: setInterval(() => syncManager.startSync(), intervalMs);
+            const intervalMinutes = config.syncSettings.syncIntervalMinutes;
+            const intervalMs = intervalMinutes * 60 * 1000;
+            console.log(`Auto sync enabled. Running every ${intervalMinutes} minutes.`);
+            
+            // Start periodic synchronization
+            setInterval(() => {
+                console.log(`[Auto Sync] Triggered sync at interval of ${intervalMinutes} minutes.`);
+                syncManager.startSync();
+            }, intervalMs);
         }
+
+        // TODO: Implement System Tray (for Electron/UI) to handle app shutdown and display status.
 
     } catch (error) {
         console.error("Fatal error during application startup:", error.message);

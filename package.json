@@ -1,0 +1,24 @@
+{
+    "name": "bridge-ground",
+    "version": "1.0.0",
+    "description": "A data synchronization and REST API proxy application for Mall data.",
+    "main": "src/main.js",
+    "scripts": {
+      "start": "node src/main.js"
+    },
+    "keywords": [
+      "data-sync",
+      "rest-api",
+      "proxy",
+      "cross-platform"
+    ],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+      "sqlite3": "^5.1.7",
+      "axios": "^1.6.8",
+      "xml2js": "^0.6.2",
+      "express": "^4.19.2",
+      "crypto": "^1.0.1"
+    }
+  }

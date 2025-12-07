@@ -1,7 +1,7 @@
 // src/sync/SyncManager.js
 const ApiClient = require('./ApiClient');
 const XmlParser = require('./XmlParser');
-const DatabaseManager = require('../db/DatabaseManager');
+const DatabaseManager = require('../src/db/DatabaseManager');
 const { getAppDataPath, downloadFile } = require('../utils/FileUtil');
 const path = require('path');
 const ConfigManager = require('../config/ConfigManager');

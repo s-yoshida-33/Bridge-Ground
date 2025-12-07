@@ -142,38 +142,56 @@ class SyncManager {
     // --- Upsert Logic ---
     
     async genericUpsert(tableName, idField, items) {
-        for (const item of items) {
-            const idValue = item[idField];
-            if (!idValue) continue;
+        if (!items || items.length === 0) return;
+        
+        // better-sqlite3 transaction support
+        const runTransaction = this.dbManager.db.transaction((itemsToUpsert) => {
+            for (const item of itemsToUpsert) {
+                const idValue = item[idField];
+                if (!idValue) continue;
 
-            // Remove remote URL fields before DB operation
-            const itemToSave = Object.keys(item).reduce((acc, key) => {
-                if (!key.endsWith('_remote_url')) {
-                    acc[key.replace(/([A-Z])/g, "_$1").toLowerCase()] = item[key];
+                // Remove remote URL fields before DB operation
+                // Note: The key conversion logic here assumes item keys are camelCase and need snake_case conversion,
+                // BUT XmlParser output keys might already be in a mix or snake_case depending on implementation.
+                // Assuming XmlParser outputs keys that match DB columns or simple properties.
+                // Let's trust the current mapping logic but be careful.
+                const itemToSave = Object.keys(item).reduce((acc, key) => {
+                    if (!key.endsWith('_remote_url')) {
+                         // Simple camelCase to snake_case converter, might need refinement if keys are already snake_case
+                        const dbKey = key.replace(/([A-Z])/g, "_$1").toLowerCase();
+                        acc[dbKey] = item[key];
+                    }
+                    return acc;
+                }, {});
+
+                const fields = Object.keys(itemToSave).filter(key => key !== idField);
+                const values = fields.map(field => itemToSave[field]);
+                
+                // Check existence synchronously
+                const existingRow = this.dbManager.db.prepare(`SELECT ${idField} FROM ${tableName} WHERE ${idField} = ?`).get(idValue);
+
+                if (existingRow) {
+                    // UPDATE
+                    const setClauses = fields.map(field => `${field} = ?`).join(', ');
+                    const updateValues = values.concat([idValue]);
+                    const sql = `UPDATE ${tableName} SET ${setClauses} WHERE ${idField} = ?`;
+                    this.dbManager.db.prepare(sql).run(...updateValues);
+                } else {
+                    // INSERT
+                    const insertFields = Object.keys(itemToSave);
+                    const placeholders = insertFields.map(() => '?').join(', ');
+                    const insertValues = insertFields.map(field => itemToSave[field]);
+                    const sql = `INSERT INTO ${tableName} (${insertFields.join(', ')}) VALUES (${placeholders})`;
+                    this.dbManager.db.prepare(sql).run(...insertValues);
                 }
-                return acc;
-            }, {});
-
-            const fields = Object.keys(itemToSave).filter(key => key !== idField);
-            const setClauses = fields.map(field => `${field} = ?`).join(', ');
-            const values = fields.map(field => itemToSave[field]);
-            
-            const existingRow = await this.dbManager.all(`SELECT ${idField} FROM ${tableName} WHERE ${idField} = ?`, [idValue]);
-
-            if (existingRow.length > 0) {
-                // UPDATE
-                const updateValues = values.concat([idValue]);
-                const sql = `UPDATE ${tableName} SET ${setClauses} WHERE ${idField} = ?`;
-                await this.dbManager.run(sql, updateValues);
-            } else {
-                // INSERT
-                const insertFields = Object.keys(itemToSave);
-                const placeholders = insertFields.map(() => '?').join(', ');
-                const insertValues = insertFields.map(field => itemToSave[field]);
-
-                const sql = `INSERT INTO ${tableName} (${insertFields.join(', ')}) VALUES (${placeholders})`;
-                await this.dbManager.run(sql, insertValues);
             }
+        });
+
+        try {
+            runTransaction(items);
+        } catch (error) {
+            console.error(`Error during batch upsert to ${tableName}:`, error);
+            throw error;
         }
     }
 

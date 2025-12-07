@@ -1,10 +1,10 @@
 // src/db/DatabaseManager.js
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const { getAppDataPath } = require('../utils/FileUtil');
 
-// Define the database file path based on BridgeWebPopper's specification
+// Define the database file path
 const APP_NAME = 'BridgeGround';
 const DB_FILE_NAME = 'bridgeground.db';
 const DB_DIR = path.join(getAppDataPath(), 'TTI', APP_NAME, 'api');
@@ -13,7 +13,7 @@ const SETUP_SQL_PATH = path.join(__dirname, 'setup.sql');
 
 /**
  * @class DatabaseManager
- * Manages the SQLite database connection and initialization.
+ * Manages the SQLite database connection and initialization using better-sqlite3.
  */
 class DatabaseManager {
     constructor() {
@@ -24,23 +24,21 @@ class DatabaseManager {
      * @description Connects to the SQLite database. Creates the directory if it doesn't exist.
      * @returns {Promise<void>}
      */
-    connect() {
-        return new Promise((resolve, reject) => {
-            // Ensure the directory exists
-            if (!fs.existsSync(DB_DIR)) {
-                fs.mkdirSync(DB_DIR, { recursive: true });
-            }
+    async connect() {
+        // Ensure the directory exists
+        if (!fs.existsSync(DB_DIR)) {
+            fs.mkdirSync(DB_DIR, { recursive: true });
+        }
 
+        try {
             // Open the database connection
-            this.db = new sqlite3.Database(DB_PATH, (err) => {
-                if (err) {
-                    console.error("Could not connect to database:", err.message);
-                    return reject(err);
-                }
-                console.log('Connected to the SQLite database:', DB_PATH);
-                resolve();
-            });
-        });
+            // better-sqlite3 opens the database synchronously
+            this.db = new Database(DB_PATH);
+            console.log('Connected to the SQLite database:', DB_PATH);
+        } catch (err) {
+            console.error("Could not connect to database:", err.message);
+            throw err;
+        }
     }
 
     /**
@@ -48,13 +46,12 @@ class DatabaseManager {
      */
     close() {
         if (this.db) {
-            this.db.close((err) => {
-                if (err) {
-                    console.error("Error closing database:", err.message);
-                } else {
-                    console.log("Database connection closed.");
-                }
-            });
+            try {
+                this.db.close();
+                console.log("Database connection closed.");
+            } catch (err) {
+                console.error("Error closing database:", err.message);
+            }
         }
     }
 
@@ -69,19 +66,11 @@ class DatabaseManager {
 
         try {
             const sql = fs.readFileSync(SETUP_SQL_PATH, 'utf8');
-            // SQLite driver runs sequential operations when using db.exec()
-            return new Promise((resolve, reject) => {
-                this.db.exec(sql, (err) => {
-                    if (err) {
-                        console.error("Error initializing database schema:", err.message);
-                        return reject(err);
-                    }
-                    console.log("Database schema initialized successfully.");
-                    resolve();
-                });
-            });
+            // better-sqlite3 supports executing multiple statements
+            this.db.exec(sql);
+            console.log("Database schema initialized successfully.");
         } catch (error) {
-            console.error("Error reading setup.sql file:", error);
+            console.error("Error initializing database schema:", error);
             throw error;
         }
     }
@@ -92,20 +81,19 @@ class DatabaseManager {
      * @param {Array<any>} params - The parameters to bind to the statement.
      * @returns {Promise<object>} A promise resolving to the result of the query execution.
      */
-    run(sql, params = []) {
+    async run(sql, params = []) {
         if (!this.db) {
             throw new Error("Database not connected.");
         }
-        return new Promise((resolve, reject) => {
-            this.db.run(sql, params, function (err) {
-                if (err) {
-                    console.error("Database run error:", err.message);
-                    return reject(err);
-                }
-                // 'this' refers to the statement object in SQLite, providing lastID and changes
-                resolve({ id: this.lastID, changes: this.changes });
-            });
-        });
+        try {
+            const stmt = this.db.prepare(sql);
+            const info = stmt.run(...params);
+            // info contains changes and lastInsertRowid
+            return { id: info.lastInsertRowid, changes: info.changes };
+        } catch (err) {
+            console.error("Database run error:", err.message);
+            throw err;
+        }
     }
 
     /**
@@ -114,22 +102,21 @@ class DatabaseManager {
      * @param {Array<any>} params - The parameters to bind to the statement.
      * @returns {Promise<Array<object>>} A promise resolving to an array of result rows.
      */
-    all(sql, params = []) {
+    async all(sql, params = []) {
         if (!this.db) {
             throw new Error("Database not connected.");
         }
-        return new Promise((resolve, reject) => {
-            this.db.all(sql, params, (err, rows) => {
-                if (err) {
-                    console.error("Database all error:", err.message);
-                    return reject(err);
-                }
-                resolve(rows);
-            });
-        });
+        try {
+            const stmt = this.db.prepare(sql);
+            const rows = stmt.all(...params);
+            return rows;
+        } catch (err) {
+            console.error("Database all error:", err.message);
+            throw err;
+        }
     }
     
-    // TODO: Implement upsert logic for each table (e.g., upsertShops, upsertEventNews)
+    // TODO: Implement upsert logic for each table
 }
 
 module.exports = DatabaseManager;

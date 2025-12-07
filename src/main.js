@@ -6,6 +6,7 @@ const SyncManager = require('./sync/SyncManager');
 const HttpServer = require('./server/HttpServer');
 // Assuming FileUtil is implemented and includes getAppDataPath
 // const { getAppDataPath } = require('./utils/FileUtil'); 
+const DatabaseManager = require('./db/DatabaseManager');
 
 let mainWindow;
 let appTray;
@@ -62,7 +63,7 @@ function createMainWindow() {
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
-        icon: path.join(__dirname, 'ui/icon.png'), // Placeholder icon
+        icon: path.join(__dirname, 'assets/icon.ico'), // Correct path to icon
         show: false, // Start hidden to respect the system tray paradigm
         webPreferences: {
             preload: path.join(__dirname, 'ui/preload.js'), // Secure way to expose APIs to renderer
@@ -76,49 +77,67 @@ function createMainWindow() {
 
     // Handle closing the window (Minimize to tray)
     mainWindow.on('close', (event) => {
-        if (!app.isQuiting) {
+        // If tray exists, minimize to tray instead of quitting, unless explicit quit
+        if (!app.isQuiting && appTray) {
             event.preventDefault();
             mainWindow.hide(); // Hide instead of closing
             event.returnValue = false;
         }
+        // If no tray, let it close naturally (which quits the app on non-macOS usually)
     });
 
     // Show the window only when content is ready (avoids flash)
     mainWindow.on('ready-to-show', () => {
         // Can be changed to mainWindow.show() if user prefers startup visibility
-        // mainWindow.show(); 
+        mainWindow.show(); 
     });
 }
 
 function createTray() {
     // Create the system tray icon
-    const iconPath = path.join(__dirname, 'ui/tray_icon.png'); // Placeholder icon
-    appTray = new Tray(iconPath);
-    appTray.setToolTip('BridgeGround Data Sync Manager');
-
-    const contextMenu = Menu.buildFromTemplate([
-        { label: '表示 (Show)', click: () => mainWindow.show() },
-        { label: '非表示 (Hide)', click: () => mainWindow.hide() },
-        { type: 'separator' },
-        { 
-            label: '終了 (Quit)', 
-            click: () => {
-                app.isQuiting = true; // Flag to allow the 'close' handler to pass
-                if (httpServer) {
-                    httpServer.stop(); // Stop the HTTP server gracefully
-                }
-                app.quit();
-            }
-        }
-    ]);
+    const iconPath = path.join(__dirname, 'assets/icon.ico'); // Correct path to icon
     
-    // Left click: Toggle window visibility (System Tray Icon Operation)
-    appTray.on('click', () => {
-        mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
-    });
+    // Check if icon exists to avoid crash
+    const fs = require('fs');
+    if (!fs.existsSync(iconPath)) {
+        console.warn("Tray icon not found at:", iconPath);
+        // If no icon, we cannot create a tray comfortably without a fallback.
+        // For now, we'll skip tray creation if icon is missing, but this means
+        // minimizing to tray won't work as expected (no way to restore).
+        // So we should enforce window visibility logic adjustments if needed.
+        return;
+    }
 
-    // Right click: Show context menu (System Tray Icon Operation)
-    appTray.setContextMenu(contextMenu);
+    try {
+        appTray = new Tray(iconPath);
+        appTray.setToolTip('BridgeGround');
+
+        const contextMenu = Menu.buildFromTemplate([
+            { label: '表示 (Show)', click: () => mainWindow.show() },
+            { label: '非表示 (Hide)', click: () => mainWindow.hide() },
+            { type: 'separator' },
+            { 
+                label: '終了 (Quit)', 
+                click: () => {
+                    app.isQuiting = true; // Flag to allow the 'close' handler to pass
+                    if (httpServer) {
+                        httpServer.stop(); // Stop the HTTP server gracefully
+                    }
+                    app.quit();
+                }
+            }
+        ]);
+        
+        // Left click: Toggle window visibility (System Tray Icon Operation)
+        appTray.on('click', () => {
+            mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
+        });
+
+        // Right click: Show context menu (System Tray Icon Operation)
+        appTray.setContextMenu(contextMenu);
+    } catch (error) {
+        console.error("Failed to create tray:", error);
+    }
 }
 
 

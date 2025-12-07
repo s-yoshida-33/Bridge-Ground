@@ -29,12 +29,19 @@ async function initializeCore() {
         httpServer.start();
 
         // 3. Initialize Sync Manager
-        syncManager = new SyncManager();
+        syncManager = new SyncManager((progress) => {
+            if (mainWindow) {
+                mainWindow.webContents.send('sync-progress', progress);
+            }
+        });
         
         // 4. Handle initial synchronization (Sync on Startup)
         if (config.syncSettings.syncOnStartup) {
-            console.log("Starting sync on startup...");
-            await syncManager.startSync();
+            console.log("Starting sync on startup (background mode)...");
+            // Run in background to not block UI startup
+            syncManager.startSync().catch(err => {
+                console.error("Startup sync error:", err);
+            });
         }
 
         // 5. Handle scheduled synchronization (Auto Sync)
@@ -45,7 +52,7 @@ async function initializeCore() {
             // Start periodic synchronization
             setInterval(() => {
                 console.log(`[Auto Sync] Triggered sync at interval of ${intervalMinutes} minutes.`);
-                syncManager.startSync();
+                syncManager.startSync().catch(err => console.error("Auto sync error:", err));
             }, intervalMs);
         }
 
@@ -156,26 +163,37 @@ ipcMain.handle('save-config', async (event, newConfig) => {
 
 ipcMain.handle('start-manual-sync', async () => {
     if (syncManager) {
-        // Execute manual sync
-        await syncManager.startSync(); 
-        return { success: true, message: 'Synchronization completed.' };
+        try {
+            // Execute manual sync
+            const stats = await syncManager.startSync(); 
+            return { success: true, message: 'Synchronization completed.', details: stats };
+        } catch (error) {
+            return { success: false, message: error.message };
+        }
     }
     return { success: false, message: 'Sync Manager not initialized.' };
 });
 
 ipcMain.handle('get-data-counts', async () => {
     // Helper function to fetch counts needed for the main dashboard
-    // NOTE: This requires adding a method like dbManager.getTableCount(tableName)
-    const dbManager = new DatabaseManager();
-    await dbManager.connect();
-    const counts = {
-        shops: (await dbManager.all('SELECT COUNT(*) AS count FROM shops'))[0].count,
-        shop_news: (await dbManager.all('SELECT COUNT(*) AS count FROM shop_news'))[0].count,
-        event_news: (await dbManager.all('SELECT COUNT(*) AS count FROM event_news'))[0].count,
-        specials: (await dbManager.all('SELECT COUNT(*) AS count FROM specials'))[0].count,
-    };
-    dbManager.close();
-    return counts;
+    const dbManager = new DatabaseManager(); // Use temporary instance to connect/close
+    try {
+        await dbManager.connect();
+        const counts = {
+            shops: (await dbManager.all('SELECT COUNT(*) AS count FROM shops'))[0].count,
+            shop_news: (await dbManager.all('SELECT COUNT(*) AS count FROM shop_news'))[0].count,
+            event_news: (await dbManager.all('SELECT COUNT(*) AS count FROM event_news'))[0].count,
+            specials: (await dbManager.all('SELECT COUNT(*) AS count FROM specials'))[0].count,
+            // Genres is available but not requested on UI explicitly
+        };
+        return counts;
+    } catch (error) {
+        console.error("Error fetching data counts from DB:", error);
+        // Return zeros on error to prevent UI crash
+        return { shops: 0, shop_news: 0, event_news: 0, specials: 0 };
+    } finally {
+        dbManager.close();
+    }
 });
 
 

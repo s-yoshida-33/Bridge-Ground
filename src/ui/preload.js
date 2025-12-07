@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld('bridgeApi', {
     getConfig: () => ipcRenderer.invoke('get-config'),
     saveConfig: (config) => ipcRenderer.invoke('save-config', config),
     startManualSync: () => ipcRenderer.invoke('start-manual-sync'),
-    // Expose channels for receiving sync status updates (e.g., 'sync-status-update')
+    getDataCounts: () => ipcRenderer.invoke('get-data-counts'),
+    onSyncProgress: (callback) => ipcRenderer.on('sync-progress', (event, data) => callback(data)),
 });

@@ -4,34 +4,177 @@
     <meta charset="UTF-8">
     <title>BridgeGround - データ同期管理</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Renderer.jsでトグルする基本的なスタイル */
+        body { font-family: sans-serif; padding: 20px; background-color: #f9f9f9; color: #333; }
+        #settings-view { display: none; padding: 20px; border: 1px solid #ccc; background: white; margin-top: 20px; border-radius: 8px; }
+        .input-group label { display: block; margin-top: 10px; font-weight: bold; }
+        .input-group input[type="text"], .input-group input[type="number"] { width: 100%; padding: 8px; box-sizing: border-box; }
+        #messages { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
+        .success { background-color: #e6ffe6; color: green; border: 1px solid green; }
+        .error { background-color: #ffe6e6; color: red; border: 1px solid red; }
+        
+        /* Dashboard Styles */
+        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2, h3 { color: #2c3e50; }
+        
+        /* Progress Bar Styles */
+        .progress-wrapper {
+            margin-top: 15px;
+            display: none; /* Hidden by default */
+        }
+
+        .progress-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+        .progress-bar {
+            width: 0%;
+            height: 20px;
+            background-color: #4CAF50;
+            background-image: linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent);
+            background-size: 1rem 1rem;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+            font-size: 11px;
+            transition: width 0.3s ease-in-out;
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+        
+        .progress-bar.sub {
+            background-color: #2196F3; /* Blue for sub tasks */
+            height: 16px;
+            line-height: 16px;
+            font-size: 10px;
+        }
+
+        @keyframes progress-bar-stripes {
+            0% { background-position: 1rem 0; }
+            100% { background-position: 0 0; }
+        }
+        .sync-status-text {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 10px;
+            padding-left: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        #header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        button { cursor: pointer; padding: 8px 16px; border: none; border-radius: 4px; background-color: #007bff; color: white; transition: background 0.2s; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #save-settings-button { background-color: #28a745; }
+        #save-settings-button:hover { background-color: #218838; }
+    </style>
 </head>
 <body>
     <div id="header">
         <h1>BridgeGround</h1>
-        <button id="settings-button">⚙️ 設定</button>
+        <button id="main-button" style="display:none;">メイン</button>
+        <button id="settings-button">設定</button>
     </div>
     
     <div id="main-view">
-        <h2>📊 データ同期ステータス</h2>
-        <div id="sync-status">同期していません。</div>
-        <div id="sync-progress"></div>
+        <div class="card">
+            <h3>データ同期ステータス</h3>
+            <div style="display: flex; gap: 20px; align-items: flex-start;">
+                <div style="flex: 1;">
+                    <p>サーバーから最新のデータを取得し、ローカルデータベースを更新します。</p>
+                    <button id="sync-button" style="padding: 12px 24px; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">
+                        <span></span> 今すぐ同期を実行
+                    </button>
+                    
+                    <div id="sync-progress-wrapper" class="progress-wrapper">
+                        <!-- Main Progress -->
+                        <div class="sync-status-text" id="main-status-text">全体の進捗...</div>
+                        <div class="progress-container">
+                            <div id="main-progress-bar" class="progress-bar">0%</div>
+                        </div>
+                        
+                        <!-- Sub Progress -->
+                        <div class="sync-status-text" id="sub-status-text" style="margin-top: 8px;">詳細...</div>
+                        <div class="progress-container">
+                            <div id="sub-progress-bar" class="progress-bar sub">0%</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="flex: 0 0 250px; background: #f1f8ff; padding: 15px; border-radius: 8px;">
+                    <h4 style="margin-top: 0;">現在のデータ件数</h4>
+                    <ul style="padding-left: 20px; margin-bottom: 0;">
+                        <li>店舗: <strong id="count-shops">-</strong></li>
+                        <li>ショップニュース: <strong id="count-shop-news">-</strong></li>
+                        <li>イベントニュース: <strong id="count-event-news">-</strong></li>
+                        <li>特集/セール: <strong id="count-specials">-</strong></li>
+                        <!-- <li>セール: <strong id="count-sales">-</strong></li> -->
+                    </ul>
+                </div>
+            </div>
+        </div>
 
-        <button id="sync-button">🚀 Sync (手動同期)</button>
+        <div class="card">
+            <h3>サーバー接続情報</h3>
+            <p style="margin-bottom: 8px;">ローカルAPIエンドポイント (Base URL):</p>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="local-api-url" readonly style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; color: #555;">
+                <button id="copy-api-url-button" style="padding: 8px 12px; font-size: 0.9em; background-color: #6c757d;">コピー</button>
+            </div>
+            <p id="copy-message" style="margin-top: 5px; color: green; font-size: 0.9em; display: none;">コピーしました！</p>
+        </div>
+    </div>
+
+    <div id="settings-view">
+        <h2>設定</h2>
+        <div id="messages"></div>
+
+        <h3>API 設定</h3>
+        <div class="input-group">
+            <label for="api-url">API エンドポイント (Base URL):</label>
+            <input type="text" id="api-url" placeholder="https://example.com/api" required>
+        </div>
+        <div class="input-group">
+            <label for="api-username">ユーザー名:</label>
+            <input type="text" id="api-username">
+        </div>
+        <div class="input-group">
+            <label for="api-password">パスワード:</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="password" id="api-password" placeholder="変更する場合のみ入力" style="flex: 1;" disabled>
+                <button id="toggle-password-button" type="button" style="padding: 0 10px; background-color: #6c757d;">編集</button>
+            </div>
+            <small>※パスワードは暗号化されて保存されます。</small>
+        </div>
+
+        <h3>サーバーと同期設定</h3>
+        <div class="input-group">
+            <label for="server-port">HTTP サーバーポート:</label>
+            <input type="number" id="server-port-input" min="1024" max="65535" required>
+            <small>（1024〜65535の範囲）</small>
+        </div>
         
-        <p id="next-sync-time">次の自動同期まで: -</p>
+        <div class="input-group">
+            <label>
+                <input type="checkbox" id="auto-sync-enabled"> 自動同期を有効にする
+            </label>
+        </div>
+        <div class="input-group">
+            <label for="sync-interval">同期間隔 (分):</label>
+            <input type="number" id="sync-interval" min="1" required>
+        </div>
+        <div class="input-group">
+            <label>
+                <input type="checkbox" id="sync-on-startup"> アプリ起動時に自動同期を実行
+            </label>
+        </div>
         
-        <h3>データ件数</h3>
-        <ul id="data-counts">
-            <li>ショップ: <span id="count-shops">0</span>件</li>
-            <li>ショップニュース: <span id="count-shop-news">0</span>件</li>
-            <li>イベントニュース: <span id="count-event-news">0</span>件</li>
-            <li>特集: <span id="count-specials">0</span>件</li>
-            <li>セール: <span id="count-sales">0</span>件</li>
-        </ul>
-        
-        <h3>HTTPサーバー</h3>
-        <p>稼働中: <span id="server-status">ON</span> (<span id="server-port">8080</span>)</p>
-        <p>APIエンドポイント例: <a id="api-link" href="http://localhost:8080/api/shops" target="_blank">http://localhost:<span id="server-port-link">8080</span>/api/shops</a></p>
+        <button id="save-settings-button" style="margin-top: 20px; padding: 10px 20px;">設定を保存</button>
     </div>
 
     <script src="renderer.js"></script>

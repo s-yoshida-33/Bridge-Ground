@@ -1,6 +1,6 @@
 {
     "name": "bridge-ground",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "A data synchronization and REST API proxy application for Mall data.",
     "main": "src/main.js",
     "scripts": {

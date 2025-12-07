@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>BridgeGround - データ同期管理</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="header">
+        <h1>BridgeGround</h1>
+        <button id="settings-button">⚙️ 設定</button>
+    </div>
+    
+    <div id="main-view">
+        <h2>📊 データ同期ステータス</h2>
+        <div id="sync-status">同期していません。</div>
+        <div id="sync-progress"></div>
+
+        <button id="sync-button">🚀 Sync (手動同期)</button>
+        
+        <p id="next-sync-time">次の自動同期まで: -</p>
+        
+        <h3>データ件数</h3>
+        <ul id="data-counts">
+            <li>ショップ: <span id="count-shops">0</span>件</li>
+            <li>ショップニュース: <span id="count-shop-news">0</span>件</li>
+            <li>イベントニュース: <span id="count-event-news">0</span>件</li>
+            <li>特集: <span id="count-specials">0</span>件</li>
+            <li>セール: <span id="count-sales">0</span>件</li>
+        </ul>
+        
+        <h3>HTTPサーバー</h3>
+        <p>稼働中: <span id="server-status">ON</span> (<span id="server-port">8080</span>)</p>
+        <p>APIエンドポイント例: <a id="api-link" href="http://localhost:8080/api/shops" target="_blank">http://localhost:<span id="server-port-link">8080</span>/api/shops</a></p>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

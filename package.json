@@ -4,7 +4,7 @@
     "description": "A data synchronization and REST API proxy application for Mall data.",
     "main": "src/main.js",
     "scripts": {
-      "start": "node src/main.js"
+      "start": "electron src/main.js"
     },
     "keywords": [
       "data-sync",
@@ -19,6 +19,7 @@
       "axios": "^1.6.8",
       "xml2js": "^0.6.2",
       "express": "^4.19.2",
-      "crypto": "^1.0.1"
+      "crypto": "^1.0.1",
+      "electron": "^28.0.0"
     }
   }

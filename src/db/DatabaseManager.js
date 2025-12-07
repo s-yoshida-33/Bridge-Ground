@@ -115,8 +115,84 @@ class DatabaseManager {
             throw err;
         }
     }
-    
-    // TODO: Implement upsert logic for each table
+
+    /**
+     * Creates a temporary table with the same schema as the original table.
+     * @param {string} originalTable The name of the existing table
+     * @param {string} tempTable The name of the temporary table to create
+     */
+    async createTempTable(originalTable, tempTable) {
+        if (!this.db) throw new Error("Database not connected.");
+        
+        // Get the schema of the original table
+        const row = this.db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name=?`).get(originalTable);
+        
+        if (!row || !row.sql) {
+            throw new Error(`Table ${originalTable} does not exist.`);
+        }
+
+        // Replace the table name in the CREATE statement
+        // Handle "CREATE TABLE tableName" and "CREATE TABLE IF NOT EXISTS tableName"
+        let createSql = row.sql;
+        
+        // Simple regex replacement might be risky if table name is a substring of column names, 
+        // but for "CREATE TABLE [IF NOT EXISTS] name" it should be at the start.
+        // Let's use a robust approach by replacing the first occurrence of the table name after "TABLE"
+        
+        // Regex to find "TABLE [IF NOT EXISTS] originalTable"
+        const regex = new RegExp(`TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?("?${originalTable}"?)`, 'i');
+        const match = createSql.match(regex);
+        
+        if (match) {
+            // Replace the matched table name with temp table name
+            // We need to be careful to reconstruct the string correctly
+            const matchString = match[0]; // e.g. "TABLE shops" or "TABLE IF NOT EXISTS shops"
+            const replacedString = matchString.replace(match[1], tempTable);
+            createSql = createSql.replace(matchString, replacedString);
+        } else {
+             // Fallback: simple replace if regex fails (though it shouldn't for standard SQLite dump)
+             createSql = createSql.replace(originalTable, tempTable);
+        }
+
+        this.db.exec(`DROP TABLE IF EXISTS ${tempTable}`);
+        this.db.exec(createSql);
+        console.log(`Created temporary table: ${tempTable}`);
+    }
+
+    /**
+     * Swaps the temporary table with the original table using a transaction.
+     * @param {string} tempTable 
+     * @param {string} originalTable 
+     */
+    async swapTable(tempTable, originalTable) {
+        if (!this.db) throw new Error("Database not connected.");
+
+        const transaction = this.db.transaction(() => {
+            // 1. Drop old backup if exists
+            this.db.prepare(`DROP TABLE IF EXISTS ${originalTable}_old`).run();
+            
+            // 2. Rename current to backup (if it exists)
+            // Check if original table exists first to avoid error
+            const exists = this.db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`).get(originalTable);
+            if (exists) {
+                this.db.prepare(`ALTER TABLE ${originalTable} RENAME TO ${originalTable}_old`).run();
+            }
+            
+            // 3. Rename temp to original
+            this.db.prepare(`ALTER TABLE ${tempTable} RENAME TO ${originalTable}`).run();
+            
+            // 4. Drop backup
+            this.db.prepare(`DROP TABLE IF EXISTS ${originalTable}_old`).run();
+        });
+
+        try {
+            transaction();
+            console.log(`Swapped table ${tempTable} to ${originalTable}`);
+        } catch (error) {
+            console.error(`Failed to swap tables ${tempTable} -> ${originalTable}:`, error);
+            throw error;
+        }
+    }
 }
 
 module.exports = DatabaseManager;

@@ -4,7 +4,6 @@
  */
 
 -- Table for Shops (from /shoplist)
-DROP TABLE IF EXISTS shops;
 CREATE TABLE IF NOT EXISTS shops (
     shop_id INTEGER PRIMARY KEY,
     shop_name TEXT NOT NULL,

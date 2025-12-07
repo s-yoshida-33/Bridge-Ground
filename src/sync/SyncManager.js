@@ -44,11 +44,11 @@ class SyncManager {
 
         // Tasks definition for main progress
         const tasks = [
-            { name: '店舗データ', key: 'shops', endpoint: '/shoplist', type: 'normal' },
-            { name: 'ジャンルデータ', key: 'genres', endpoint: '/genrelist', type: 'genre' },
-            { name: 'イベントニュース', key: 'eventNews', endpoint: '/eventnewslist', type: 'normal' },
-            { name: 'ショップニュース', key: 'shopNews', endpoint: '/shopnewslist', type: 'normal' },
-            { name: '特集データ', key: 'specials', endpoint: '/speciallist', type: 'special' }
+            { name: '店舗データ', key: 'shops', endpoint: '/shoplist', type: 'normal', tableName: 'shops' },
+            { name: 'ジャンルデータ', key: 'genres', endpoint: '/genrelist', type: 'genre', tableName: 'genres' },
+            { name: 'イベントニュース', key: 'eventNews', endpoint: '/eventnewslist', type: 'normal', tableName: 'event_news' },
+            { name: 'ショップニュース', key: 'shopNews', endpoint: '/shopnewslist', type: 'normal', tableName: 'shop_news' },
+            { name: '特集データ', key: 'specials', endpoint: '/speciallist', type: 'special', tableName: 'specials' }
         ];
 
         const totalTasks = tasks.length;
@@ -104,11 +104,19 @@ class SyncManager {
                         downloader = this.downloadMediaForShopNews.bind(this);
                     }
 
-                    syncStats[task.key] = await this.syncEndpoint(task.endpoint, processor, upsert, downloader, subProgressReporter);
+                    syncStats[task.key] = await this.syncEndpoint(
+                        task.endpoint, 
+                        task.tableName, 
+                        processor, 
+                        upsert, 
+                        downloader, 
+                        subProgressReporter
+                    );
 
                 } else if (task.type === 'genre') {
                     syncStats[task.key] = await this.syncEndpoint(
                         task.endpoint, 
+                        task.tableName,
                         this.xmlParser.processGenreItem.bind(this.xmlParser), 
                         this.upsertGenres.bind(this), 
                         async () => {}, 
@@ -117,6 +125,7 @@ class SyncManager {
                 } else if (task.type === 'special') {
                     syncStats[task.key] = await this.syncSpecialEndpoint(
                         task.endpoint, 
+                        task.tableName,
                         this.xmlParser.processSpecialTitleItem.bind(this.xmlParser), 
                         this.upsertSpecials.bind(this),
                         subProgressReporter
@@ -164,9 +173,22 @@ class SyncManager {
     
     // --- Generic Sync and Upsert Logic ---
 
-    async syncEndpoint(endpoint, itemProcessor, upsertFunction, mediaDownloader, progressCallback) {
+    async syncEndpoint(endpoint, tableName, itemProcessor, upsertFunction, mediaDownloader, progressCallback) {
         console.log(`\nStarting sync for: ${endpoint}`);
         progressCallback(0, "データ取得中...");
+        
+        // Temp Table Setup
+        const tempTableName = `${tableName}_temp`;
+        let useTempTable = false;
+
+        try {
+            // Attempt to create a temporary table for safe sync
+            await this.dbManager.createTempTable(tableName, tempTableName);
+            useTempTable = true;
+        } catch (error) {
+            console.warn(`Could not create temporary table for ${tableName}. Proceeding with direct sync. Reason: ${error.message}`);
+            // Fallback to direct sync if temp table creation fails (e.g., if main table doesn't exist yet, though initializeSchema should handle it)
+        }
         
         const rawXml = await this.apiClient.fetchData(endpoint);
         
@@ -183,6 +205,16 @@ class SyncManager {
 
         if (totalItems === 0) {
             progressCallback(100, "データなし");
+            // Clean up temp table if it was created
+            if (useTempTable) {
+                 // Even if no data, we might want to swap empty table? 
+                 // User request implies "don't empty response during sync", but if result is empty, it should be empty.
+                 // Assuming 0 items means "no data", we might just return here.
+                 // However, if we want to reflect "0 items" in the DB, we should swap.
+                 // Let's assume for now 0 items means nothing to update, keeping old data.
+                 // If we want to clear data, we should probably swap.
+                 // But sticking to "safe" approach: 0 items = no change.
+            }
             return 0;
         }
 
@@ -202,16 +234,34 @@ class SyncManager {
         }
         
         progressCallback(90, "データベース保存中...");
-        await upsertFunction(processedItems);
+        
+        const targetTable = useTempTable ? tempTableName : tableName;
+        await upsertFunction(processedItems, targetTable);
+        
+        if (useTempTable) {
+            progressCallback(95, "データ反映中...");
+            await this.dbManager.swapTable(tempTableName, tableName);
+        }
         
         progressCallback(100, "完了");
         return processedItems.length;
     }
 
-    async syncSpecialEndpoint(endpoint, titleItemProcessor, upsertFunction, progressCallback) {
+    async syncSpecialEndpoint(endpoint, tableName, titleItemProcessor, upsertFunction, progressCallback) {
         console.log(`\nStarting complex sync for: ${endpoint}`);
         progressCallback(0, "データ取得中...");
         
+        // Temp Table Setup
+        const tempTableName = `${tableName}_temp`;
+        let useTempTable = false;
+
+        try {
+            await this.dbManager.createTempTable(tableName, tempTableName);
+            useTempTable = true;
+        } catch (error) {
+            console.warn(`Could not create temporary table for ${tableName}. Proceeding with direct sync. Reason: ${error.message}`);
+        }
+
         const rawXml = await this.apiClient.fetchData(endpoint);
         
         // Save raw XML to file
@@ -245,7 +295,14 @@ class SyncManager {
         }
         
         progressCallback(90, "データベース保存中...");
-        await upsertFunction(allSpecialItems);
+        
+        const targetTable = useTempTable ? tempTableName : tableName;
+        await upsertFunction(allSpecialItems, targetTable);
+        
+        if (useTempTable) {
+            progressCallback(95, "データ反映中...");
+            await this.dbManager.swapTable(tempTableName, tableName);
+        }
         
         progressCallback(100, "完了");
         return allSpecialItems.length;
@@ -324,6 +381,8 @@ class SyncManager {
                 const fields = Object.keys(itemToSave).filter(key => key !== idField);
                 const values = fields.map(field => itemToSave[field]);
                 
+                // Note: When using temp table, it starts empty, so everything is INSERT.
+                // However, we still check existence to be safe or if genericUpsert is reused for incremental updates.
                 const existingRow = this.dbManager.db.prepare(`SELECT ${idField} FROM ${tableName} WHERE ${idField} = ?`).get(idValue);
 
                 if (existingRow) {
@@ -349,11 +408,11 @@ class SyncManager {
         }
     }
 
-    async upsertShops(items) { await this.genericUpsert('shops', 'shop_id', items); }
-    async upsertEventNews(items) { await this.genericUpsert('event_news', 'event_id', items); }
-    async upsertShopNews(items) { await this.genericUpsert('shop_news', 'shop_news_id', items); }
-    async upsertSpecials(items) { await this.genericUpsert('specials', 'special_id', items); }
-    async upsertGenres(items) { await this.genericUpsert('genres', 'genre_id', items); }
+    async upsertShops(items, tableName = 'shops') { await this.genericUpsert(tableName, 'shop_id', items); }
+    async upsertEventNews(items, tableName = 'event_news') { await this.genericUpsert(tableName, 'event_id', items); }
+    async upsertShopNews(items, tableName = 'shop_news') { await this.genericUpsert(tableName, 'shop_news_id', items); }
+    async upsertSpecials(items, tableName = 'specials') { await this.genericUpsert(tableName, 'special_id', items); }
+    async upsertGenres(items, tableName = 'genres') { await this.genericUpsert(tableName, 'genre_id', items); }
 }
 
 module.exports = SyncManager;

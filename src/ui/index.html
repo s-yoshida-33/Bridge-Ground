@@ -2,10 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>BridgeGround - データ同期管理</title>
+    <title>BridgeGround</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        /* Renderer.jsでトグルする基本的なスタイル */
         body { font-family: sans-serif; padding: 20px; background-color: #f9f9f9; color: #333; }
         #settings-view { display: none; padding: 20px; border: 1px solid #ccc; background: white; margin-top: 20px; border-radius: 8px; }
         .input-group label { display: block; margin-top: 10px; font-weight: bold; }
@@ -86,7 +85,6 @@
             <h3>データ同期ステータス</h3>
             <div style="display: flex; gap: 20px; align-items: flex-start;">
                 <div style="flex: 1;">
-                    <p>サーバーから最新のデータを取得し、ローカルデータベースを更新します。</p>
                     <button id="sync-button" style="padding: 12px 24px; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">
                         <span></span> 今すぐ同期を実行
                     </button>
@@ -174,7 +172,7 @@
             </label>
         </div>
         
-        <button id="save-settings-button" style="margin-top: 20px; padding: 10px 20px;">設定を保存</button>
+        <button id="save-settings-button" style="margin-top: 20px; padding: 10px 20px;">保存</button>
     </div>
 
     <script src="renderer.js"></script>

@@ -15,7 +15,7 @@
         "proxy",
         "cross-platform"
     ],
-    "author": "",
+    "author": "Toei Techno International Inc.",
     "license": "ISC",
     "dependencies": {
         "axios": "^1.6.8",
@@ -32,6 +32,7 @@
     "build": {
         "appId": "com.tti.bridgeground",
         "productName": "BridgeGround",
+        "copyright": "Copyright © 2024 Toei Techno International Inc.",
         "files": [
             "src/**/*",
             "package.json"

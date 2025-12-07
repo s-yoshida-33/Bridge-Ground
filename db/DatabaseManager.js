@@ -86,7 +86,50 @@ class DatabaseManager {
         }
     }
     
-    // TODO: Add methods for insert/update/select operations (e.g., run, get, all)
+    /**
+     * @description Executes a query that doesn't return data (e.g., INSERT, UPDATE, DELETE, CREATE).
+     * @param {string} sql - The SQL statement to execute.
+     * @param {Array<any>} params - The parameters to bind to the statement.
+     * @returns {Promise<object>} A promise resolving to the result of the query execution.
+     */
+    run(sql, params = []) {
+        if (!this.db) {
+            throw new Error("Database not connected.");
+        }
+        return new Promise((resolve, reject) => {
+            this.db.run(sql, params, function (err) {
+                if (err) {
+                    console.error("Database run error:", err.message);
+                    return reject(err);
+                }
+                // 'this' refers to the statement object in SQLite, providing lastID and changes
+                resolve({ id: this.lastID, changes: this.changes });
+            });
+        });
+    }
+
+    /**
+     * @description Executes a query and returns all result rows.
+     * @param {string} sql - The SQL statement to execute.
+     * @param {Array<any>} params - The parameters to bind to the statement.
+     * @returns {Promise<Array<object>>} A promise resolving to an array of result rows.
+     */
+    all(sql, params = []) {
+        if (!this.db) {
+            throw new Error("Database not connected.");
+        }
+        return new Promise((resolve, reject) => {
+            this.db.all(sql, params, (err, rows) => {
+                if (err) {
+                    console.error("Database all error:", err.message);
+                    return reject(err);
+                }
+                resolve(rows);
+            });
+        });
+    }
+    
+    // TODO: Implement upsert logic for each table (e.g., upsertShops, upsertEventNews)
 }
 
 module.exports = DatabaseManager;

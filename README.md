@@ -1,7 +1,8 @@
-# Bridge-Ground (BridgeGround)
+# Bridge-Ground (Go Version)
 
 ## 概要
-**Bridge-Ground** は、外部のモールデータAPIからデータを同期し、ローカル環境でREST APIおよび静的ファイルサーバーとして機能するElectronアプリケーションです。
+**Bridge-Ground** は、外部のモールデータAPIからデータを同期し、ローカル環境でREST APIおよび静的ファイルサーバーとして機能するアプリケーションです。
+以前はElectronを使用していましたが、現在は完全に **Golang** に移行されました。
 外部システム（BridgeWebPopper等）のデータをローカルデータベース（SQLite）に取り込み、オフラインやローカルネットワーク内でのデータ利用を可能にします。また、画像データもローカルにダウンロードして配信します。
 
 ## 主な機能
@@ -14,7 +15,7 @@
   - イベントニュース (`/eventnewslist`)
   - ショップニュース (`/shopnewslist`)
   - 特集・セール情報 (`/speciallist`)
-- **メディアダウンロード**: 各データに関連付けられた画像ファイルを自動的にダウンロードし、ローカルに保存します。
+- **メディアダウンロード**: 各データに関連付けられた画像ファイルを自動的にダウンロードし、ローカルに保存します（Goの並行処理により高速化）。
 - **同期モード**:
   - **手動同期**: UIまたはAPI経由で即時実行。
   - **起動時同期**: アプリ起動時にバックグラウンドで実行（設定可）。
@@ -24,20 +25,17 @@
 同期したデータをJSON形式で提供するREST APIサーバーを内蔵しています。
 - **ポート**: デフォルト `8080` (設定可能)
 - **静的ファイル配信**: ダウンロードした画像ファイルを `/files` パスで配信します。
-- **ダッシュボード**: ルートURL (`/`) にアクセスすると、利用可能なAPIエンドポイントの一覧を表示します。
+- **ダッシュボード**: ルートURL (`/`) にアクセスすると、UIが表示されます。
 
-### 3. デスクトップ統合
-- **システムトレイ**: アプリはタスクトレイに常駐し、ウィンドウを閉じてもバックグラウンドで動作を継続します。
-- **設定管理**: API接続先や同期スケジュールをGUIまたは設定ファイルで管理します。
+### 3. デスクトップUI
+- **Lorca**: Chrome/Edgeを利用した軽量なGUIを提供します。
 
 ## 技術スタック
 
-- **Platform**: Electron
-- **Runtime**: Node.js
-- **Server Framework**: Express
-- **Database**: SQLite (via `better-sqlite3`)
-- **HTTP Client**: Axios
-- **XML Parser**: xml2js
+- **Language**: Go (Golang)
+- **GUI Library**: Lorca (Uses installed Chrome/Edge)
+- **Database**: SQLite (modernc.org/sqlite - CGO-free)
+- **HTTP Server**: net/http (Standard Library)
 
 ## API仕様
 
@@ -63,50 +61,20 @@
 ## セットアップと実行
 
 ### 前提条件
-- Node.js (推奨: v18以上)
-- npm
-
-### インストール
-依存パッケージをインストールします。
-```bash
-npm install
-# または
-npm ci
-```
-
-### 開発モードでの実行
-Electronアプリを起動します。
-```bash
-npm start
-```
+- Go 1.21以上 (開発・ビルド時)
+- Google Chrome または Microsoft Edge (実行時)
 
 ### ビルド
-インストーラー（Windows向け `exe`）を作成します。
 ```bash
-npm run build
+go build -o bridge-ground.exe ./cmd/bridgeground
+```
+
+### 実行
+```bash
+./bridge-ground.exe
 ```
 
 ## 設定
 
-設定はアプリケーション内の機能、または `src/config/api_config_default.json` をベースにしたユーザー設定で管理されます。
-
-```json
-{
-  "apiSettings": {
-    "baseUrl": "https://target-api-domain.com/api", // 同期元APIのベースURL
-    "username": "", // Basic認証用 (必要な場合)
-    "password": ""  // Basic認証用 (必要な場合)
-  },
-  "serverSettings": {
-    "port": 8080 // ローカルAPIサーバーのポート
-  },
-  "syncSettings": {
-    "autoSyncEnabled": false,     // 自動同期の有効/無効
-    "syncIntervalMinutes": 60,    // 自動同期の間隔(分)
-    "syncOnStartup": false        // 起動時の同期実行
-  }
-}
-```
-
-## データベーススキーマ
-データは `src/db/setup.sql` で定義されたスキーマに従って `shops`, `event_news`, `shop_news`, `specials`, `genres` テーブルに格納されます。
+設定は `%APPDATA%/TTI/BridgeGround/config.json` に保存されます。
+アプリ内の「設定」画面から変更可能です。

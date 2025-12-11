@@ -1,0 +1,16 @@
+{
+  "apiSettings": {
+    "baseUrl": "https://suzaka.aeonmall.com/api",
+    "apiKey": "",
+    "username": "groundapi_suzaka",
+    "password": "w3HxZV0f"
+  },
+  "syncSettings": {
+    "syncIntervalMinutes": 1,
+    "syncOnStartup": true,
+    "autoSyncEnabled": true
+  },
+  "serverSettings": {
+    "port": 8090
+  }
+}

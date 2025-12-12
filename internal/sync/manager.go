@@ -72,6 +72,7 @@ func (m *Manager) getExistingUpdateDates(tableName, idCol string) (map[string]st
 			continue
 		}
 
+		id = strings.TrimSpace(id) // Ensure ID is trimmed
 		if date == nil {
 			result[id] = ""
 		} else {
@@ -376,6 +377,8 @@ func (m *Manager) syncShops() (int, error) {
 	// We will delete keys from `existing` as we process them.
 	// Remaining keys will be deleted from DB.
 
+	fmt.Printf("Initial existing shops count: %d\n", len(existing))
+
 	updateCount := 0
 
 	tx, err := m.DB.Conn.Begin()
@@ -401,6 +404,8 @@ func (m *Manager) syncShops() (int, error) {
 	var downloadJobs []DownloadJob
 
 	for _, item := range resp.Items {
+		item.ShopID = strings.TrimSpace(item.ShopID) // Trim ID to ensure match
+
 		// Check update date
 		oldDate, exists := existing[item.ShopID]
 		if exists {
@@ -455,6 +460,7 @@ func (m *Manager) syncShops() (int, error) {
 	// Delete obsolete records
 	deletedCount := 0
 	if len(existing) > 0 {
+		fmt.Printf("Deleting %d obsolete shops\n", len(existing))
 		delStmt, err := tx.Prepare("DELETE FROM shops WHERE shop_id = ?")
 		if err != nil {
 			return 0, err
@@ -463,8 +469,11 @@ func (m *Manager) syncShops() (int, error) {
 		for id := range existing {
 			if _, err := delStmt.Exec(id); err == nil {
 				deletedCount++
+			} else {
+				fmt.Printf("Failed to delete shop %s: %v\n", id, err)
 			}
 		}
+		fmt.Printf("Deleted %d shops\n", deletedCount)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -509,6 +518,7 @@ func (m *Manager) syncShopNews() (int, error) {
 	var downloadJobs []DownloadJob
 
 	for _, item := range resp.Items {
+		item.ShopNewsID = strings.TrimSpace(item.ShopNewsID)
 		// Check update date
 		oldDate, exists := existing[item.ShopNewsID]
 		if exists {
@@ -584,6 +594,7 @@ func (m *Manager) syncEventNews() (int, error) {
 	var downloadJobs []DownloadJob
 
 	for _, item := range resp.Items {
+		item.EventID = strings.TrimSpace(item.EventID)
 		// Check update date
 		oldDate, exists := existing[item.EventID]
 		if exists {
@@ -670,6 +681,7 @@ func (m *Manager) syncSpecials() (int, error) {
 			item.SpecialTitle = parent.SpecialTitle
 			item.UpdateDate = parent.UpdateDate
 
+			item.SpecialID = strings.TrimSpace(item.SpecialID)
 			// Check update date
 			oldDate, exists := existing[item.SpecialID]
 			if exists {
@@ -814,7 +826,40 @@ func (m *Manager) cleanupOrphanedFiles() error {
 		return nil
 	})
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	// 3. Remove empty directories
+	// We walk again (or could have collected dirs in pass 2)
+	// Simple approach: walk, collect dirs, reverse sort by length (deepest first), remove if empty
+	var dirs []string
+	filepath.Walk(baseFileDir, func(path string, info os.FileInfo, err error) error {
+		if err == nil && info.IsDir() && path != baseFileDir {
+			dirs = append(dirs, path)
+		}
+		return nil
+	})
+
+	// Sort by length descending to process deepest directories first
+	// Bubble sort or simple swap for simplicity since depth isn't huge
+	for i := 0; i < len(dirs); i++ {
+		for j := i + 1; j < len(dirs); j++ {
+			if len(dirs[i]) < len(dirs[j]) {
+				dirs[i], dirs[j] = dirs[j], dirs[i]
+			}
+		}
+	}
+
+	for _, dir := range dirs {
+		// Try to remove. It will fail if not empty, which is what we want.
+		// os.Remove on a directory only works if empty.
+		if err := os.Remove(dir); err == nil {
+			// fmt.Printf("Removed empty directory: %s\n", dir)
+		}
+	}
+
+	return nil
 }
 
 func (m *Manager) fetchXML(url string) ([]byte, error) {

@@ -4,29 +4,43 @@ import "encoding/xml"
 
 // ShopItem represents a shop from the XML feed
 type ShopItem struct {
-	XMLName            xml.Name `xml:"item"`
-	ShopID             string   `xml:"shopId" db:"shop_id"`
-	ShopName           string   `xml:"shopName" db:"shop_name"`
-	ShopNameKana       string   `xml:"shopNameKana" db:"shop_name_kana"`
-	ShopNameEnglish    string   `xml:"shopNameEnglish" db:"shop_name_english"`
-	Genre              string   `xml:"genre" db:"genre"`
-	GenreSub           string   `xml:"genreSub" db:"genre_sub"`
-	Tel                string   `xml:"tel" db:"tel"`
-	OpenTime           string   `xml:"openTime" db:"open_time"`
-	Floor              string   `xml:"floor" db:"floor"`
-	
-	// Images (Relative paths in XML)
-	Photo1             string   `xml:"photo1"`
-	Photo1Thumb        string   `xml:"photo1Thumb"`
-	ShopLogo           string   `xml:"shopLogo"`
-	
-	// These fields are populated during processing, not from XML directly
-	Photo1RemoteURL    string   `db:"photo1_remote_url"`
-	Photo1LocalPath    string   `db:"photo1_local_path"`
-	ShopLogoRemoteURL  string   `db:"shop_logo_remote_url"`
-	ShopLogoLocalPath  string   `db:"shop_logo_local_path"`
-	
-	UpdateDate         string   `xml:"updateDate" db:"update_date"`
+	XMLName          xml.Name `xml:"item" json:"-"`
+	ShopID           string   `xml:"shopId" db:"shop_id" json:"shopId"`
+	ShopName         string   `xml:"shopName" db:"shop_name" json:"shopName"`
+	ShopNameKana     string   `xml:"shopNameKana" db:"shop_name_kana" json:"shopNameKana"`
+	ShopNameEnglish  string   `xml:"shopNameEnglish" db:"shop_name_english" json:"shopNameEnglish"`
+	Searches         string   `xml:"searches" db:"searches" json:"searches"`
+	Genre            string   `xml:"genre" db:"genre" json:"genre"`
+	GenreSub         string   `xml:"genreSub" db:"genre_sub" json:"genreSub"`
+	GenreSubEnglish  string   `xml:"genreSubEnglish" db:"genre_sub_english" json:"genreSubEnglish"`
+	GenreMemo        string   `xml:"genreMemo" db:"genre_memo" json:"genreMemo"`
+	GenreMemoEnglish string   `xml:"genreMemoEnglish" db:"genre_memo_english" json:"genreMemoEnglish"`
+	GroupID          string   `xml:"groupId" db:"group_id" json:"groupId"`
+	Tel              string   `xml:"tel" db:"tel" json:"tel"`
+	Floors           string   `xml:"floors" db:"floors" json:"floors"`
+	Area             string   `xml:"area" db:"area" json:"area"`
+	AreaSub          string   `xml:"areaSub" db:"area_sub" json:"areaSub"`
+	Number           string   `xml:"number" db:"number" json:"number"`
+	CloseFlg         string   `xml:"closeFlg" db:"close_flg" json:"closeFlg"`
+	OpenTime         string   `xml:"openTime" db:"open_time" json:"openTime"`
+	Description      string   `xml:"description" db:"description" json:"description"`
+
+	// Images (Original values from XML)
+	Photo1   string `xml:"photo1" db:"photo1" json:"photo1"`
+	Photo1LocalPath   string `db:"photo1_local_path" json:"photo1LocalPath"`
+
+	Photo2   string `xml:"photo2" db:"photo2" json:"photo2"`
+	Photo2LocalPath   string `db:"photo2_local_path" json:"photo2LocalPath"`
+
+	ShopLogo string `xml:"shopLogo" db:"shop_logo" json:"shopLogo"`
+	ShopLogoLocalPath string `db:"shop_logo_local_path" json:"shopLogoLocalPath"`
+
+	UpdateDate string `xml:"updateDate" db:"update_date" json:"updateDate"`
+
+	// Internal fields for downloaded files (not in XML, but needed for DB/App logic)
+	Photo1RemoteURL   string `db:"photo1_remote_url" json:"-"`
+	Photo2RemoteURL   string `db:"photo2_remote_url" json:"-"`
+	ShopLogoRemoteURL string `db:"shop_logo_remote_url" json:"-"`
 }
 
 // EventNewsItem represents an event news item

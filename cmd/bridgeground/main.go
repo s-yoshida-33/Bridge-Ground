@@ -21,7 +21,7 @@ var (
 )
 
 func main() {
-	fmt.Println("Starting BridgeGround (Golang with Lorca)...")
+	fmt.Printf("Starting BridgeGround v%s (Golang with Lorca)...\n", config.Version)
 
 	// 1. Load Config
 	var err error
@@ -32,6 +32,11 @@ func main() {
 
 	// 2. Initialize Managers
 	dbMgr = db.NewManager()
+	if err := dbMgr.Connect(); err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer dbMgr.Close()
+
 	syncMgr = sync.NewManager(globalCfg, dbMgr)
 
 	// 3. Start HTTP Server (Goroutine)
@@ -56,6 +61,10 @@ func main() {
 		return globalCfg
 	})
 
+	ui.Bind("go_getAppVersion", func() string {
+		return config.Version
+	})
+
 	ui.Bind("go_saveConfig", func(newCfg config.Config) error {
 		if err := config.SaveConfig(&newCfg); err != nil {
 			return err
@@ -72,10 +81,20 @@ func main() {
 		// but we need to return a value to the Promise.
 		// If we return a channel, Lorca might not support it directly as Promise.
 		// For now, we run it blocking. If UI freezes, we'll need to refactor to async event pattern.
-		err := syncMgr.StartSync()
+		updated, err := syncMgr.StartSync()
 		if err != nil {
 			return map[string]interface{}{"success": false, "message": err.Error()}
 		}
+
+		if updated {
+			// Trigger SSE update event
+			srv.BroadcastEvent("update", map[string]interface{}{
+				"type":      "update",
+				"timestamp": time.Now().Format(time.RFC3339),
+				"message":   "Manual sync completed",
+			})
+		}
+
 		return map[string]interface{}{"success": true}
 	})
 
@@ -97,7 +116,17 @@ func main() {
 		go func() {
 			// Delay to ensure UI is ready to receive progress events
 			time.Sleep(3 * time.Second)
-			syncMgr.StartSync()
+			// On startup, we might want to send update event regardless, or only if updated.
+			// The requirement is "updated on API side". So only if updated.
+			// BUT, the client might be launching for the first time or after a while.
+			// Let's stick to "if updated" to be consistent with the requirement "only if update_date changed".
+			if updated, err := syncMgr.StartSync(); err == nil && updated {
+				srv.BroadcastEvent("update", map[string]interface{}{
+					"type":      "update",
+					"timestamp": time.Now().Format(time.RFC3339),
+					"message":   "Startup sync completed",
+				})
+			}
 		}()
 	}
 
@@ -105,7 +134,13 @@ func main() {
 		go func() {
 			ticker := time.NewTicker(time.Duration(globalCfg.SyncSettings.SyncIntervalMinutes) * time.Minute)
 			for range ticker.C {
-				syncMgr.StartSync()
+				if updated, err := syncMgr.StartSync(); err == nil && updated {
+					srv.BroadcastEvent("update", map[string]interface{}{
+						"type":      "update",
+						"timestamp": time.Now().Format(time.RFC3339),
+						"message":   "Auto sync completed",
+					})
+				}
 			}
 		}()
 	}

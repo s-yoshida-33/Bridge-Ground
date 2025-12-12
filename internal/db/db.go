@@ -33,6 +33,12 @@ func NewManager() *Manager {
 }
 
 func (m *Manager) Connect() error {
+	if m.Conn != nil {
+		if err := m.Conn.Ping(); err == nil {
+			return nil
+		}
+	}
+
 	dir := filepath.Dir(m.Path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create db directory: %w", err)
@@ -41,6 +47,12 @@ func (m *Manager) Connect() error {
 	db, err := sql.Open("sqlite", m.Path)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
+	}
+
+	// Enable WAL mode for better concurrency
+	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		// Log error but continue? Or fail?
+		fmt.Printf("Warning: Failed to set WAL mode: %v\n", err)
 	}
 
 	if err := db.Ping(); err != nil {
@@ -54,27 +66,44 @@ func (m *Manager) Connect() error {
 func (m *Manager) Close() {
 	if m.Conn != nil {
 		m.Conn.Close()
+		m.Conn = nil
 	}
 }
 
 func (m *Manager) InitializeSchema() error {
 	// Basic schema creation if not exists
 	queries := []string{
+		`DROP TABLE IF EXISTS shops`, // Re-create shops table to match new schema
 		`CREATE TABLE IF NOT EXISTS shops (
 			shop_id TEXT PRIMARY KEY,
 			shop_name TEXT,
 			shop_name_kana TEXT,
 			shop_name_english TEXT,
+			searches TEXT,
 			genre TEXT,
 			genre_sub TEXT,
+			genre_sub_english TEXT,
+			genre_memo TEXT,
+			genre_memo_english TEXT,
+			group_id TEXT,
 			tel TEXT,
+			floors TEXT,
+			area TEXT,
+			area_sub TEXT,
+			number TEXT,
+			close_flg TEXT,
 			open_time TEXT,
-			floor TEXT,
+			description TEXT,
+			photo1 TEXT,
+			photo2 TEXT,
+			shop_logo TEXT,
+			update_date TEXT,
 			photo1_remote_url TEXT,
 			photo1_local_path TEXT,
+			photo2_remote_url TEXT,
+			photo2_local_path TEXT,
 			shop_logo_remote_url TEXT,
-			shop_logo_local_path TEXT,
-			update_date TEXT
+			shop_logo_local_path TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS event_news (
 			event_id TEXT PRIMARY KEY,

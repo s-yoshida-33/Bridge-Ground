@@ -1,80 +1,112 @@
-# Bridge-Ground (Go Version)
+# BridgeGround (Local Data Sync Server)
 
-## 概要
-**Bridge-Ground** は、外部のモールデータAPIからデータを同期し、ローカル環境でREST APIおよび静的ファイルサーバーとして機能するアプリケーションです。
-以前はElectronを使用していましたが、現在は完全に **Golang** に移行されました。
-外部システム（BridgeWebPopper等）のデータをローカルデータベース（SQLite）に取り込み、オフラインやローカルネットワーク内でのデータ利用を可能にします。また、画像データもローカルにダウンロードして配信します。
+BridgeGround は、外部 API からデータを定期的に同期し、ローカルアプリケーション向けに最適化された API とイベント通知を提供するミドルウェアサーバーです。
+Golang と Lorca (Chrome/Edge UI) を使用して構築されています。
 
 ## 主な機能
 
-### 1. データ同期機能
-外部APIからXML形式のデータを取得し、ローカルデータベースに保存します。
-- **対象データ**:
-  - ショップ情報 (`/shoplist`)
-  - ジャンルマスタ (`/genrelist`)
-  - イベントニュース (`/eventnewslist`)
-  - ショップニュース (`/shopnewslist`)
-  - 特集・セール情報 (`/speciallist`)
-- **メディアダウンロード**: 各データに関連付けられた画像ファイルを自動的にダウンロードし、ローカルに保存します（Goの並行処理により高速化）。
-- **同期モード**:
-  - **手動同期**: UIまたはAPI経由で即時実行。
-  - **起動時同期**: アプリ起動時にバックグラウンドで実行（設定可）。
-  - **自動定期同期**: 設定された間隔（分単位）で定期的に実行（設定可）。
+1.  **データ同期**: 外部 API からショップ情報、ニュース、特集などの XML データを取得し、ローカル SQLite データベースに保存します。
+2.  **メディア管理**: 画像や動画などのメディアファイルを自動的にダウンロードし、ローカルパスとして管理します。
+3.  **ローカル API**: 同期されたデータを取得するための REST API を提供します。
+4.  **リアルタイム通知**: データの更新を検知した際に Server-Sent Events (SSE) でクライアントに通知します。
 
-### 2. ローカルAPIサーバー機能
-同期したデータをJSON形式で提供するREST APIサーバーを内蔵しています。
-- **ポート**: デフォルト `8080` (設定可能)
-- **静的ファイル配信**: ダウンロードした画像ファイルを `/files` パスで配信します。
-- **ダッシュボード**: ルートURL (`/`) にアクセスすると、UIが表示されます。
+## 開発環境
 
-### 3. デスクトップUI
-- **Lorca**: Chrome/Edgeを利用した軽量なGUIを提供します。
+-   Go 1.21+
+-   GCC (for SQLite CGO)
 
-## 技術スタック
+## 起動方法
 
-- **Language**: Go (Golang)
-- **GUI Library**: Lorca (Uses installed Chrome/Edge)
-- **Database**: SQLite (modernc.org/sqlite - CGO-free)
-- **HTTP Server**: net/http (Standard Library)
-
-## API仕様
-
-ローカルサーバー（デフォルト: `http://localhost:8080`）は以下のエンドポイントを提供します。
-
-### データ取得API
-全てのレスポンスはJSON形式です。
-
-| エンドポイント | メソッド | 説明 |
-| --- | --- | --- |
-| `/api/shops` | GET | ショップ情報の全件リストを取得 |
-| `/api/shop-news` | GET | ショップニュースの全件リストを取得 |
-| `/api/event-news` | GET | イベントニュースの全件リストを取得 |
-| `/api/specials` | GET | 特集・セール情報の全件リストを取得 |
-| `/api/sales` | GET | セール一覧を取得（`/api/specials` と同等） |
-| `/api/genres` | GET | ジャンルマスタを取得 |
-
-### 静的ファイル
-ダウンロードされた画像は以下のパスでアクセス可能です。
-- URL: `http://localhost:8080/files/<path_to_image>`
-- 実体パス: `AppData/Roaming/TTI/BridgeGround/files/` (OSにより異なる)
-
-## セットアップと実行
-
-### 前提条件
-- Go 1.21以上 (開発・ビルド時)
-- Google Chrome または Microsoft Edge (実行時)
-
-### ビルド
 ```bash
-go build -o bridge-ground.exe ./cmd/bridgeground
+# 依存関係のインストール
+go mod download
+
+# 実行
+go run cmd/bridgeground/main.go
 ```
 
-### 実行
-```bash
-./bridge-ground.exe
+## API 仕様
+
+### ベース URL
+
+デフォルト: `http://localhost:8090` (設定画面で変更可能)
+
+### REST API
+
+#### 店舗データ関連
+
+-   `GET /api/shops`: 全店舗データ
+-   `GET /api/shop-news`: 店舗ニュース
+-   `GET /api/event-news`: イベントニュース
+-   `GET /api/specials`: 特集・セール情報
+-   `GET /api/genres`: ジャンルマスタ
+
+※ レスポンス形式は JSON です。
+
+### Server-Sent Events (SSE)
+
+データの更新をリアルタイムに検知するために、SSE エンドポイントを提供しています。
+クライアントアプリケーションは、このエンドポイントに接続し、`update` イベントを受信したタイミングで上記の REST API から最新データを再取得することを推奨します。
+
+-   **エンドポイント**: `/api/events`
+
+#### イベント一覧
+
+| イベント名 | 説明 | データ例 |
+| :--- | :--- | :--- |
+| `connected` | 接続確立時に送信されます。 | `{"type": "connected", "message": "..."}` |
+| `heartbeat` | 接続維持のため 30 秒ごとに送信されます。 | `{"timestamp": "...", "clients": 1}` |
+| `update` | **同期処理によってデータの追加・更新・削除が検知された場合のみ**送信されます。 | `{"type": "update", "timestamp": "...", "message": "..."}` |
+
+#### クライアント実装例 (JavaScript)
+
+```javascript
+const eventSource = new EventSource("http://localhost:8090/api/events");
+
+// 接続確立
+eventSource.addEventListener("connected", (e) => {
+    console.log("Connected:", JSON.parse(e.data));
+});
+
+// データ更新通知
+eventSource.addEventListener("update", (e) => {
+    console.log("Data updated:", JSON.parse(e.data));
+    // ここで最新データを再取得する処理を実行
+    // fetchShops();
+});
+
+// ハートビート (接続確認用)
+eventSource.addEventListener("heartbeat", (e) => {
+    // console.log("Heartbeat:", JSON.parse(e.data));
+});
+
+// エラーハンドリングと再接続
+eventSource.onerror = (e) => {
+    console.error("SSE Error:", e);
+    eventSource.close();
+    // 適切な待機時間を置いて再接続
+    setTimeout(() => {
+        // 再接続ロジック
+    }, 5000);
+};
 ```
 
 ## 設定
 
-設定は `%APPDATA%/TTI/BridgeGround/config.json` に保存されます。
-アプリ内の「設定」画面から変更可能です。
+アプリ起動時に表示される設定画面、または `config.json` で以下の設定が可能です。
+
+-   **API Settings**: 外部 CMS のベース URL と認証情報
+-   **Server Settings**: ローカルサーバーのポート番号
+-   **Sync Settings**: 自動同期の有効化と間隔（分）
+
+## ディレクトリ構成
+
+-   `cmd/`: エントリーポイント
+-   `internal/`: アプリケーションロジック
+    -   `config/`: 設定管理
+    -   `db/`: データベース操作
+    -   `server/`: HTTP サーバーと SSE
+    -   `sync/`: データ同期ロジック
+    -   `models/`: データ構造体
+-   `src/ui/`: 設定画面用フロントエンドアセット
+-   `files/`: ダウンロードされたメディアファイル (実行時に生成)

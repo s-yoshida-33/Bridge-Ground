@@ -5,6 +5,9 @@ import (
 	"os"
 )
 
+// Version is the application version
+var Version = "0.0.1"
+
 type Config struct {
 	APISettings    APISettings    `json:"apiSettings"`
 	SyncSettings   SyncSettings   `json:"syncSettings"`

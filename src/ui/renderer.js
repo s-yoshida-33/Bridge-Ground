@@ -14,9 +14,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // New Progress Elements
     const progressWrapper = document.getElementById('sync-progress-wrapper');
     const mainProgressBar = document.getElementById('main-progress-bar');
-    const subProgressBar = document.getElementById('sub-progress-bar');
+    // const subProgressBar = document.getElementById('sub-progress-bar'); // Removed
     const mainStatusText = document.getElementById('main-status-text');
-    const subStatusText = document.getElementById('sub-status-text');
+    // const subStatusText = document.getElementById('sub-status-text'); // Removed
 
     const localApiUrlInput = document.getElementById('local-api-url');
     const copyApiUrlButton = document.getElementById('copy-api-url-button');
@@ -28,6 +28,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     let currentConfig = await bridgeApi.getConfig();
     let isPasswordEditable = false;
+
+    // --- Version Display ---
+    try {
+        const version = await bridgeApi.getAppVersion();
+        const verElem = document.getElementById('app-version');
+        if (verElem) {
+            verElem.textContent = version;
+        }
+    } catch (e) {
+        console.error("Failed to get app version:", e);
+    }
 
     // --- Password Toggle Handler ---
     togglePasswordButton.addEventListener('click', () => {
@@ -89,11 +100,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             mainStatusText.textContent = data.main.message;
         }
         
-        if (data.sub) {
-            subProgressBar.style.width = `${data.sub.percentage}%`;
-            subProgressBar.textContent = `${data.sub.percentage}%`;
-            subStatusText.textContent = data.sub.message;
-        }
+        // if (data.sub) {
+        //     subProgressBar.style.width = `${data.sub.percentage}%`;
+        //     subProgressBar.textContent = `${data.sub.percentage}%`;
+        //     subStatusText.textContent = data.sub.message;
+        // }
         
         // If sync is complete (100%), we can re-enable button after a short delay
         if (data.main && data.main.percentage === 100) {
@@ -108,8 +119,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     progressWrapper.style.display = 'none';
                     // Reset bars for next time
                     mainProgressBar.style.width = '0%';
-                    subProgressBar.style.width = '0%';
-                    subStatusText.textContent = '';
+                    // subProgressBar.style.width = '0%';
+                    // subStatusText.textContent = '';
                 }, 2000);
 
             }, 1000);
@@ -232,10 +243,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         progressWrapper.style.display = 'block';
         mainProgressBar.style.width = '0%';
         mainProgressBar.textContent = '0%';
-        subProgressBar.style.width = '0%';
-        subProgressBar.textContent = '0%';
+        // subProgressBar.style.width = '0%';
+        // subProgressBar.textContent = '0%';
         mainStatusText.textContent = '同期を開始します...';
-        subStatusText.textContent = '';
+        // subStatusText.textContent = '';
 
         try {
             const result = await bridgeApi.startManualSync(); 

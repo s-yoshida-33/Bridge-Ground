@@ -288,9 +288,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // If latestStats exists, verify the key exists AND the value is greater than 0
                 // JavaScript objects: key in latestStats checks for existence
                 if (latestStats && (key in latestStats)) {
-                    const added = latestStats[key];
-                    if (added > 0) {
-                         return `${total} (今回: +${added})`;
+                    const diff = latestStats[key];
+                    if (diff !== 0) {
+                         const sign = diff > 0 ? '+' : '';
+                         return `${total} (今回: ${sign}${diff})`;
                     }
                 }
                 return total;

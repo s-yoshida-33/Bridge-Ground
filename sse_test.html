@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>更新通知テスト受信</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        #log { border: 1px solid #ccc; padding: 10px; height: 300px; overflow-y: scroll; background: #f9f9f9; }
+        .event { margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .timestamp { color: #888; font-size: 0.8em; }
+        .type { font-weight: bold; color: #007bff; }
+        .data { color: #333; }
+        .status-ok { color: green; }
+        .status-error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>更新通知 (SSE) 受信テスト</h1>
+    <div>
+        ステータス: <span id="status">接続待機中...</span>
+    </div>
+    <br>
+    <div id="log"></div>
+
+    <script>
+        const logDiv = document.getElementById('log');
+        const statusSpan = document.getElementById('status');
+
+        function addLog(type, data) {
+            const div = document.createElement('div');
+            div.className = 'event';
+            const time = new Date().toLocaleTimeString();
+            
+            let dataStr = "";
+            try {
+                // オブジェクトなら整形して表示
+                if (typeof data === 'object') {
+                    dataStr = JSON.stringify(data, null, 2);
+                } else {
+                    dataStr = data;
+                }
+            } catch (e) {
+                dataStr = data;
+            }
+
+            div.innerHTML = `
+                <span class="timestamp">[${time}]</span> 
+                <span class="type">${type}</span>: 
+                <pre class="data">${dataStr}</pre>
+            `;
+            logDiv.prepend(div);
+        }
+
+        // Configのポート番号に合わせてください (デフォルト: 8090)
+        const PORT = 8090;
+        const EVENT_URL = `http://localhost:${PORT}/api/events`;
+
+        console.log(`Connecting to ${EVENT_URL}...`);
+        
+        const evtSource = new EventSource(EVENT_URL);
+
+        evtSource.onopen = function() {
+            console.log("Connection to server opened.");
+            statusSpan.textContent = "接続完了 (受信待機中)";
+            statusSpan.className = "status-ok";
+            addLog("SYSTEM", "サーバーに接続しました");
+        };
+
+        evtSource.onmessage = function(e) {
+            console.log("Message received:", e.data);
+            addLog("MESSAGE", e.data);
+        };
+
+        // イベントタイプ: connected
+        evtSource.addEventListener("connected", function(e) {
+            console.log("Connected event:", e.data);
+            addLog("connected", JSON.parse(e.data));
+        });
+
+        // イベントタイプ: update (今回の確認対象)
+        evtSource.addEventListener("update", function(e) {
+            console.log("Update event:", e.data);
+            addLog("update", JSON.parse(e.data));
+            alert("更新通知を受信しました！\n" + e.data);
+        });
+
+        // イベントタイプ: heartbeat
+        evtSource.addEventListener("heartbeat", function(e) {
+            // ハートビートはログが流れるのでコンソールのみでも良いが、動作確認のため最初は表示
+            // addLog("heartbeat", JSON.parse(e.data));
+            console.log("Heartbeat:", e.data);
+        });
+
+        evtSource.onerror = function(e) {
+            console.error("EventSource failed:", e);
+            statusSpan.textContent = "接続エラー (サーバーが起動していないか、接続が切れました)";
+            statusSpan.className = "status-error";
+            addLog("ERROR", "接続エラーが発生しました");
+        };
+    </script>
+</body>
+</html>

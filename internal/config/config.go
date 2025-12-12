@@ -7,7 +7,7 @@ import (
 )
 
 // Version is the application version
-var Version = "2.0.0"
+var Version = "2.1.3"
 
 type Config struct {
 	APISettings    APISettings    `json:"apiSettings"`
@@ -73,14 +73,14 @@ func LoadConfig() (*Config, error) {
 			},
 			SyncSettings: SyncSettings{
 				SyncIntervalMinutes: 60,
-				SyncOnStartup:       true,
-				AutoSyncEnabled:     true,
+				SyncOnStartup:       false,
+				AutoSyncEnabled:     false,
 				SyncTargets: &SyncTargets{
-					Shops:     true,
-					ShopNews:  true,
-					EventNews: true,
-					Specials:  true,
-					Genres:    true,
+					Shops:     false,
+					ShopNews:  false,
+					EventNews: false,
+					Specials:  false,
+					Genres:    false,
 				},
 			},
 			ServerSettings: ServerSettings{
@@ -102,11 +102,11 @@ func LoadConfig() (*Config, error) {
 	// Set default sync targets if not present in config
 	if cfg.SyncSettings.SyncTargets == nil {
 		cfg.SyncSettings.SyncTargets = &SyncTargets{
-			Shops:     true,
-			ShopNews:  true,
-			EventNews: true,
-			Specials:  true,
-			Genres:    true,
+			Shops:     false,
+			ShopNews:  false,
+			EventNews: false,
+			Specials:  false,
+			Genres:    false,
 		}
 	}
 

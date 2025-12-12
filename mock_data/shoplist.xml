@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<data>
+    <item>
+        <shopId>1001</shopId>
+        <shopName>テストショップA</shopName>
+        <shopNameKana>テストショップエー</shopNameKana>
+        <shopNameEnglish>Test Shop A</shopNameEnglish>
+        <searches>test</searches>
+        <genre>1</genre>
+        <genreSub>2</genreSub>
+        <genreSubEnglish>Cafe</genreSubEnglish>
+        <genreMemo>おいしいコーヒー</genreMemo>
+        <genreMemoEnglish>Delicious Coffee</genreMemoEnglish>
+        <groupId>1</groupId>
+        <tel>03-1234-5678</tel>
+        <floors>1F</floors>
+        <area>Area A</area>
+        <areaSub>A-1</areaSub>
+        <number>101</number>
+        <closeFlg>0</closeFlg>
+        <openTime>10:00-21:00</openTime>
+        <description>テスト用のショップデータです。</description>
+        <photo1>http://localhost:8080/images/photo1.jpg</photo1>
+        <photo2></photo2>
+        <shopLogo></shopLogo>
+        <updateDate>2024-01-01 10:00:00</updateDate>
+    </item>
+    <item>
+        <shopId>1002</shopId>
+        <shopName>テストショップB</shopName>
+        <shopNameKana>テストショップビー</shopNameKana>
+        <shopNameEnglish>Test Shop B</shopNameEnglish>
+        <updateDate>2025-12-01 10:00:00</updateDate>
+    </item>
+</data>
+

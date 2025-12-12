@@ -6,13 +6,13 @@
     "password": "w3HxZV0f"
   },
   "syncSettings": {
-    "syncIntervalMinutes": 1,
-    "syncOnStartup": true,
+    "syncIntervalMinutes": 10,
+    "syncOnStartup": false,
     "autoSyncEnabled": true,
     "syncTargets": {
-      "shops": true,
-      "shopNews": true,
-      "eventNews": true,
+      "shops": false,
+      "shopNews": false,
+      "eventNews": false,
       "specials": false,
       "genres": false
     }

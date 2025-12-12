@@ -135,7 +135,7 @@ func (m *Manager) StartSync() (bool, error) {
 		if err != nil {
 			fmt.Printf("Error syncing shops: %v\n", err)
 		}
-		if count > 0 {
+		if count != 0 {
 			anyUpdated = true
 		}
 		updateStats["shops"] = count
@@ -153,7 +153,7 @@ func (m *Manager) StartSync() (bool, error) {
 		if err != nil {
 			fmt.Printf("Error syncing shop news: %v\n", err)
 		}
-		if count > 0 {
+		if count != 0 {
 			anyUpdated = true
 		}
 		updateStats["shopNews"] = count
@@ -171,7 +171,7 @@ func (m *Manager) StartSync() (bool, error) {
 		if err != nil {
 			fmt.Printf("Error syncing event news: %v\n", err)
 		}
-		if count > 0 {
+		if count != 0 {
 			anyUpdated = true
 		}
 		updateStats["eventNews"] = count
@@ -189,7 +189,7 @@ func (m *Manager) StartSync() (bool, error) {
 		if err != nil {
 			fmt.Printf("Error syncing specials: %v\n", err)
 		}
-		if count > 0 {
+		if count != 0 {
 			anyUpdated = true
 		}
 		updateStats["specials"] = count
@@ -207,12 +207,20 @@ func (m *Manager) StartSync() (bool, error) {
 		if err != nil {
 			fmt.Printf("Error syncing genres: %v\n", err)
 		}
-		if count > 0 {
+		if count != 0 {
 			anyUpdated = true
 		}
 		// Genre updates are not tracked for "updated" flag currently (always 0)
 	} else {
 		fmt.Println("Skipping genres sync (disabled in config)")
+	}
+
+	// 6. Cleanup Orphaned Files
+	m.notifyProgress(SyncProgress{
+		Main: &ProgressDetail{Percentage: 95, Message: "古いファイルを整理中..."},
+	})
+	if err := m.cleanupOrphanedFiles(); err != nil {
+		fmt.Printf("Error cleaning up files: %v\n", err)
 	}
 
 	fmt.Println("--- Synchronization Completed ---")
@@ -228,8 +236,8 @@ func (m *Manager) downloadWorker(jobs <-chan DownloadJob, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for job := range jobs {
 		if err := m.downloadFile(job.RemoteURL, job.LocalPath); err != nil {
-			// Log error but don't stop worker
-			// fmt.Printf("[Worker] Failed to download %s: %v\n", job.RemoteURL, err)
+			// Log error
+			fmt.Printf("[Worker] Failed to download %s: %v\n", job.RemoteURL, err)
 		}
 	}
 }
@@ -248,20 +256,55 @@ func (m *Manager) downloadFile(url, destPath string) error {
 		return err
 	}
 
-	resp, err := http.Get(url)
-	if err != nil {
+	// Helper to perform download
+	doDownload := func(targetUrl string) error {
+		req, err := http.NewRequest("GET", targetUrl, nil)
+		if err != nil {
+			return err
+		}
+
+		if m.Config.APISettings.Username != "" {
+			req.SetBasicAuth(m.Config.APISettings.Username, m.Config.APISettings.Password)
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("status: %s", resp.Status)
+		}
+
+		out, err := os.Create(destPath)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+
+		_, err = io.Copy(out, resp.Body)
 		return err
 	}
-	defer resp.Body.Close()
 
-	out, err := os.Create(destPath)
-	if err != nil {
-		return err
+	// First attempt
+	err := doDownload(url)
+	if err == nil {
+		fmt.Printf("[Download] Success: %s\n", url)
+		return nil
 	}
-	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
-	return err
+	// If failed and URL contains "/api/", try removing it (common path issue)
+	if strings.Contains(url, "/api/") {
+		altUrl := strings.Replace(url, "/api/", "/", 1)
+		fmt.Printf("[Download] Retrying with alternative URL: %s (Original error: %v)\n", altUrl, err)
+		if errRetry := doDownload(altUrl); errRetry == nil {
+			fmt.Printf("[Download] Success on retry: %s\n", altUrl)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("failed to download file: %s, error: %w", url, err)
 }
 
 func (m *Manager) getBaseFileDir() string {
@@ -272,6 +315,16 @@ func (m *Manager) getBaseFileDir() string {
 func (m *Manager) resolveURL(relativePath string) string {
 	base := strings.TrimRight(m.Config.APISettings.BaseURL, "/")
 	cleanRel := strings.TrimLeft(relativePath, "/")
+
+	// If the relative path starts with "files/", check if base URL ends with "api".
+	// If so, we likely want to strip "api" from base to get the file root.
+	// Example: Base=".../api", Rel="files/..." -> ".../files/..."
+	if strings.HasPrefix(cleanRel, "files/") && strings.HasSuffix(base, "/api") {
+		base = strings.TrimSuffix(base, "/api")
+		// Trim again in case there was a slash before "api"
+		base = strings.TrimRight(base, "/")
+	}
+
 	return base + "/" + cleanRel
 }
 
@@ -318,6 +371,11 @@ func (m *Manager) syncShops() (int, error) {
 	}
 
 	existing, _ := m.getExistingUpdateDates("shops", "shop_id")
+	// Make a copy or just assume existing map will be used to track deletions
+	// But `existing` map is also used to check old date.
+	// We will delete keys from `existing` as we process them.
+	// Remaining keys will be deleted from DB.
+
 	updateCount := 0
 
 	tx, err := m.DB.Conn.Begin()
@@ -345,10 +403,11 @@ func (m *Manager) syncShops() (int, error) {
 	for _, item := range resp.Items {
 		// Check update date
 		oldDate, exists := existing[item.ShopID]
+		if exists {
+			delete(existing, item.ShopID) // Mark as seen
+		}
+
 		// Determine if update is needed
-		// Note: We use string comparison for update_date.
-		// If the record doesn't exist, or the update_date is different, we count it as an update.
-		// Also handle empty update_date which might cause constant updates if not handled
 		isNew := !exists
 		isUpdated := exists && oldDate != item.UpdateDate
 
@@ -363,8 +422,6 @@ func (m *Manager) syncShops() (int, error) {
 		}
 
 		if isNew || isUpdated {
-			// Debug logging (commented out for production)
-			// fmt.Printf("[DEBUG] Shop update detected. ID: %s, Old: '%s', New: '%s'\n", item.ShopID, oldDate, item.UpdateDate)
 			updateCount++
 		}
 
@@ -394,12 +451,28 @@ func (m *Manager) syncShops() (int, error) {
 			item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
 		)
 	}
+
+	// Delete obsolete records
+	deletedCount := 0
+	if len(existing) > 0 {
+		delStmt, err := tx.Prepare("DELETE FROM shops WHERE shop_id = ?")
+		if err != nil {
+			return 0, err
+		}
+		defer delStmt.Close()
+		for id := range existing {
+			if _, err := delStmt.Exec(id); err == nil {
+				deletedCount++
+			}
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 
 	m.processDownloads(downloadJobs)
-	return updateCount, nil
+	return updateCount - deletedCount, nil
 }
 
 func (m *Manager) syncShopNews() (int, error) {
@@ -438,8 +511,11 @@ func (m *Manager) syncShopNews() (int, error) {
 	for _, item := range resp.Items {
 		// Check update date
 		oldDate, exists := existing[item.ShopNewsID]
+		if exists {
+			delete(existing, item.ShopNewsID)
+		}
+
 		if !exists || (oldDate != item.UpdateDate && item.UpdateDate != "" && strings.TrimSpace(oldDate) != strings.TrimSpace(item.UpdateDate)) {
-			// fmt.Printf("[DEBUG] ShopNews update detected. ID: %s, Old: '%s', New: '%s'\n", item.ShopNewsID, oldDate, item.UpdateDate)
 			updateCount++
 		}
 
@@ -450,12 +526,28 @@ func (m *Manager) syncShopNews() (int, error) {
 		}
 		stmt.Exec(item.ShopNewsID, item.ShopID, item.Title, item.Body, item.Photo1RemoteURL, item.Photo1LocalPath, item.UpdateDate)
 	}
+
+	// Delete obsolete records
+	deletedCount := 0
+	if len(existing) > 0 {
+		delStmt, err := tx.Prepare("DELETE FROM shop_news WHERE shop_news_id = ?")
+		if err != nil {
+			return 0, err
+		}
+		defer delStmt.Close()
+		for id := range existing {
+			if _, err := delStmt.Exec(id); err == nil {
+				deletedCount++
+			}
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 
 	m.processDownloads(downloadJobs)
-	return updateCount, nil
+	return updateCount - deletedCount, nil
 }
 
 func (m *Manager) syncEventNews() (int, error) {
@@ -494,8 +586,11 @@ func (m *Manager) syncEventNews() (int, error) {
 	for _, item := range resp.Items {
 		// Check update date
 		oldDate, exists := existing[item.EventID]
+		if exists {
+			delete(existing, item.EventID)
+		}
+
 		if !exists || (oldDate != item.UpdateDate && item.UpdateDate != "" && strings.TrimSpace(oldDate) != strings.TrimSpace(item.UpdateDate)) {
-			// fmt.Printf("[DEBUG] EventNews update detected. ID: %s, Old: '%s', New: '%s'\n", item.EventID, oldDate, item.UpdateDate)
 			updateCount++
 		}
 
@@ -506,12 +601,28 @@ func (m *Manager) syncEventNews() (int, error) {
 		}
 		stmt.Exec(item.EventID, item.Title, item.Body, item.DateStart, item.DateEnd, item.Photo1RemoteURL, item.Photo1LocalPath, item.UpdateDate)
 	}
+
+	// Delete obsolete records
+	deletedCount := 0
+	if len(existing) > 0 {
+		delStmt, err := tx.Prepare("DELETE FROM event_news WHERE event_id = ?")
+		if err != nil {
+			return 0, err
+		}
+		defer delStmt.Close()
+		for id := range existing {
+			if _, err := delStmt.Exec(id); err == nil {
+				deletedCount++
+			}
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 
 	m.processDownloads(downloadJobs)
-	return updateCount, nil
+	return updateCount - deletedCount, nil
 }
 
 func (m *Manager) syncSpecials() (int, error) {
@@ -561,8 +672,11 @@ func (m *Manager) syncSpecials() (int, error) {
 
 			// Check update date
 			oldDate, exists := existing[item.SpecialID]
+			if exists {
+				delete(existing, item.SpecialID)
+			}
+
 			if !exists || (oldDate != item.UpdateDate && item.UpdateDate != "" && strings.TrimSpace(oldDate) != strings.TrimSpace(item.UpdateDate)) {
-				// fmt.Printf("[DEBUG] Special update detected. ID: %s, Old: '%s', New: '%s'\n", item.SpecialID, oldDate, item.UpdateDate)
 				updateCount++
 			}
 
@@ -574,12 +688,28 @@ func (m *Manager) syncSpecials() (int, error) {
 			stmt.Exec(item.SpecialID, item.SpecialTitle, item.Title, item.SpecialSubBody, item.CategoryName, item.ShopID, item.ShopName, item.UpdateDate, item.SpecialImageLocalPath)
 		}
 	}
+
+	// Delete obsolete records
+	deletedCount := 0
+	if len(existing) > 0 {
+		delStmt, err := tx.Prepare("DELETE FROM specials WHERE special_id = ?")
+		if err != nil {
+			return 0, err
+		}
+		defer delStmt.Close()
+		for id := range existing {
+			if _, err := delStmt.Exec(id); err == nil {
+				deletedCount++
+			}
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 
 	m.processDownloads(downloadJobs)
-	return updateCount, nil
+	return updateCount - deletedCount, nil
 }
 
 func (m *Manager) syncGenres() (int, error) {
@@ -618,6 +748,73 @@ func (m *Manager) syncGenres() (int, error) {
 	// Genres don't have update_date, assume false or maybe we should hash?
 	// For now, returning false as they are master data and rarely change
 	return 0, tx.Commit()
+}
+
+func (m *Manager) cleanupOrphanedFiles() error {
+	baseFileDir := m.getBaseFileDir()
+
+	// 1. Collect all valid local paths from DB
+	validPaths := make(map[string]bool)
+
+	queries := []string{
+		"SELECT photo1_local_path FROM shops WHERE photo1_local_path != ''",
+		"SELECT photo2_local_path FROM shops WHERE photo2_local_path != ''",
+		"SELECT shop_logo_local_path FROM shops WHERE shop_logo_local_path != ''",
+		"SELECT photo1_local_path FROM shop_news WHERE photo1_local_path != ''",
+		"SELECT photo1_local_path FROM event_news WHERE photo1_local_path != ''",
+		"SELECT special_image_local_path FROM specials WHERE special_image_local_path != ''",
+	}
+
+	for _, q := range queries {
+		rows, err := m.DB.Conn.Query(q)
+		if err != nil {
+			fmt.Printf("Warning: cleanup query failed: %s, %v\n", q, err)
+			continue
+		}
+		defer rows.Close() // In loop but rows closed after scan or next iter. better to use func closure if concerned about fd limit
+		// Actually rows.Close() is defered but will stack up. Let's wrap in closure or just direct Close.
+		// Re-writing loop body:
+		func() {
+			defer rows.Close()
+			for rows.Next() {
+				var p string
+				if err := rows.Scan(&p); err == nil && p != "" {
+					// Normalize path
+					abs, err := filepath.Abs(p)
+					if err == nil {
+						validPaths[strings.ToLower(abs)] = true
+					}
+				}
+			}
+		}()
+	}
+
+	// 2. Walk through the file directory
+	err := filepath.Walk(baseFileDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		// Check if file is in validPaths
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return nil
+		}
+
+		if !validPaths[strings.ToLower(absPath)] {
+			// Found orphaned file
+			// fmt.Printf("Removing orphaned file: %s\n", path)
+			if err := os.Remove(path); err != nil {
+				fmt.Printf("Failed to remove orphaned file: %s, %v\n", path, err)
+			}
+		}
+		return nil
+	})
+
+	return err
 }
 
 func (m *Manager) fetchXML(url string) ([]byte, error) {

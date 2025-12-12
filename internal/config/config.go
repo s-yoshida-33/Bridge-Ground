@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
 // Version is the application version
@@ -49,6 +50,13 @@ func LoadConfig() (*Config, error) {
 		"src/config/api_config_default.json",
 	}
 
+	// Add executable directory to search paths
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		// Check config.json in the same directory as the executable
+		paths = append([]string{filepath.Join(exeDir, "config.json")}, paths...)
+	}
+
 	var configPath string
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
@@ -76,7 +84,7 @@ func LoadConfig() (*Config, error) {
 				},
 			},
 			ServerSettings: ServerSettings{
-				Port: 3000,
+				Port: 8090,
 			},
 		}, nil
 	}

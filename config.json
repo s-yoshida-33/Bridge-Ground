@@ -8,7 +8,14 @@
   "syncSettings": {
     "syncIntervalMinutes": 1,
     "syncOnStartup": true,
-    "autoSyncEnabled": true
+    "autoSyncEnabled": true,
+    "syncTargets": {
+      "shops": true,
+      "shopNews": true,
+      "eventNews": true,
+      "specials": false,
+      "genres": false
+    }
   },
   "serverSettings": {
     "port": 8090

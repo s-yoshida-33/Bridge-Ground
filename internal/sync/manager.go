@@ -111,80 +111,114 @@ func (m *Manager) StartSync() (bool, error) {
 	}
 
 	anyUpdated := false
+	targets := m.Config.SyncSettings.SyncTargets
+	if targets == nil {
+		// Should verify default targets are set in config load, but fallback here
+		targets = &config.SyncTargets{
+			Shops:     true,
+			ShopNews:  true,
+			EventNews: true,
+			Specials:  true,
+			Genres:    true,
+		}
+	}
+
+	// Track update counts for each category
+	updateStats := make(map[string]int)
 
 	// 1. Sync Shops
-	m.notifyProgress(SyncProgress{
-		Main: &ProgressDetail{Percentage: 10, Message: "店舗データを同期中..."},
-	})
-	updated, err := m.syncShops()
-	if err != nil {
-		fmt.Printf("Error syncing shops: %v\n", err)
-	}
-	if updated {
-		anyUpdated = true
+	if targets.Shops {
+		m.notifyProgress(SyncProgress{
+			Main: &ProgressDetail{Percentage: 10, Message: "店舗データを同期中..."},
+		})
+		count, err := m.syncShops()
+		if err != nil {
+			fmt.Printf("Error syncing shops: %v\n", err)
+		}
+		if count > 0 {
+			anyUpdated = true
+		}
+		updateStats["shops"] = count
+	} else {
+		fmt.Println("Skipping shops sync (disabled in config)")
+		updateStats["shops"] = 0
 	}
 
 	// 2. Sync Shop News
-	m.notifyProgress(SyncProgress{
-		Main: &ProgressDetail{Percentage: 30, Message: "ショップニュースを同期中..."},
-	})
-	updated, err = m.syncShopNews()
-	if err != nil {
-		fmt.Printf("Error syncing shop news: %v\n", err)
-	}
-	if updated {
-		anyUpdated = true
+	if targets.ShopNews {
+		m.notifyProgress(SyncProgress{
+			Main: &ProgressDetail{Percentage: 30, Message: "ショップニュースを同期中..."},
+		})
+		count, err := m.syncShopNews()
+		if err != nil {
+			fmt.Printf("Error syncing shop news: %v\n", err)
+		}
+		if count > 0 {
+			anyUpdated = true
+		}
+		updateStats["shopNews"] = count
+	} else {
+		fmt.Println("Skipping shop news sync (disabled in config)")
+		updateStats["shopNews"] = 0
 	}
 
 	// 3. Sync Event News
-	m.notifyProgress(SyncProgress{
-		Main: &ProgressDetail{Percentage: 50, Message: "イベントニュースを同期中..."},
-	})
-	updated, err = m.syncEventNews()
-	if err != nil {
-		fmt.Printf("Error syncing event news: %v\n", err)
-	}
-	if updated {
-		anyUpdated = true
+	if targets.EventNews {
+		m.notifyProgress(SyncProgress{
+			Main: &ProgressDetail{Percentage: 50, Message: "イベントニュースを同期中..."},
+		})
+		count, err := m.syncEventNews()
+		if err != nil {
+			fmt.Printf("Error syncing event news: %v\n", err)
+		}
+		if count > 0 {
+			anyUpdated = true
+		}
+		updateStats["eventNews"] = count
+	} else {
+		fmt.Println("Skipping event news sync (disabled in config)")
+		updateStats["eventNews"] = 0
 	}
 
 	// 4. Sync Specials
-	m.notifyProgress(SyncProgress{
-		Main: &ProgressDetail{Percentage: 70, Message: "特集データを同期中..."},
-	})
-	updated, err = m.syncSpecials()
-	if err != nil {
-		fmt.Printf("Error syncing specials: %v\n", err)
-	}
-	if updated {
-		anyUpdated = true
+	if targets.Specials {
+		m.notifyProgress(SyncProgress{
+			Main: &ProgressDetail{Percentage: 70, Message: "特集データを同期中..."},
+		})
+		count, err := m.syncSpecials()
+		if err != nil {
+			fmt.Printf("Error syncing specials: %v\n", err)
+		}
+		if count > 0 {
+			anyUpdated = true
+		}
+		updateStats["specials"] = count
+	} else {
+		fmt.Println("Skipping specials sync (disabled in config)")
+		updateStats["specials"] = 0
 	}
 
 	// 5. Sync Genres
-	m.notifyProgress(SyncProgress{
-		Main: &ProgressDetail{Percentage: 90, Message: "ジャンルデータを同期中..."},
-	})
-	updated, err = m.syncGenres()
-	if err != nil {
-		fmt.Printf("Error syncing genres: %v\n", err)
-	}
-	if updated {
-		anyUpdated = true
+	if targets.Genres {
+		m.notifyProgress(SyncProgress{
+			Main: &ProgressDetail{Percentage: 90, Message: "ジャンルデータを同期中..."},
+		})
+		count, err := m.syncGenres()
+		if err != nil {
+			fmt.Printf("Error syncing genres: %v\n", err)
+		}
+		if count > 0 {
+			anyUpdated = true
+		}
+		// Genre updates are not tracked for "updated" flag currently (always 0)
+	} else {
+		fmt.Println("Skipping genres sync (disabled in config)")
 	}
 
 	fmt.Println("--- Synchronization Completed ---")
 
-	// Get stats for final update
-	counts, _ := m.DB.GetDataCounts()
-	stats := map[string]int{
-		"shops":     counts.Shops,
-		"shopNews":  counts.ShopNews,
-		"eventNews": counts.EventNews,
-		"specials":  counts.Specials,
-	}
-
 	m.notifyProgress(SyncProgress{
-		Main: &ProgressDetail{Percentage: 100, Message: "同期完了", Stats: stats},
+		Main: &ProgressDetail{Percentage: 100, Message: "同期完了", Stats: updateStats},
 	})
 	return anyUpdated, nil
 }
@@ -266,7 +300,7 @@ func (m *Manager) processDownloads(jobs []DownloadJob) {
 
 // --- Sync Implementations ---
 
-func (m *Manager) syncShops() (bool, error) {
+func (m *Manager) syncShops() (int, error) {
 	baseURL := m.Config.APISettings.BaseURL
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
@@ -275,20 +309,20 @@ func (m *Manager) syncShops() (bool, error) {
 	fmt.Printf("Fetching shops from: %s\n", endpoint)
 	data, err := m.fetchXML(endpoint)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 
 	var resp models.ShopListResponse
 	if err := xml.Unmarshal(data, &resp); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	existing, _ := m.getExistingUpdateDates("shops", "shop_id")
-	hasUpdates := false
+	updateCount := 0
 
 	tx, err := m.DB.Conn.Begin()
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO shops (
 		shop_id, shop_name, shop_name_kana, shop_name_english, searches, 
@@ -301,7 +335,7 @@ func (m *Manager) syncShops() (bool, error) {
 		shop_logo_remote_url, shop_logo_local_path
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	defer stmt.Close()
 
@@ -311,10 +345,27 @@ func (m *Manager) syncShops() (bool, error) {
 	for _, item := range resp.Items {
 		// Check update date
 		oldDate, exists := existing[item.ShopID]
-		if !exists || oldDate != item.UpdateDate {
+		// Determine if update is needed
+		// Note: We use string comparison for update_date.
+		// If the record doesn't exist, or the update_date is different, we count it as an update.
+		// Also handle empty update_date which might cause constant updates if not handled
+		isNew := !exists
+		isUpdated := exists && oldDate != item.UpdateDate
+
+		// If both old and new dates are empty, treat as no update needed to prevent loop
+		if exists && oldDate == "" && item.UpdateDate == "" {
+			isUpdated = false
+		}
+
+		// Additional check: Trim space to avoid formatting issues
+		if exists && strings.TrimSpace(oldDate) == strings.TrimSpace(item.UpdateDate) {
+			isUpdated = false
+		}
+
+		if isNew || isUpdated {
 			// Debug logging (commented out for production)
 			// fmt.Printf("[DEBUG] Shop update detected. ID: %s, Old: '%s', New: '%s'\n", item.ShopID, oldDate, item.UpdateDate)
-			hasUpdates = true
+			updateCount++
 		}
 
 		if item.Photo1 != "" {
@@ -344,14 +395,14 @@ func (m *Manager) syncShops() (bool, error) {
 		)
 	}
 	if err := tx.Commit(); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	m.processDownloads(downloadJobs)
-	return hasUpdates, nil
+	return updateCount, nil
 }
 
-func (m *Manager) syncShopNews() (bool, error) {
+func (m *Manager) syncShopNews() (int, error) {
 	baseURL := m.Config.APISettings.BaseURL
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
@@ -360,24 +411,24 @@ func (m *Manager) syncShopNews() (bool, error) {
 	fmt.Printf("Fetching shop news from: %s\n", endpoint)
 	data, err := m.fetchXML(endpoint)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 
 	var resp models.ShopNewsResponse
 	if err := xml.Unmarshal(data, &resp); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	existing, _ := m.getExistingUpdateDates("shop_news", "shop_news_id")
-	hasUpdates := false
+	updateCount := 0
 
 	tx, err := m.DB.Conn.Begin()
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO shop_news (shop_news_id, shop_id, title, body, photo1_remote_url, photo1_local_path, update_date) VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	defer stmt.Close()
 
@@ -387,9 +438,9 @@ func (m *Manager) syncShopNews() (bool, error) {
 	for _, item := range resp.Items {
 		// Check update date
 		oldDate, exists := existing[item.ShopNewsID]
-		if !exists || oldDate != item.UpdateDate {
+		if !exists || (oldDate != item.UpdateDate && item.UpdateDate != "" && strings.TrimSpace(oldDate) != strings.TrimSpace(item.UpdateDate)) {
 			// fmt.Printf("[DEBUG] ShopNews update detected. ID: %s, Old: '%s', New: '%s'\n", item.ShopNewsID, oldDate, item.UpdateDate)
-			hasUpdates = true
+			updateCount++
 		}
 
 		if item.Photo1 != "" {
@@ -400,14 +451,14 @@ func (m *Manager) syncShopNews() (bool, error) {
 		stmt.Exec(item.ShopNewsID, item.ShopID, item.Title, item.Body, item.Photo1RemoteURL, item.Photo1LocalPath, item.UpdateDate)
 	}
 	if err := tx.Commit(); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	m.processDownloads(downloadJobs)
-	return hasUpdates, nil
+	return updateCount, nil
 }
 
-func (m *Manager) syncEventNews() (bool, error) {
+func (m *Manager) syncEventNews() (int, error) {
 	baseURL := m.Config.APISettings.BaseURL
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
@@ -416,24 +467,24 @@ func (m *Manager) syncEventNews() (bool, error) {
 	fmt.Printf("Fetching event news from: %s\n", endpoint)
 	data, err := m.fetchXML(endpoint)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 
 	var resp models.EventNewsResponse
 	if err := xml.Unmarshal(data, &resp); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	existing, _ := m.getExistingUpdateDates("event_news", "event_id")
-	hasUpdates := false
+	updateCount := 0
 
 	tx, err := m.DB.Conn.Begin()
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO event_news (event_id, title, body, date_start, date_end, photo1_remote_url, photo1_local_path, update_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	defer stmt.Close()
 
@@ -443,9 +494,9 @@ func (m *Manager) syncEventNews() (bool, error) {
 	for _, item := range resp.Items {
 		// Check update date
 		oldDate, exists := existing[item.EventID]
-		if !exists || oldDate != item.UpdateDate {
+		if !exists || (oldDate != item.UpdateDate && item.UpdateDate != "" && strings.TrimSpace(oldDate) != strings.TrimSpace(item.UpdateDate)) {
 			// fmt.Printf("[DEBUG] EventNews update detected. ID: %s, Old: '%s', New: '%s'\n", item.EventID, oldDate, item.UpdateDate)
-			hasUpdates = true
+			updateCount++
 		}
 
 		if item.Photo1 != "" {
@@ -456,14 +507,14 @@ func (m *Manager) syncEventNews() (bool, error) {
 		stmt.Exec(item.EventID, item.Title, item.Body, item.DateStart, item.DateEnd, item.Photo1RemoteURL, item.Photo1LocalPath, item.UpdateDate)
 	}
 	if err := tx.Commit(); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	m.processDownloads(downloadJobs)
-	return hasUpdates, nil
+	return updateCount, nil
 }
 
-func (m *Manager) syncSpecials() (bool, error) {
+func (m *Manager) syncSpecials() (int, error) {
 	baseURL := m.Config.APISettings.BaseURL
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
@@ -472,24 +523,24 @@ func (m *Manager) syncSpecials() (bool, error) {
 	fmt.Printf("Fetching specials from: %s\n", endpoint)
 	data, err := m.fetchXML(endpoint)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 
 	var resp models.SpecialListResponse
 	if err := xml.Unmarshal(data, &resp); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	existing, _ := m.getExistingUpdateDates("specials", "special_id")
-	hasUpdates := false
+	updateCount := 0
 
 	tx, err := m.DB.Conn.Begin()
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO specials (special_id, special_title, title, special_sub_body, category_name, shop_id, shop_name, update_date, special_image_local_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	defer stmt.Close()
 
@@ -510,9 +561,9 @@ func (m *Manager) syncSpecials() (bool, error) {
 
 			// Check update date
 			oldDate, exists := existing[item.SpecialID]
-			if !exists || oldDate != item.UpdateDate {
+			if !exists || (oldDate != item.UpdateDate && item.UpdateDate != "" && strings.TrimSpace(oldDate) != strings.TrimSpace(item.UpdateDate)) {
 				// fmt.Printf("[DEBUG] Special update detected. ID: %s, Old: '%s', New: '%s'\n", item.SpecialID, oldDate, item.UpdateDate)
-				hasUpdates = true
+				updateCount++
 			}
 
 			if item.SpecialImage != "" {
@@ -524,14 +575,14 @@ func (m *Manager) syncSpecials() (bool, error) {
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	m.processDownloads(downloadJobs)
-	return hasUpdates, nil
+	return updateCount, nil
 }
 
-func (m *Manager) syncGenres() (bool, error) {
+func (m *Manager) syncGenres() (int, error) {
 	baseURL := m.Config.APISettings.BaseURL
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
@@ -540,30 +591,33 @@ func (m *Manager) syncGenres() (bool, error) {
 	fmt.Printf("Fetching genres from: %s\n", endpoint)
 	data, err := m.fetchXML(endpoint)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 
 	var resp models.GenreListResponse
 	if err := xml.Unmarshal(data, &resp); err != nil {
-		return false, err
+		return 0, err
 	}
 
 	tx, err := m.DB.Conn.Begin()
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO genres (genre_id, genre_name, genre_slug) VALUES (?, ?, ?)`)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	defer stmt.Close()
 
+	// Genres don't have update_date, so we treat all as processed but not necessarily "updated".
+	// However, since we don't track changes for genres, we can either return 0 or the count of items.
+	// Returning 0 maintains the behavior that genres don't trigger "new updates" notifications usually.
 	for _, item := range resp.Items {
 		stmt.Exec(item.GenreID, item.GenreName, item.GenreSlug)
 	}
 	// Genres don't have update_date, assume false or maybe we should hash?
 	// For now, returning false as they are master data and rarely change
-	return false, tx.Commit()
+	return 0, tx.Commit()
 }
 
 func (m *Manager) fetchXML(url string) ([]byte, error) {

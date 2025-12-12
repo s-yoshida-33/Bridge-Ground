@@ -73,7 +73,7 @@ func (m *Manager) Close() {
 func (m *Manager) InitializeSchema() error {
 	// Basic schema creation if not exists
 	queries := []string{
-		`DROP TABLE IF EXISTS shops`, // Re-create shops table to match new schema
+		// `DROP TABLE IF EXISTS shops`, // Removed: This was causing full sync on every restart
 		`CREATE TABLE IF NOT EXISTS shops (
 			shop_id TEXT PRIMARY KEY,
 			shop_name TEXT,

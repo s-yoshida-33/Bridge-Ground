@@ -173,6 +173,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('auto-sync-enabled').checked = config.syncSettings.autoSyncEnabled;
         document.getElementById('sync-interval').value = config.syncSettings.syncIntervalMinutes;
         document.getElementById('sync-on-startup').checked = config.syncSettings.syncOnStartup;
+
+        // Sync Targets
+        const targets = config.syncSettings.syncTargets || {
+            shops: true, shopNews: true, eventNews: true, specials: true, genres: true
+        };
+        document.getElementById('sync-target-shops').checked = targets.shops;
+        document.getElementById('sync-target-shop-news').checked = targets.shopNews;
+        document.getElementById('sync-target-event-news').checked = targets.eventNews;
+        document.getElementById('sync-target-specials').checked = targets.specials;
+        document.getElementById('sync-target-genres').checked = targets.genres;
     }
 
     function showMessage(type, text) {
@@ -209,7 +219,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             syncSettings: {
                 autoSyncEnabled: document.getElementById('auto-sync-enabled').checked,
                 syncIntervalMinutes: parseInt(intervalInput),
-                syncOnStartup: document.getElementById('sync-on-startup').checked
+                syncOnStartup: document.getElementById('sync-on-startup').checked,
+                syncTargets: {
+                    shops: document.getElementById('sync-target-shops').checked,
+                    shopNews: document.getElementById('sync-target-shop-news').checked,
+                    eventNews: document.getElementById('sync-target-event-news').checked,
+                    specials: document.getElementById('sync-target-specials').checked,
+                    genres: document.getElementById('sync-target-genres').checked
+                }
             }
         };
 
@@ -268,8 +285,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const counts = await bridgeApi.getDataCounts(); // IPC Call to get counts
             
             const formatCount = (total, key) => {
-                if (latestStats && latestStats[key] > 0) {
-                    return `${total} (今回: +${latestStats[key]})`;
+                // If latestStats exists, verify the key exists AND the value is greater than 0
+                // JavaScript objects: key in latestStats checks for existence
+                if (latestStats && (key in latestStats)) {
+                    const added = latestStats[key];
+                    if (added > 0) {
+                         return `${total} (今回: +${added})`;
+                    }
                 }
                 return total;
             };

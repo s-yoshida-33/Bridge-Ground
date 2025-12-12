@@ -124,7 +124,7 @@
                 <input type="text" id="local-api-url" readonly style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; color: #555;">
                 <button id="copy-api-url-button" style="padding: 8px 12px; font-size: 0.9em; background-color: #6c757d;">コピー</button>
             </div>
-            <p id="copy-message" style="margin-top: 5px; color: green; font-size: 0.9em; display: none;">コピーしました</p>
+            <p id="copy-message" style="margin-top: 5px; color: green; font-size: 0.9em; display: none;">コピー完了</p>
             
             <h4 style="margin-top: 20px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;">利用可能なAPIエンドポイント</h4>
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
@@ -226,12 +226,34 @@
                 <input type="checkbox" id="sync-on-startup"> アプリ起動時に自動同期を実行
             </label>
         </div>
+
+        <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px;">
+            <h4 style="margin-top: 0; margin-bottom: 10px;">同期対象エンドポイント</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px;">
+                <label>
+                    <input type="checkbox" id="sync-target-shops"> 店舗データ
+                </label>
+                <label>
+                    <input type="checkbox" id="sync-target-shop-news"> ショップニュース
+                </label>
+                <label>
+                    <input type="checkbox" id="sync-target-event-news"> イベントニュース
+                </label>
+                <label>
+                    <input type="checkbox" id="sync-target-specials"> 特集/セール
+                </label>
+                <label>
+                    <input type="checkbox" id="sync-target-genres"> ジャンルデータ
+                </label>
+            </div>
+            <small style="display: block; margin-top: 5px; color: #666;">※チェックを外すとそのデータの同期をスキップします。</small>
+        </div>
         
         <button id="save-settings-button" style="margin-top: 20px; padding: 10px 20px;">保存</button>
     </div>
 
     <div id="footer" style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em; border-top: 1px solid #eee; padding-top: 10px;">
-        BridgeGround v<span id="app-version">...</span>
+        v<span id="app-version">...</span>
     </div>
 
     <script src="/bridge.js"></script>

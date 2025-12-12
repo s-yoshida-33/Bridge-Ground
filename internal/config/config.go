@@ -6,7 +6,7 @@ import (
 )
 
 // Version is the application version
-var Version = "0.0.1"
+var Version = "2.0.0"
 
 type Config struct {
 	APISettings    APISettings    `json:"apiSettings"`
@@ -22,9 +22,18 @@ type APISettings struct {
 }
 
 type SyncSettings struct {
-	SyncIntervalMinutes int  `json:"syncIntervalMinutes"`
-	SyncOnStartup       bool `json:"syncOnStartup"`
-	AutoSyncEnabled     bool `json:"autoSyncEnabled"`
+	SyncIntervalMinutes int          `json:"syncIntervalMinutes"`
+	SyncOnStartup       bool         `json:"syncOnStartup"`
+	AutoSyncEnabled     bool         `json:"autoSyncEnabled"`
+	SyncTargets         *SyncTargets `json:"syncTargets,omitempty"`
+}
+
+type SyncTargets struct {
+	Shops     bool `json:"shops"`
+	ShopNews  bool `json:"shopNews"`
+	EventNews bool `json:"eventNews"`
+	Specials  bool `json:"specials"`
+	Genres    bool `json:"genres"`
 }
 
 type ServerSettings struct {
@@ -58,6 +67,13 @@ func LoadConfig() (*Config, error) {
 				SyncIntervalMinutes: 60,
 				SyncOnStartup:       true,
 				AutoSyncEnabled:     true,
+				SyncTargets: &SyncTargets{
+					Shops:     true,
+					ShopNews:  true,
+					EventNews: true,
+					Specials:  true,
+					Genres:    true,
+				},
 			},
 			ServerSettings: ServerSettings{
 				Port: 3000,
@@ -73,6 +89,17 @@ func LoadConfig() (*Config, error) {
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
+	}
+
+	// Set default sync targets if not present in config
+	if cfg.SyncSettings.SyncTargets == nil {
+		cfg.SyncSettings.SyncTargets = &SyncTargets{
+			Shops:     true,
+			ShopNews:  true,
+			EventNews: true,
+			Specials:  true,
+			Genres:    true,
+		}
 	}
 
 	return &cfg, nil

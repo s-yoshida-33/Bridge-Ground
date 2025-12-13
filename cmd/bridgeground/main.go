@@ -4,20 +4,26 @@ import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
 	"bridge-ground/internal/server"
-	"bridge-ground/internal/sync"
+	appSync "bridge-ground/internal/sync"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"sync"
 	"time"
 
+	"github.com/getlantern/systray"
 	"github.com/zserge/lorca"
 )
 
 // Globals
 var (
 	globalCfg *config.Config
-	syncMgr   *sync.Manager
+	syncMgr   *appSync.Manager
 	dbMgr     *db.Manager
+	srv       *server.Server
+	ui        lorca.UI
+	uiMutex   sync.Mutex
 )
 
 func main() {
@@ -37,97 +43,32 @@ func main() {
 	}
 	defer dbMgr.Close()
 
-	syncMgr = sync.NewManager(globalCfg, dbMgr)
+	syncMgr = appSync.NewManager(globalCfg, dbMgr)
 
 	// 3. Start HTTP Server (Goroutine)
-	srv := server.NewServer(globalCfg, dbMgr)
+	srv = server.NewServer(globalCfg, dbMgr)
 	go func() {
 		srv.Start()
 	}()
 
-	// 4. Create UI Window
-	// Start with a loading message
-	// Add --remote-allow-origins=* to fix connection issue with newer Chrome versions
-	ui, err := lorca.New("data:text/html,<h1>Loading BridgeGround...</h1>", "", 1000, 800, "--remote-allow-origins=*")
-	if err != nil {
-		log.Fatal("Failed to start Lorca (Chrome/Edge not found?): ", err)
-	}
-	defer ui.Close()
-
-	// 5. Bind Go Functions
-	// These will be available as window.go_getConfig(), etc. (returning Promises)
-
-	ui.Bind("go_getConfig", func() *config.Config {
-		return globalCfg
-	})
-
-	ui.Bind("go_getAppVersion", func() string {
-		return config.Version
-	})
-
-	ui.Bind("go_saveConfig", func(newCfg config.Config) error {
-		if err := config.SaveConfig(&newCfg); err != nil {
-			return err
-		}
-
-		// Update startup settings
-		if err := updateStartupRegistry(newCfg.SystemSettings.RunOnStartup); err != nil {
-			// Log error but don't fail the save? Or return warning?
-			// For now, let's log it to console.
-			fmt.Printf("Failed to update startup registry: %v\n", err)
-		}
-
-		*globalCfg = newCfg
-		// In a real app, you might want to signal the sync manager to reload config
-		return nil
-	})
-
-	ui.Bind("go_startManualSync", func() map[string]interface{} {
-		// This runs in the UI thread/context managed by Lorca.
-		// StartSync blocks, so it might freeze the UI if Lorca doesn't handle it concurrently.
-		// Lorca uses a message loop. Long operations should ideally be in a goroutine,
-		// but we need to return a value to the Promise.
-		// If we return a channel, Lorca might not support it directly as Promise.
-		// For now, we run it blocking. If UI freezes, we'll need to refactor to async event pattern.
-		updated, err := syncMgr.StartSync()
-		if err != nil {
-			return map[string]interface{}{"success": false, "message": err.Error()}
-		}
-
-		if updated {
-			// Trigger SSE update event
-			srv.BroadcastEvent("update", map[string]interface{}{
-				"type":      "update",
-				"timestamp": time.Now().Format(time.RFC3339),
-				"message":   "Manual sync completed",
-			})
-		}
-
-		return map[string]interface{}{"success": true}
-	})
-
-	ui.Bind("go_getDataCounts", func() *db.DataCounts {
-		counts, _ := dbMgr.GetDataCounts()
-		return counts
-	})
-
-	// 6. Setup Progress Callback
-	syncMgr.SetProgressCallback(func(p sync.SyncProgress) {
+	// 4. Setup Progress Callback (Thread-safe)
+	syncMgr.SetProgressCallback(func(p appSync.SyncProgress) {
 		b, _ := json.Marshal(p)
-		// ui.Eval is thread-safe
 		jsCode := fmt.Sprintf("if(window.dispatchSyncProgress) window.dispatchSyncProgress(%s)", string(b))
-		ui.Eval(jsCode)
+
+		uiMutex.Lock()
+		if ui != nil {
+			// ui.Eval might fail if window is closed concurrently, ignore error
+			_ = ui.Eval(jsCode)
+		}
+		uiMutex.Unlock()
 	})
 
-	// 7. Auto Sync Logic
+	// 5. Auto Sync Logic
 	if globalCfg.SyncSettings.SyncOnStartup {
 		go func() {
-			// Delay to ensure UI is ready to receive progress events
+			// Delay slightly to let server start
 			time.Sleep(3 * time.Second)
-			// On startup, we might want to send update event regardless, or only if updated.
-			// The requirement is "updated on API side". So only if updated.
-			// BUT, the client might be launching for the first time or after a while.
-			// Let's stick to "if updated" to be consistent with the requirement "only if update_date changed".
 			if updated, err := syncMgr.StartSync(); err == nil && updated {
 				srv.BroadcastEvent("update", map[string]interface{}{
 					"type":      "update",
@@ -153,14 +94,141 @@ func main() {
 		}()
 	}
 
-	// 8. Navigate to App
-	// Wait a bit for server to be up
-	time.Sleep(500 * time.Millisecond)
+	// 6. Start System Tray (Blocking)
+	// This will block main thread until systray.Quit() is called
+	systray.Run(onReady, onExit)
+}
+
+func onReady() {
+	// Try to load icon
+	// Look for icon in standard locations
+	iconPath := "src/assets/icon.ico"
+	if _, err := os.Stat(iconPath); os.IsNotExist(err) {
+		// Try finding it relative to executable if not in current dir
+		if exePath, err := os.Executable(); err == nil {
+			// Assume standard deployment structure: root/Bridge Ground.exe, root/src/assets/...
+			// Or root/bin/exe, root/src...
+			// Let's try simple relative path first
+			_ = exePath // Prevent unused variable error
+		}
+	}
+
+	iconData, err := os.ReadFile(iconPath)
+	if err == nil {
+		systray.SetIcon(iconData)
+	} else {
+		systray.SetTitle("BG")
+	}
+
+	systray.SetTooltip("BridgeGround Server")
+
+	mOpen := systray.AddMenuItem("設定画面を開く", "設定画面を表示します")
+	mQuit := systray.AddMenuItem("終了", "アプリケーションを終了します")
+
+	// Event loop for tray items
+	go func() {
+		for {
+			select {
+			case <-mOpen.ClickedCh:
+				openUI()
+			case <-mQuit.ClickedCh:
+				systray.Quit()
+			}
+		}
+	}()
+
+	// Initial UI state
+	if !globalCfg.SystemSettings.StartHidden {
+		openUI()
+	}
+}
+
+func onExit() {
+	uiMutex.Lock()
+	if ui != nil {
+		ui.Close()
+	}
+	uiMutex.Unlock()
+}
+
+func openUI() {
+	uiMutex.Lock()
+	defer uiMutex.Unlock()
+
+	if ui != nil {
+		// Window is already open
+		return
+	}
+
+	// Create UI Window
+	var err error
+	// Use --remote-allow-origins=* to fix connection issue with newer Chrome versions
+	newUI, err := lorca.New("data:text/html,<h1>Loading BridgeGround...</h1>", "", 1000, 800, "--remote-allow-origins=*")
+	if err != nil {
+		log.Println("Failed to start Lorca (Chrome/Edge not found?):", err)
+		return
+	}
+
+	// Bind Go Functions
+	newUI.Bind("go_getConfig", func() *config.Config {
+		return globalCfg
+	})
+
+	newUI.Bind("go_getAppVersion", func() string {
+		return config.Version
+	})
+
+	newUI.Bind("go_saveConfig", func(newCfg config.Config) error {
+		if err := config.SaveConfig(&newCfg); err != nil {
+			return err
+		}
+
+		// Update startup settings
+		if err := updateStartupRegistry(newCfg.SystemSettings.RunOnStartup); err != nil {
+			fmt.Printf("Failed to update startup registry: %v\n", err)
+		}
+
+		*globalCfg = newCfg
+		return nil
+	})
+
+	newUI.Bind("go_startManualSync", func() map[string]interface{} {
+		updated, err := syncMgr.StartSync()
+		if err != nil {
+			return map[string]interface{}{"success": false, "message": err.Error()}
+		}
+
+		if updated {
+			srv.BroadcastEvent("update", map[string]interface{}{
+				"type":      "update",
+				"timestamp": time.Now().Format(time.RFC3339),
+				"message":   "Manual sync completed",
+			})
+		}
+
+		return map[string]interface{}{"success": true}
+	})
+
+	newUI.Bind("go_getDataCounts", func() *db.DataCounts {
+		counts, _ := dbMgr.GetDataCounts()
+		return counts
+	})
+
+	// Load App URL
 	port := globalCfg.ServerSettings.Port
 	url := fmt.Sprintf("http://localhost:%d/index.html", port)
-	fmt.Println("Loading URL:", url)
-	ui.Load(url)
+	newUI.Load(url)
 
-	// 9. Wait for exit
-	<-ui.Done()
+	ui = newUI
+
+	// Watch for UI close
+	go func(u lorca.UI) {
+		<-u.Done()
+		uiMutex.Lock()
+		if ui == u {
+			ui = nil
+		}
+		uiMutex.Unlock()
+		// Do NOT call systray.Quit() here, as we want to keep running in background
+	}(newUI)
 }

@@ -171,6 +171,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         document.getElementById('server-port-input').value = config.serverSettings.port;
         document.getElementById('run-on-startup').checked = config.systemSettings ? config.systemSettings.runOnStartup : false;
+        document.getElementById('start-hidden').checked = config.systemSettings ? config.systemSettings.startHidden : false;
         document.getElementById('auto-sync-enabled').checked = config.syncSettings.autoSyncEnabled;
         document.getElementById('sync-interval').value = config.syncSettings.syncIntervalMinutes;
         document.getElementById('sync-on-startup').checked = config.syncSettings.syncOnStartup;
@@ -218,7 +219,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 port: parseInt(portInput)
             },
             systemSettings: {
-                runOnStartup: document.getElementById('run-on-startup').checked
+                runOnStartup: document.getElementById('run-on-startup').checked,
+                startHidden: document.getElementById('start-hidden').checked
             },
             syncSettings: {
                 autoSyncEnabled: document.getElementById('auto-sync-enabled').checked,

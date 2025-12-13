@@ -7,7 +7,7 @@ import (
 )
 
 // Version is the application version
-var Version = "2.2.1"
+var Version = "2.3.0"
 
 type Config struct {
 	APISettings    APISettings    `json:"apiSettings"`
@@ -18,6 +18,7 @@ type Config struct {
 
 type SystemSettings struct {
 	RunOnStartup bool `json:"runOnStartup"`
+	StartHidden  bool `json:"startHidden"`
 }
 
 type APISettings struct {

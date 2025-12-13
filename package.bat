@@ -1,5 +1,5 @@
 @echo off
-set "VERSION=2.2.1"
+set "VERSION=2.3.0"
 set "PACKAGE_NAME=BridgeGround_v%VERSION%"
 
 echo Creating distribution package...

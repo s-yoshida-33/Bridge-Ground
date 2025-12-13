@@ -69,6 +69,14 @@ func main() {
 		if err := config.SaveConfig(&newCfg); err != nil {
 			return err
 		}
+
+		// Update startup settings
+		if err := updateStartupRegistry(newCfg.SystemSettings.RunOnStartup); err != nil {
+			// Log error but don't fail the save? Or return warning?
+			// For now, let's log it to console.
+			fmt.Printf("Failed to update startup registry: %v\n", err)
+		}
+
 		*globalCfg = newCfg
 		// In a real app, you might want to signal the sync manager to reload config
 		return nil

@@ -7,12 +7,17 @@ import (
 )
 
 // Version is the application version
-var Version = "2.2.0"
+var Version = "2.2.1"
 
 type Config struct {
 	APISettings    APISettings    `json:"apiSettings"`
 	SyncSettings   SyncSettings   `json:"syncSettings"`
 	ServerSettings ServerSettings `json:"serverSettings"`
+	SystemSettings SystemSettings `json:"systemSettings"`
+}
+
+type SystemSettings struct {
+	RunOnStartup bool `json:"runOnStartup"`
 }
 
 type APISettings struct {
@@ -85,6 +90,9 @@ func LoadConfig() (*Config, error) {
 			},
 			ServerSettings: ServerSettings{
 				Port: 8090,
+			},
+			SystemSettings: SystemSettings{
+				RunOnStartup: false,
 			},
 		}, nil
 	}

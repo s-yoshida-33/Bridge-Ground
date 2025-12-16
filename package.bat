@@ -1,5 +1,5 @@
 @echo off
-set "VERSION=2.3.0"
+set "VERSION=3.0.0"
 set "PACKAGE_NAME=BridgeGround_v%VERSION%"
 
 echo Creating distribution package...
@@ -7,8 +7,8 @@ echo Creating distribution package...
 if exist "%PACKAGE_NAME%" rmdir /s /q "%PACKAGE_NAME%"
 mkdir "%PACKAGE_NAME%"
 
-echo Copying executable...
-copy "build\Bridge Ground.exe" "%PACKAGE_NAME%\" >nul
+echo Building executable...
+go build -ldflags "-H windowsgui" -o "%PACKAGE_NAME%\Bridge Ground.exe" ./cmd/bridgeground
 
 echo Copying configuration...
 copy config.json "%PACKAGE_NAME%\" >nul

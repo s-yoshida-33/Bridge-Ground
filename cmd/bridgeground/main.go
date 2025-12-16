@@ -1,5 +1,7 @@
 package main
 
+//go:generate goversioninfo -icon=../../src/assets/icon.ico
+
 import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
@@ -8,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -64,18 +67,44 @@ func main() {
 		uiMutex.Unlock()
 	})
 
+	syncMgr.SetDataUpdateCallback(func(dataType string) {
+		var data interface{}
+		var err error
+
+		switch dataType {
+		case "shops":
+			data, err = srv.FetchShopList()
+		case "shop_news":
+			data, err = srv.FetchGenericList("SELECT * FROM shop_news")
+		case "event_news":
+			data, err = srv.FetchGenericList("SELECT * FROM event_news")
+		case "specials":
+			data, err = srv.FetchGenericList("SELECT * FROM specials")
+		case "genres":
+			data, err = srv.FetchGenericList("SELECT * FROM genres")
+		default:
+			log.Printf("Unknown data type updated: %s", dataType)
+			return
+		}
+
+		if err != nil {
+			log.Printf("Failed to fetch updated data for %s: %v", dataType, err)
+			return
+		}
+
+		srv.BroadcastEvent("update", map[string]interface{}{
+			"type":      dataType,
+			"timestamp": time.Now().Format(time.RFC3339),
+			"data":      data,
+		})
+	})
+
 	// 5. Auto Sync Logic
 	if globalCfg.SyncSettings.SyncOnStartup {
 		go func() {
 			// Delay slightly to let server start
 			time.Sleep(3 * time.Second)
-			if updated, err := syncMgr.StartSync(); err == nil && updated {
-				srv.BroadcastEvent("update", map[string]interface{}{
-					"type":      "update",
-					"timestamp": time.Now().Format(time.RFC3339),
-					"message":   "Startup sync completed",
-				})
-			}
+			syncMgr.StartSync()
 		}()
 	}
 
@@ -83,13 +112,7 @@ func main() {
 		go func() {
 			ticker := time.NewTicker(time.Duration(globalCfg.SyncSettings.SyncIntervalMinutes) * time.Minute)
 			for range ticker.C {
-				if updated, err := syncMgr.StartSync(); err == nil && updated {
-					srv.BroadcastEvent("update", map[string]interface{}{
-						"type":      "update",
-						"timestamp": time.Now().Format(time.RFC3339),
-						"message":   "Auto sync completed",
-					})
-				}
+				syncMgr.StartSync()
 			}
 		}()
 	}
@@ -193,18 +216,12 @@ func openUI() {
 	})
 
 	newUI.Bind("go_startManualSync", func() map[string]interface{} {
-		updated, err := syncMgr.StartSync()
+		_, err := syncMgr.StartSync()
 		if err != nil {
 			return map[string]interface{}{"success": false, "message": err.Error()}
 		}
 
-		if updated {
-			srv.BroadcastEvent("update", map[string]interface{}{
-				"type":      "update",
-				"timestamp": time.Now().Format(time.RFC3339),
-				"message":   "Manual sync completed",
-			})
-		}
+		// Updates are broadcasted via callback in StartSync
 
 		return map[string]interface{}{"success": true}
 	})
@@ -217,6 +234,12 @@ func openUI() {
 	// Load App URL
 	port := globalCfg.ServerSettings.Port
 	url := fmt.Sprintf("http://localhost:%d/index.html", port)
+
+	// Wait for server to start before loading UI
+	if !waitForServer(url, 10*time.Second) {
+		log.Printf("Warning: Server did not respond within timeout at %s", url)
+	}
+
 	newUI.Load(url)
 
 	ui = newUI
@@ -231,4 +254,17 @@ func openUI() {
 		uiMutex.Unlock()
 		// Do NOT call systray.Quit() here, as we want to keep running in background
 	}(newUI)
+}
+
+func waitForServer(url string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url)
+		if err == nil {
+			resp.Body.Close()
+			return true
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return false
 }

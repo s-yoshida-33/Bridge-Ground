@@ -30,6 +30,7 @@ type Manager struct {
 	Config           *config.Config
 	DB               *db.Manager
 	progressCallback func(SyncProgress)
+	dataUpdateCallback func(string)
 }
 
 // DownloadJob represents a task for the worker pool
@@ -49,10 +50,37 @@ func (m *Manager) SetProgressCallback(cb func(SyncProgress)) {
 	m.progressCallback = cb
 }
 
+func (m *Manager) SetDataUpdateCallback(cb func(string)) {
+	m.dataUpdateCallback = cb
+}
+
 func (m *Manager) notifyProgress(p SyncProgress) {
 	if m.progressCallback != nil {
 		m.progressCallback(p)
 	}
+}
+
+func (m *Manager) notifyDataUpdate(resourceName string) {
+	if m.dataUpdateCallback != nil {
+		m.dataUpdateCallback(resourceName)
+	}
+}
+
+func (m *Manager) getLastUpdateDateAll(key string) (string, error) {
+	var val string
+	// Check if table exists first? No, InitializeSchema ensures it exists.
+	// But during first run after migration, it might be empty.
+	err := m.DB.Conn.QueryRow("SELECT value FROM sync_meta WHERE key = ?", key).Scan(&val)
+	if err != nil {
+		// sql.ErrNoRows or other error
+		return "", nil
+	}
+	return val, nil
+}
+
+func (m *Manager) setLastUpdateDateAll(key, value string) error {
+	_, err := m.DB.Conn.Exec("INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)", key, value)
+	return err
 }
 
 func (m *Manager) getExistingUpdateDates(tableName, idCol string) (map[string]string, error) {
@@ -138,6 +166,7 @@ func (m *Manager) StartSync() (bool, error) {
 		}
 		if count != 0 {
 			anyUpdated = true
+			m.notifyDataUpdate("shops")
 		}
 		updateStats["shops"] = count
 	} else {
@@ -156,6 +185,7 @@ func (m *Manager) StartSync() (bool, error) {
 		}
 		if count != 0 {
 			anyUpdated = true
+			m.notifyDataUpdate("shop_news")
 		}
 		updateStats["shopNews"] = count
 	} else {
@@ -174,6 +204,7 @@ func (m *Manager) StartSync() (bool, error) {
 		}
 		if count != 0 {
 			anyUpdated = true
+			m.notifyDataUpdate("event_news")
 		}
 		updateStats["eventNews"] = count
 	} else {
@@ -192,6 +223,7 @@ func (m *Manager) StartSync() (bool, error) {
 		}
 		if count != 0 {
 			anyUpdated = true
+			m.notifyDataUpdate("specials")
 		}
 		updateStats["specials"] = count
 	} else {
@@ -210,6 +242,7 @@ func (m *Manager) StartSync() (bool, error) {
 		}
 		if count != 0 {
 			anyUpdated = true
+			m.notifyDataUpdate("genres")
 		}
 		// Genre updates are not tracked for "updated" flag currently (always 0)
 	} else {
@@ -359,7 +392,7 @@ func (m *Manager) syncShops() (int, error) {
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
-	endpoint := baseURL + "shoplist"
+	endpoint := baseURL + "shoplist?limit=1000"
 	fmt.Printf("Fetching shops from: %s\n", endpoint)
 	data, err := m.fetchXML(endpoint)
 	if err != nil {
@@ -369,6 +402,14 @@ func (m *Manager) syncShops() (int, error) {
 	var resp models.ShopListResponse
 	if err := xml.Unmarshal(data, &resp); err != nil {
 		return 0, err
+	}
+
+	if resp.UpdateDateAll != "" {
+		lastUpdate, _ := m.getLastUpdateDateAll("shops")
+		if lastUpdate == resp.UpdateDateAll {
+			fmt.Println("Shops data is up to date (UpdateDateAll match). Skipping.")
+			return 0, nil
+		}
 	}
 
 	existing, _ := m.getExistingUpdateDates("shops", "shop_id")
@@ -480,6 +521,10 @@ func (m *Manager) syncShops() (int, error) {
 		return 0, err
 	}
 
+	if resp.UpdateDateAll != "" {
+		m.setLastUpdateDateAll("shops", resp.UpdateDateAll)
+	}
+
 	m.processDownloads(downloadJobs)
 	return updateCount - deletedCount, nil
 }
@@ -489,7 +534,7 @@ func (m *Manager) syncShopNews() (int, error) {
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
-	endpoint := baseURL + "shopnewslist"
+	endpoint := baseURL + "shopnewslist?limit=1000"
 	fmt.Printf("Fetching shop news from: %s\n", endpoint)
 	data, err := m.fetchXML(endpoint)
 	if err != nil {
@@ -500,6 +545,15 @@ func (m *Manager) syncShopNews() (int, error) {
 	if err := xml.Unmarshal(data, &resp); err != nil {
 		return 0, err
 	}
+	fmt.Printf("Parsed %d items from XML for Shop News\n", len(resp.Items))
+
+	if resp.UpdateDateAll != "" {
+		lastUpdate, _ := m.getLastUpdateDateAll("shop_news")
+		if lastUpdate == resp.UpdateDateAll {
+			fmt.Println("Shop News data is up to date (UpdateDateAll match). Skipping.")
+			return 0, nil
+		}
+	}
 
 	existing, _ := m.getExistingUpdateDates("shop_news", "shop_news_id")
 	updateCount := 0
@@ -508,7 +562,12 @@ func (m *Manager) syncShopNews() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO shop_news (shop_news_id, shop_id, title, body, photo1_remote_url, photo1_local_path, update_date) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO shop_news (
+		shop_news_id, shop_id, shop_name, shop_logo, shop_floors_name, 
+		title, body, categories, date_start, date_end, photo1,
+		photo1_remote_url, photo1_local_path, shop_logo_remote_url, shop_logo_local_path, 
+		update_date
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, err
 	}
@@ -534,7 +593,21 @@ func (m *Manager) syncShopNews() (int, error) {
 			item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
 			downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
 		}
-		stmt.Exec(item.ShopNewsID, item.ShopID, item.Title, item.Body, item.Photo1RemoteURL, item.Photo1LocalPath, item.UpdateDate)
+		if item.ShopLogo != "" {
+			item.ShopLogoRemoteURL = m.resolveURL(item.ShopLogo)
+			item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
+			downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
+		}
+
+		_, err := stmt.Exec(
+			item.ShopNewsID, item.ShopID, item.ShopName, item.ShopLogo, item.ShopFloorsName,
+			item.Title, item.Body, item.Categories, item.DateStart, item.DateEnd, item.Photo1,
+			item.Photo1RemoteURL, item.Photo1LocalPath, item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
+			item.UpdateDate,
+		)
+		if err != nil {
+			fmt.Printf("Error inserting shop news %s: %v\n", item.ShopNewsID, err)
+		}
 	}
 
 	// Delete obsolete records
@@ -556,6 +629,10 @@ func (m *Manager) syncShopNews() (int, error) {
 		return 0, err
 	}
 
+	if resp.UpdateDateAll != "" {
+		m.setLastUpdateDateAll("shop_news", resp.UpdateDateAll)
+	}
+
 	m.processDownloads(downloadJobs)
 	return updateCount - deletedCount, nil
 }
@@ -565,7 +642,7 @@ func (m *Manager) syncEventNews() (int, error) {
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
-	endpoint := baseURL + "eventnewslist"
+	endpoint := baseURL + "eventnewslist?limit=1000"
 	fmt.Printf("Fetching event news from: %s\n", endpoint)
 	data, err := m.fetchXML(endpoint)
 	if err != nil {
@@ -576,6 +653,15 @@ func (m *Manager) syncEventNews() (int, error) {
 	if err := xml.Unmarshal(data, &resp); err != nil {
 		return 0, err
 	}
+	fmt.Printf("Parsed %d items from XML for Event News\n", len(resp.Items))
+
+	if resp.UpdateDateAll != "" {
+		lastUpdate, _ := m.getLastUpdateDateAll("event_news")
+		if lastUpdate == resp.UpdateDateAll {
+			fmt.Println("Event News data is up to date (UpdateDateAll match). Skipping.")
+			return 0, nil
+		}
+	}
 
 	existing, _ := m.getExistingUpdateDates("event_news", "event_id")
 	updateCount := 0
@@ -584,7 +670,10 @@ func (m *Manager) syncEventNews() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO event_news (event_id, title, body, date_start, date_end, photo1_remote_url, photo1_local_path, update_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO event_news (
+		event_id, title, body, categories, date_start, date_end, display_end, venues, photo1,
+		photo1_remote_url, photo1_local_path, update_date
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, err
 	}
@@ -605,12 +694,22 @@ func (m *Manager) syncEventNews() (int, error) {
 			updateCount++
 		}
 
+		// Normalize Venues (remove surrounding whitespace which might happen with CDATA formatting in XML)
+		item.Venues = strings.TrimSpace(item.Venues)
+
 		if item.Photo1 != "" {
 			item.Photo1RemoteURL = m.resolveURL(item.Photo1)
 			item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
 			downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
 		}
-		stmt.Exec(item.EventID, item.Title, item.Body, item.DateStart, item.DateEnd, item.Photo1RemoteURL, item.Photo1LocalPath, item.UpdateDate)
+		_, err := stmt.Exec(
+			item.EventID, item.Title, item.Body, item.Categories, item.DateStart, item.DateEnd,
+			item.DisplayEnd, item.Venues, item.Photo1,
+			item.Photo1RemoteURL, item.Photo1LocalPath, item.UpdateDate,
+		)
+		if err != nil {
+			fmt.Printf("Error inserting event news %s: %v\n", item.EventID, err)
+		}
 	}
 
 	// Delete obsolete records
@@ -632,6 +731,10 @@ func (m *Manager) syncEventNews() (int, error) {
 		return 0, err
 	}
 
+	if resp.UpdateDateAll != "" {
+		m.setLastUpdateDateAll("event_news", resp.UpdateDateAll)
+	}
+
 	m.processDownloads(downloadJobs)
 	return updateCount - deletedCount, nil
 }
@@ -641,7 +744,7 @@ func (m *Manager) syncSpecials() (int, error) {
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
-	endpoint := baseURL + "speciallist"
+	endpoint := baseURL + "speciallist?limit=1000"
 	fmt.Printf("Fetching specials from: %s\n", endpoint)
 	data, err := m.fetchXML(endpoint)
 	if err != nil {
@@ -651,6 +754,14 @@ func (m *Manager) syncSpecials() (int, error) {
 	var resp models.SpecialListResponse
 	if err := xml.Unmarshal(data, &resp); err != nil {
 		return 0, err
+	}
+
+	if resp.UpdateDateAll != "" {
+		lastUpdate, _ := m.getLastUpdateDateAll("specials")
+		if lastUpdate == resp.UpdateDateAll {
+			fmt.Println("Specials data is up to date (UpdateDateAll match). Skipping.")
+			return 0, nil
+		}
 	}
 
 	existing, _ := m.getExistingUpdateDates("specials", "special_id")
@@ -720,6 +831,10 @@ func (m *Manager) syncSpecials() (int, error) {
 		return 0, err
 	}
 
+	if resp.UpdateDateAll != "" {
+		m.setLastUpdateDateAll("specials", resp.UpdateDateAll)
+	}
+
 	m.processDownloads(downloadJobs)
 	return updateCount - deletedCount, nil
 }
@@ -729,7 +844,7 @@ func (m *Manager) syncGenres() (int, error) {
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
-	endpoint := baseURL + "genrelist"
+	endpoint := baseURL + "genrelist?limit=1000"
 	fmt.Printf("Fetching genres from: %s\n", endpoint)
 	data, err := m.fetchXML(endpoint)
 	if err != nil {
@@ -739,6 +854,14 @@ func (m *Manager) syncGenres() (int, error) {
 	var resp models.GenreListResponse
 	if err := xml.Unmarshal(data, &resp); err != nil {
 		return 0, err
+	}
+
+	if resp.UpdateDateAll != "" {
+		lastUpdate, _ := m.getLastUpdateDateAll("genres")
+		if lastUpdate == resp.UpdateDateAll {
+			fmt.Println("Genres data is up to date (UpdateDateAll match). Skipping.")
+			return 0, nil
+		}
 	}
 
 	tx, err := m.DB.Conn.Begin()
@@ -759,7 +882,15 @@ func (m *Manager) syncGenres() (int, error) {
 	}
 	// Genres don't have update_date, assume false or maybe we should hash?
 	// For now, returning false as they are master data and rarely change
-	return 0, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	if resp.UpdateDateAll != "" {
+		m.setLastUpdateDateAll("genres", resp.UpdateDateAll)
+	}
+
+	return 0, nil
 }
 
 func (m *Manager) cleanupOrphanedFiles() error {
@@ -773,6 +904,7 @@ func (m *Manager) cleanupOrphanedFiles() error {
 		"SELECT photo2_local_path FROM shops WHERE photo2_local_path != ''",
 		"SELECT shop_logo_local_path FROM shops WHERE shop_logo_local_path != ''",
 		"SELECT photo1_local_path FROM shop_news WHERE photo1_local_path != ''",
+		"SELECT shop_logo_local_path FROM shop_news WHERE shop_logo_local_path != ''",
 		"SELECT photo1_local_path FROM event_news WHERE photo1_local_path != ''",
 		"SELECT special_image_local_path FROM specials WHERE special_image_local_path != ''",
 	}

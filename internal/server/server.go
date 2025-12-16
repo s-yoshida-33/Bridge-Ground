@@ -69,68 +69,10 @@ func (s *Server) BroadcastEvent(eventType string, data interface{}) {
 	s.Broker.Broadcast(eventType, data)
 }
 
-func (s *Server) createListEndpoint(tableName string, query string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if s.DB.Conn == nil {
-			http.Error(w, "Database not connected", http.StatusInternalServerError)
-			return
-		}
-
-		rows, err := s.DB.Conn.Query(query)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Query error: %v", err), http.StatusInternalServerError)
-			return
-		}
-		defer rows.Close()
-
-		columns, err := rows.Columns()
-		if err != nil {
-			http.Error(w, "Failed to get columns", http.StatusInternalServerError)
-			return
-		}
-
-		var result []map[string]interface{}
-
-		for rows.Next() {
-			// Create a slice of interface{} to hold values
-			values := make([]interface{}, len(columns))
-			valuePtrs := make([]interface{}, len(columns))
-			for i := range values {
-				valuePtrs[i] = &values[i]
-			}
-
-			if err := rows.Scan(valuePtrs...); err != nil {
-				continue
-			}
-
-			rowMap := make(map[string]interface{})
-			for i, col := range columns {
-				var v interface{}
-				val := values[i]
-
-				// Handle SQLite types (often []byte or nil)
-				b, ok := val.([]byte)
-				if ok {
-					v = string(b)
-				} else {
-					v = val
-				}
-				rowMap[col] = v
-			}
-			result = append(result, rowMap)
-		}
-
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		encoder := json.NewEncoder(w)
-		encoder.SetIndent("", "  ")
-		encoder.Encode(result)
-	}
-}
-
-func (s *Server) handleShopList(w http.ResponseWriter, r *http.Request) {
+// FetchShopList retrieves the full list of shops from the database
+func (s *Server) FetchShopList() ([]models.ShopItem, error) {
 	if s.DB.Conn == nil {
-		http.Error(w, "Database not connected", http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("database not connected")
 	}
 
 	query := `SELECT 
@@ -143,8 +85,7 @@ func (s *Server) handleShopList(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := s.DB.Conn.Query(query)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Query error: %v", err), http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("query error: %v", err)
 	}
 	defer rows.Close()
 
@@ -206,6 +147,80 @@ func (s *Server) handleShopList(w http.ResponseWriter, r *http.Request) {
 		item.ShopLogoLocalPath = s(shopLogoLocalPath)
 
 		result = append(result, item)
+	}
+	return result, nil
+}
+
+// FetchGenericList retrieves data for a generic table as a list of maps
+func (s *Server) FetchGenericList(query string) ([]map[string]interface{}, error) {
+	if s.DB.Conn == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	rows, err := s.DB.Conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %v", err)
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get columns: %v", err)
+	}
+
+	var result []map[string]interface{}
+
+	for rows.Next() {
+		// Create a slice of interface{} to hold values
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			continue
+		}
+
+		rowMap := make(map[string]interface{})
+		for i, col := range columns {
+			var v interface{}
+			val := values[i]
+
+			// Handle SQLite types (often []byte or nil)
+			b, ok := val.([]byte)
+			if ok {
+				v = string(b)
+			} else {
+				v = val
+			}
+			rowMap[col] = v
+		}
+		result = append(result, rowMap)
+	}
+	return result, nil
+}
+
+func (s *Server) createListEndpoint(tableName string, query string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		result, err := s.FetchGenericList(query)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		encoder := json.NewEncoder(w)
+		encoder.SetIndent("", "  ")
+		encoder.Encode(result)
+	}
+}
+
+func (s *Server) handleShopList(w http.ResponseWriter, r *http.Request) {
+	result, err := s.FetchShopList()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

@@ -24,6 +24,8 @@ func updateStartupRegistry(enabled bool) error {
 		$Shortcut = $WshShell.CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\BridgeGround.lnk")
 		$Shortcut.TargetPath = "%s"
 		$Shortcut.WorkingDirectory = "%s"
+		// Set WindowStyle to Minimized (7) if user wants to start hidden, but shortcuts always flash.
+		// A better way is passing an argument like --minimized if we supported it, but our app checks config.
 		$Shortcut.Save()
 		`, exePath, exeDir)
 		

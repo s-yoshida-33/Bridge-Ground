@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -121,12 +122,26 @@ func (b *EventBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *EventBroker) Broadcast(eventType string, data interface{}) {
-	payload, err := json.Marshal(data)
+	payload, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		log.Printf("Error marshaling event data: %v", err)
 		return
 	}
-	msg := fmt.Sprintf("event: %s\ndata: %s\n\n", eventType, payload)
-	b.messages <- msg
+
+	// SSE format for multiline data:
+	// data: line1
+	// data: line2
+	// ...
+	
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("event: %s\n", eventType))
+	
+	lines := strings.Split(string(payload), "\n")
+	for _, line := range lines {
+		sb.WriteString(fmt.Sprintf("data: %s\n", line))
+	}
+	sb.WriteString("\n")
+	
+	b.messages <- sb.String()
 }
 

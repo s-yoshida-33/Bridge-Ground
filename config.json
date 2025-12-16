@@ -19,5 +19,9 @@
   },
   "serverSettings": {
     "port": 8090
+  },
+  "systemSettings": {
+    "runOnStartup": true,
+    "startHidden": true
   }
 }

@@ -1,0 +1,43 @@
+{
+    "FixedFileInfo": {
+        "FileVersion": {
+            "Major": 3,
+            "Minor": 0,
+            "Patch": 0,
+            "Build": 0
+        },
+        "ProductVersion": {
+            "Major": 3,
+            "Minor": 0,
+            "Patch": 0,
+            "Build": 0
+        },
+        "FileFlagsMask": "3f",
+        "FileFlags ": "00",
+        "FileOS": "040004",
+        "FileType": "01",
+        "FileSubType": "00"
+    },
+    "StringFileInfo": {
+        "Comments": "",
+        "CompanyName": "Toei Techno International Inc.",
+        "FileDescription": "Bridge Ground",
+        "FileVersion": "3.0.0.0",
+        "InternalName": "Bridge Ground",
+        "LegalCopyright": "Copyright (c) 2025 Toei Techno International Inc.",
+        "LegalTrademarks": "",
+        "OriginalFilename": "Bridge Ground.exe",
+        "PrivateBuild": "",
+        "ProductName": "Bridge Ground",
+        "ProductVersion": "3.0.0.0",
+        "SpecialBuild": ""
+    },
+    "VarFileInfo": {
+        "Translation": {
+            "LangID": "0409",
+            "CharsetID": "04B0"
+        }
+    },
+    "IconPath": "../../src/assets/icon.ico",
+    "ManifestPath": ""
+}

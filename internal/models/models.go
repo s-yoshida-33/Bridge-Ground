@@ -43,16 +43,24 @@ type ShopItem struct {
 	ShopLogoRemoteURL string `db:"shop_logo_remote_url" json:"-"`
 }
 
+// CDATAString handles cases where data might be wrapped in CDATA or have whitespace
+type CDATAString struct {
+	Value string `xml:",cdata"`
+}
+
 // EventNewsItem represents an event news item
 type EventNewsItem struct {
 	XMLName         xml.Name `xml:"item"`
 	EventID         string   `xml:"eventId" db:"event_id"`
 	Title           string   `xml:"title" db:"title"`
 	Body            string   `xml:"body" db:"body"`
+	Categories      string   `xml:"categories" db:"categories"`
 	DateStart       string   `xml:"dateStart" db:"date_start"`
 	DateEnd         string   `xml:"dateEnd" db:"date_end"`
+	DisplayEnd      string   `xml:"displayEnd" db:"display_end"`
+	Venues          string   `xml:"venues" db:"venues"`
 	
-	Photo1          string   `xml:"photo1"`
+	Photo1          string   `xml:"photo1" db:"photo1"`
 	
 	Photo1RemoteURL string   `db:"photo1_remote_url"`
 	Photo1LocalPath string   `db:"photo1_local_path"`
@@ -65,13 +73,21 @@ type ShopNewsItem struct {
 	XMLName         xml.Name `xml:"item"`
 	ShopNewsID      string   `xml:"shopNewsId" db:"shop_news_id"`
 	ShopID          string   `xml:"shopId" db:"shop_id"`
+	ShopName        string   `xml:"shopName" db:"shop_name"`
+	ShopLogo        string   `xml:"shopLogo" db:"shop_logo"`
+	ShopFloorsName  string   `xml:"shopFloorsName" db:"shop_floors_name"`
 	Title           string   `xml:"title" db:"title"`
 	Body            string   `xml:"body" db:"body"`
+	Categories      string   `xml:"categories" db:"categories"`
+	DateStart       string   `xml:"dateStart" db:"date_start"`
+	DateEnd         string   `xml:"dateEnd" db:"date_end"`
 	
-	Photo1          string   `xml:"photo1"`
+	Photo1          string   `xml:"photo1" db:"photo1"`
 	
 	Photo1RemoteURL string   `db:"photo1_remote_url"`
 	Photo1LocalPath string   `db:"photo1_local_path"`
+	ShopLogoRemoteURL string `db:"shop_logo_remote_url"`
+	ShopLogoLocalPath string `db:"shop_logo_local_path"`
 	
 	UpdateDate      string   `xml:"updateDate" db:"update_date"`
 }
@@ -115,26 +131,31 @@ type GenreItem struct {
 
 // Root response wrapper for XML parsing
 type ShopListResponse struct {
-	XMLName xml.Name   `xml:"data"`
-	Items   []ShopItem `xml:"item"`
+	XMLName       xml.Name   `xml:"data"`
+	UpdateDateAll string     `xml:"updateDateAll"`
+	Items         []ShopItem `xml:"item"`
 }
 
 type EventNewsResponse struct {
-	XMLName xml.Name        `xml:"data"`
-	Items   []EventNewsItem `xml:"item"`
+	XMLName       xml.Name        `xml:"data"`
+	UpdateDateAll string          `xml:"updateDateAll"`
+	Items         []EventNewsItem `xml:"item"`
 }
 
 type ShopNewsResponse struct {
-	XMLName xml.Name       `xml:"data"`
-	Items   []ShopNewsItem `xml:"item"`
+	XMLName       xml.Name       `xml:"data"`
+	UpdateDateAll string         `xml:"updateDateAll"`
+	Items         []ShopNewsItem `xml:"item"`
 }
 
 type GenreListResponse struct {
-	XMLName xml.Name    `xml:"data"`
-	Items   []GenreItem `xml:"item"`
+	XMLName       xml.Name    `xml:"data"`
+	UpdateDateAll string      `xml:"updateDateAll"`
+	Items         []GenreItem `xml:"item"`
 }
 
 type SpecialListResponse struct {
-	XMLName xml.Name           `xml:"data"`
-	Items   []SpecialTitleItem `xml:"item"`
+	XMLName       xml.Name           `xml:"data"`
+	UpdateDateAll string             `xml:"updateDateAll"`
+	Items         []SpecialTitleItem `xml:"item"`
 }

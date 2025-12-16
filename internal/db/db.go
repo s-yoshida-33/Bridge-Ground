@@ -109,8 +109,12 @@ func (m *Manager) InitializeSchema() error {
 			event_id TEXT PRIMARY KEY,
 			title TEXT,
 			body TEXT,
+			categories TEXT,
 			date_start TEXT,
 			date_end TEXT,
+			display_end TEXT,
+			venues TEXT,
+			photo1 TEXT,
 			photo1_remote_url TEXT,
 			photo1_local_path TEXT,
 			update_date TEXT
@@ -118,10 +122,19 @@ func (m *Manager) InitializeSchema() error {
 		`CREATE TABLE IF NOT EXISTS shop_news (
 			shop_news_id TEXT PRIMARY KEY,
 			shop_id TEXT,
+			shop_name TEXT,
+			shop_logo TEXT,
+			shop_floors_name TEXT,
 			title TEXT,
 			body TEXT,
+			categories TEXT,
+			date_start TEXT,
+			date_end TEXT,
+			photo1 TEXT,
 			photo1_remote_url TEXT,
 			photo1_local_path TEXT,
+			shop_logo_remote_url TEXT,
+			shop_logo_local_path TEXT,
 			update_date TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS genres (
@@ -140,6 +153,10 @@ func (m *Manager) InitializeSchema() error {
 			update_date TEXT,
 			special_image_local_path TEXT
 		)`,
+		`CREATE TABLE IF NOT EXISTS sync_meta (
+			key TEXT PRIMARY KEY,
+			value TEXT
+		)`,
 	}
 
 	for _, query := range queries {
@@ -147,6 +164,29 @@ func (m *Manager) InitializeSchema() error {
 			return fmt.Errorf("failed to execute schema query: %w", err)
 		}
 	}
+
+	// Migrations: Try to add columns if they don't exist (ignore errors for existing columns)
+	migrations := []string{
+		"ALTER TABLE event_news ADD COLUMN categories TEXT",
+		"ALTER TABLE event_news ADD COLUMN display_end TEXT",
+		"ALTER TABLE event_news ADD COLUMN venues TEXT",
+		"ALTER TABLE event_news ADD COLUMN photo1 TEXT",
+		
+		"ALTER TABLE shop_news ADD COLUMN shop_name TEXT",
+		"ALTER TABLE shop_news ADD COLUMN shop_logo TEXT",
+		"ALTER TABLE shop_news ADD COLUMN shop_logo_remote_url TEXT",
+		"ALTER TABLE shop_news ADD COLUMN shop_logo_local_path TEXT",
+		"ALTER TABLE shop_news ADD COLUMN shop_floors_name TEXT",
+		"ALTER TABLE shop_news ADD COLUMN categories TEXT",
+		"ALTER TABLE shop_news ADD COLUMN date_start TEXT",
+		"ALTER TABLE shop_news ADD COLUMN date_end TEXT",
+		"ALTER TABLE shop_news ADD COLUMN photo1 TEXT",
+	}
+
+	for _, query := range migrations {
+		m.Conn.Exec(query) // Ignore error as column might exist
+	}
+
 	return nil
 }
 

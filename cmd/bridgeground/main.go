@@ -75,13 +75,13 @@ func main() {
 		case "shops":
 			data, err = srv.FetchShopList()
 		case "shop_news":
-			data, err = srv.FetchGenericList("SELECT * FROM shop_news")
+			data, err = srv.FetchShopNews()
 		case "event_news":
-			data, err = srv.FetchGenericList("SELECT * FROM event_news")
+			data, err = srv.FetchEventNews()
 		case "specials":
-			data, err = srv.FetchGenericList("SELECT * FROM specials")
+			data, err = srv.FetchSpecials()
 		case "genres":
-			data, err = srv.FetchGenericList("SELECT * FROM genres")
+			data, err = srv.FetchGenres()
 		default:
 			log.Printf("Unknown data type updated: %s", dataType)
 			return
@@ -92,8 +92,11 @@ func main() {
 			return
 		}
 
-		srv.BroadcastEvent("update", map[string]interface{}{
-			"type":      dataType,
+		// イベント名をデータタイプそのものにする（例: "shops", "shop_news"）
+		// これまでは全て "update" イベントとして送信していたが、
+		// クライアント側で addEventListener("shops", ...) のように個別に待ち受けられるようにする。
+		srv.BroadcastEvent(dataType, map[string]interface{}{
+			"type":      dataType, // 互換性のためペイロード内にもtypeを残しておく
 			"timestamp": time.Now().Format(time.RFC3339),
 			"data":      data,
 		})

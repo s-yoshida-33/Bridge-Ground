@@ -89,7 +89,7 @@ func (b *EventBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -122,26 +122,32 @@ func (b *EventBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *EventBroker) Broadcast(eventType string, data interface{}) {
-	payload, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		log.Printf("Error marshaling event data: %v", err)
+	// Reset to single line JSON to avoid "data: " prefix on every line issue
+	// and ensure client receives clean JSON payload.
+	// 文字化け対策として HTMLエスケープを無効化する
+
+	// Use Buffer to customize encoder
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false) // Disable HTML escaping to prevent mojibake like \u003c
+	enc.SetIndent("", "  ")  // プリティプリントを有効化
+	if err := enc.Encode(data); err != nil {
+		log.Printf("Error encoding JSON: %v", err)
 		return
 	}
 
-	// SSE format for multiline data:
-	// data: line1
-	// data: line2
-	// ...
-	
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("event: %s\n", eventType))
-	
-	lines := strings.Split(string(payload), "\n")
-	for _, line := range lines {
-		sb.WriteString(fmt.Sprintf("data: %s\n", line))
-	}
-	sb.WriteString("\n")
-	
-	b.messages <- sb.String()
-}
+	// enc.Encode adds a newline at the end, trim it
+	jsonStr := strings.TrimSpace(buf.String())
 
+	// 複数行のJSONをSSEのdata:プレフィックス付き形式に変換
+	// SSEの仕様上、改行を含むデータは各行に "data: " を付ける必要がある
+	lines := strings.Split(jsonStr, "\n")
+	var msgBuilder strings.Builder
+	msgBuilder.WriteString(fmt.Sprintf("event: %s\n", eventType))
+	for _, line := range lines {
+		msgBuilder.WriteString(fmt.Sprintf("data: %s\n", line))
+	}
+	msgBuilder.WriteString("\n")
+
+	b.messages <- msgBuilder.String()
+}

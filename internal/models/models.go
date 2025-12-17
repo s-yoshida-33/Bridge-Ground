@@ -50,83 +50,83 @@ type CDATAString struct {
 
 // EventNewsItem represents an event news item
 type EventNewsItem struct {
-	XMLName         xml.Name `xml:"item"`
-	EventID         string   `xml:"eventId" db:"event_id"`
-	Title           string   `xml:"title" db:"title"`
-	Body            string   `xml:"body" db:"body"`
-	Categories      string   `xml:"categories" db:"categories"`
-	DateStart       string   `xml:"dateStart" db:"date_start"`
-	DateEnd         string   `xml:"dateEnd" db:"date_end"`
-	DisplayEnd      string   `xml:"displayEnd" db:"display_end"`
-	Venues          string   `xml:"venues" db:"venues"`
+	XMLName         xml.Name `xml:"item" json:"-"`
+	EventID         string   `xml:"eventId" db:"event_id" json:"eventId"`
+	Title           string   `xml:"title" db:"title" json:"title"`
+	Body            string   `xml:"body" db:"body" json:"body"`
+	Categories      string   `xml:"categories" db:"categories" json:"categories"`
+	DateStart       string   `xml:"dateStart" db:"date_start" json:"dateStart"`
+	DateEnd         string   `xml:"dateEnd" db:"date_end" json:"dateEnd"`
+	DisplayEnd      string   `xml:"displayEnd" db:"display_end" json:"displayEnd"`
+	Venues          string   `xml:"venues" db:"venues" json:"venues"`
 	
-	Photo1          string   `xml:"photo1" db:"photo1"`
+	Photo1          string   `xml:"photo1" db:"photo1" json:"photo1"`
 	
-	Photo1RemoteURL string   `db:"photo1_remote_url"`
-	Photo1LocalPath string   `db:"photo1_local_path"`
+	Photo1RemoteURL string   `db:"photo1_remote_url" json:"-"`
+	Photo1LocalPath string   `db:"photo1_local_path" json:"photo1LocalPath"`
 	
-	UpdateDate      string   `xml:"updateDate" db:"update_date"`
+	UpdateDate      string   `xml:"updateDate" db:"update_date" json:"updateDate"`
 }
 
 // ShopNewsItem represents a shop news item
 type ShopNewsItem struct {
-	XMLName         xml.Name `xml:"item"`
-	ShopNewsID      string   `xml:"shopNewsId" db:"shop_news_id"`
-	ShopID          string   `xml:"shopId" db:"shop_id"`
-	ShopName        string   `xml:"shopName" db:"shop_name"`
-	ShopLogo        string   `xml:"shopLogo" db:"shop_logo"`
-	ShopFloorsName  string   `xml:"shopFloorsName" db:"shop_floors_name"`
-	Title           string   `xml:"title" db:"title"`
-	Body            string   `xml:"body" db:"body"`
-	Categories      string   `xml:"categories" db:"categories"`
-	DateStart       string   `xml:"dateStart" db:"date_start"`
-	DateEnd         string   `xml:"dateEnd" db:"date_end"`
+	XMLName         xml.Name `xml:"item" json:"-"`
+	ShopNewsID      string   `xml:"shopNewsId" db:"shop_news_id" json:"shopNewsId"`
+	ShopID          string   `xml:"shopId" db:"shop_id" json:"shopId"`
+	ShopName        string   `xml:"shopName" db:"shop_name" json:"shopName"`
+	ShopLogo        string   `xml:"shopLogo" db:"shop_logo" json:"shopLogo"`
+	ShopFloorsName  string   `xml:"shopFloorsName" db:"shop_floors_name" json:"shopFloorsName"`
+	Title           string   `xml:"title" db:"title" json:"title"`
+	Body            string   `xml:"body" db:"body" json:"body"`
+	Categories      string   `xml:"categories" db:"categories" json:"categories"`
+	DateStart       string   `xml:"dateStart" db:"date_start" json:"dateStart"`
+	DateEnd         string   `xml:"dateEnd" db:"date_end" json:"dateEnd"`
 	
-	Photo1          string   `xml:"photo1" db:"photo1"`
+	Photo1          string   `xml:"photo1" db:"photo1" json:"photo1"`
 	
-	Photo1RemoteURL string   `db:"photo1_remote_url"`
-	Photo1LocalPath string   `db:"photo1_local_path"`
-	ShopLogoRemoteURL string `db:"shop_logo_remote_url"`
-	ShopLogoLocalPath string `db:"shop_logo_local_path"`
+	Photo1RemoteURL string   `db:"photo1_remote_url" json:"-"`
+	Photo1LocalPath string   `db:"photo1_local_path" json:"photo1LocalPath"`
+	ShopLogoRemoteURL string `db:"shop_logo_remote_url" json:"-"`
+	ShopLogoLocalPath string `db:"shop_logo_local_path" json:"shopLogoLocalPath"`
 	
-	UpdateDate      string   `xml:"updateDate" db:"update_date"`
+	UpdateDate      string   `xml:"updateDate" db:"update_date" json:"updateDate"`
 }
 
 // SpecialTitleItem represents the parent item for specials in XML
 type SpecialTitleItem struct {
-	XMLName      xml.Name      `xml:"item"`
-	Type         string        `xml:"type,attr"` // specialTitle or special
-	SpecialTitle string        `xml:"specialTitle"`
-	UpdateDate   string        `xml:"updateDate"`
-	Items        []SpecialItem `xml:"item"` // Nested items
+	XMLName      xml.Name      `xml:"item" json:"-"`
+	Type         string        `xml:"type,attr" json:"type"` // specialTitle or special
+	SpecialTitle string        `xml:"specialTitle" json:"specialTitle"`
+	UpdateDate   string        `xml:"updateDate" json:"updateDate"`
+	Items        []SpecialItem `xml:"item" json:"items"` // Nested items
 }
 
 // SpecialItem represents a special item (sometimes nested or flattened)
 type SpecialItem struct {
-	XMLName         xml.Name `xml:"item"`
-	Type            string   `xml:"type,attr"`
-	SpecialID       string   `xml:"specialId" db:"special_id"`
-	Title           string   `xml:"title" db:"title"`
-	SpecialSubBody  string   `xml:"specialSubBody" db:"special_sub_body"`
-	CategoryName    string   `xml:"categoryName" db:"category_name"`
-	ShopID          string   `xml:"shopId" db:"shop_id"`
-	ShopName        string   `xml:"shopName" db:"shop_name"`
+	XMLName         xml.Name `xml:"item" json:"-"`
+	Type            string   `xml:"type,attr" json:"type"`
+	SpecialID       string   `xml:"specialId" db:"special_id" json:"specialId"`
+	Title           string   `xml:"title" db:"title" json:"title"`
+	SpecialSubBody  string   `xml:"specialSubBody" db:"special_sub_body" json:"specialSubBody"`
+	CategoryName    string   `xml:"categoryName" db:"category_name" json:"categoryName"`
+	ShopID          string   `xml:"shopId" db:"shop_id" json:"shopId"`
+	ShopName        string   `xml:"shopName" db:"shop_name" json:"shopName"`
 	
-	SpecialImage    string   `xml:"specialImage"`
+	SpecialImage    string   `xml:"specialImage" json:"specialImage"`
 	
 	// Derived
-	SpecialTitle          string `db:"special_title"`
-	UpdateDate            string `db:"update_date"`
-	SpecialImageRemoteURL string `db:"special_image_remote_url"` // Not in schema explicitly but good for logic
-	SpecialImageLocalPath string `db:"special_image_local_path"`
+	SpecialTitle          string `db:"special_title" json:"specialTitle"`
+	UpdateDate            string `db:"update_date" json:"updateDate"`
+	SpecialImageRemoteURL string `db:"special_image_remote_url" json:"-"` // Not in schema explicitly but good for logic
+	SpecialImageLocalPath string `db:"special_image_local_path" json:"specialImageLocalPath"`
 }
 
 // GenreItem represents a genre definition
 type GenreItem struct {
-	XMLName   xml.Name `xml:"item"`
-	GenreID   string   `xml:"genreId" db:"genre_id"`
-	GenreName string   `xml:"genreName" db:"genre_name"`
-	GenreSlug string   `xml:"genreSlug" db:"genre_slug"`
+	XMLName   xml.Name `xml:"item" json:"-"`
+	GenreID   string   `xml:"genreId" db:"genre_id" json:"genreId"`
+	GenreName string   `xml:"genreName" db:"genre_name" json:"genreName"`
+	GenreSlug string   `xml:"genreSlug" db:"genre_slug" json:"genreSlug"`
 }
 
 // Root response wrapper for XML parsing

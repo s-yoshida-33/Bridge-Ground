@@ -4,6 +4,7 @@ import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
 	"bridge-ground/internal/models"
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 type ProgressDetail struct {
@@ -27,9 +29,9 @@ type SyncProgress struct {
 
 // Manager handles data synchronization
 type Manager struct {
-	Config           *config.Config
-	DB               *db.Manager
-	progressCallback func(SyncProgress)
+	Config             *config.Config
+	DB                 *db.Manager
+	progressCallback   func(SyncProgress)
 	dataUpdateCallback func(string)
 }
 
@@ -400,7 +402,19 @@ func (m *Manager) syncShops() (int, error) {
 	}
 
 	var resp models.ShopListResponse
-	if err := xml.Unmarshal(data, &resp); err != nil {
+
+	// Create XML decoder with CharsetReader to handle non-UTF-8 encodings (like Shift_JIS)
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+		// 簡易的な実装: 実際には iconv ライブラリなどを使うのがベストだが、
+		// Go標準ではサポートが薄いため、必要ならここに変換ロジックを入れる。
+		// 現在は "utf-8" 以外が来た場合もそのまま通しているが、
+		// 文字化けの原因がXMLパース時のエンコーディング不一致にあるならここで対処が必要。
+		// もしサーバーが "Windows-31J" や "Shift_JIS" を返しているなら変換が必要。
+		return input, nil
+	}
+
+	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
 
@@ -486,6 +500,22 @@ func (m *Manager) syncShops() (int, error) {
 			item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
 			downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
 		}
+
+		item.ShopName = repairMojibake(item.ShopName)
+		item.ShopNameKana = repairMojibake(item.ShopNameKana)
+		item.ShopNameEnglish = repairMojibake(item.ShopNameEnglish)
+		item.Description = repairMojibake(item.Description)
+		item.Genre = repairMojibake(item.Genre)
+		item.GenreSub = repairMojibake(item.GenreSub)
+		item.GenreSubEnglish = repairMojibake(item.GenreSubEnglish)
+		item.GenreMemo = repairMojibake(item.GenreMemo)
+		item.GenreMemoEnglish = repairMojibake(item.GenreMemoEnglish)
+		item.Searches = repairMojibake(item.Searches)
+		item.Floors = repairMojibake(item.Floors)
+		item.Area = repairMojibake(item.Area)
+		item.AreaSub = repairMojibake(item.AreaSub)
+		item.OpenTime = repairMojibake(item.OpenTime)
+
 		stmt.Exec(
 			item.ShopID, item.ShopName, item.ShopNameKana, item.ShopNameEnglish, item.Searches,
 			item.Genre, item.GenreSub, item.GenreSubEnglish, item.GenreMemo, item.GenreMemoEnglish,
@@ -542,7 +572,10 @@ func (m *Manager) syncShopNews() (int, error) {
 	}
 
 	var resp models.ShopNewsResponse
-	if err := xml.Unmarshal(data, &resp); err != nil {
+
+	// Use decoder for consistent handling
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
 	fmt.Printf("Parsed %d items from XML for Shop News\n", len(resp.Items))
@@ -599,6 +632,12 @@ func (m *Manager) syncShopNews() (int, error) {
 			downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
 		}
 
+		item.Title = repairMojibake(item.Title)
+		item.Body = repairMojibake(item.Body)
+		item.Categories = repairMojibake(item.Categories)
+		item.ShopName = repairMojibake(item.ShopName)
+		item.ShopFloorsName = repairMojibake(item.ShopFloorsName)
+
 		_, err := stmt.Exec(
 			item.ShopNewsID, item.ShopID, item.ShopName, item.ShopLogo, item.ShopFloorsName,
 			item.Title, item.Body, item.Categories, item.DateStart, item.DateEnd, item.Photo1,
@@ -650,7 +689,10 @@ func (m *Manager) syncEventNews() (int, error) {
 	}
 
 	var resp models.EventNewsResponse
-	if err := xml.Unmarshal(data, &resp); err != nil {
+
+	// Use decoder for consistent handling
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
 	fmt.Printf("Parsed %d items from XML for Event News\n", len(resp.Items))
@@ -696,6 +738,11 @@ func (m *Manager) syncEventNews() (int, error) {
 
 		// Normalize Venues (remove surrounding whitespace which might happen with CDATA formatting in XML)
 		item.Venues = strings.TrimSpace(item.Venues)
+
+		item.Title = repairMojibake(item.Title)
+		item.Body = repairMojibake(item.Body)
+		item.Categories = repairMojibake(item.Categories)
+		item.Venues = repairMojibake(item.Venues)
 
 		if item.Photo1 != "" {
 			item.Photo1RemoteURL = m.resolveURL(item.Photo1)
@@ -752,7 +799,10 @@ func (m *Manager) syncSpecials() (int, error) {
 	}
 
 	var resp models.SpecialListResponse
-	if err := xml.Unmarshal(data, &resp); err != nil {
+
+	// Use decoder for consistent handling
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
 
@@ -808,6 +858,13 @@ func (m *Manager) syncSpecials() (int, error) {
 				item.SpecialImageLocalPath = m.resolveLocalPath(baseFileDir, item.SpecialImage)
 				downloadJobs = append(downloadJobs, DownloadJob{item.SpecialImageRemoteURL, item.SpecialImageLocalPath})
 			}
+
+			item.SpecialTitle = repairMojibake(item.SpecialTitle)
+			item.Title = repairMojibake(item.Title)
+			item.SpecialSubBody = repairMojibake(item.SpecialSubBody)
+			item.CategoryName = repairMojibake(item.CategoryName)
+			item.ShopName = repairMojibake(item.ShopName)
+
 			stmt.Exec(item.SpecialID, item.SpecialTitle, item.Title, item.SpecialSubBody, item.CategoryName, item.ShopID, item.ShopName, item.UpdateDate, item.SpecialImageLocalPath)
 		}
 	}
@@ -852,7 +909,10 @@ func (m *Manager) syncGenres() (int, error) {
 	}
 
 	var resp models.GenreListResponse
-	if err := xml.Unmarshal(data, &resp); err != nil {
+
+	// Use decoder for consistent handling
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
 
@@ -1014,6 +1074,15 @@ func (m *Manager) fetchXML(url string) ([]byte, error) {
 		return nil, fmt.Errorf("API request failed with status: %s", resp.Status)
 	}
 
+	// 修正: レスポンスの文字コードを考慮して読み込む
+	// XMLは通常ヘッダーでエンコーディングを指定するが、Goのxml.Unmarshalは
+	// デフォルトでUTF-8しかサポートしておらず、Shift-JIS等が来ると化ける可能性がある。
+	// charset readerを設定する必要があるが、ここでは簡易的にデータをすべて読み込んでから
+	// 必要なら変換を行うアプローチをとるか、あるいはxml.DecoderにCharsetReaderを設定する。
+
+	// ここではまず生データを返す。呼び出し元（syncShops等）のxml.Unmarshalで
+	// 適切なCharsetReaderを設定することで対応する。
+
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -1053,9 +1122,62 @@ func (m *Manager) saveXMLDump(endpoint string, data []byte) {
 	}
 
 	filePath := filepath.Join(dir, fileName)
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+
+	// Try to repair mojibake before saving for better readability
+	content := string(data)
+	repaired := repairMojibake(content)
+
+	if err := os.WriteFile(filePath, []byte(repaired), 0644); err != nil {
 		fmt.Printf("Failed to write XML dump to %s: %v\n", filePath, err)
 	} else {
 		// fmt.Printf("Saved XML dump to %s\n", filePath)
 	}
+}
+
+// repairMojibake attempts to fix garbled text caused by UTF-8 bytes being interpreted as Windows-1252.
+// e.g. "ã€" (E3 80 90 interpreted as Win1252) -> "【" (E3 80 90 as UTF-8)
+func repairMojibake(s string) string {
+	// Windows-1252 specific mappings for 0x80-0x9F range
+	win1252 := map[rune]byte{
+		0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84,
+		0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88,
+		0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C,
+		0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93,
+		0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+		0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B,
+		0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F,
+	}
+
+	var buf bytes.Buffer
+	// Pre-allocate buffer estimation
+	buf.Grow(len(s))
+
+	for _, r := range s {
+		if r <= 0x7F {
+			// ASCII is safe
+			buf.WriteByte(byte(r))
+		} else if b, ok := win1252[r]; ok {
+			// Map back to specific byte
+			buf.WriteByte(b)
+		} else if r >= 0xA0 && r <= 0xFF {
+			// Identity mapping for Latin-1 Supplement
+			buf.WriteByte(byte(r))
+		} else if r >= 0x80 && r <= 0x9F {
+			// Pass through C1 controls (sometimes mapped directly if not in win1252 map)
+			buf.WriteByte(byte(r))
+		} else {
+			// If we encounter a character that couldn't have come from CP1252 decoding
+			// (e.g. Japanese character), then this string is likely NOT mojibake (or at least not this type).
+			// Return original string to be safe.
+			return s
+		}
+	}
+
+	res := buf.Bytes()
+	// Check if the result is valid UTF-8
+	if utf8.Valid(res) {
+		return string(res)
+	}
+	// If not valid UTF-8, return original
+	return s
 }

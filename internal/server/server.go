@@ -28,11 +28,11 @@ func (s *Server) Start() {
 
 	// API Routes
 	mux.HandleFunc("/api/shops", s.handleShopList)
-	mux.HandleFunc("/api/shop-news", s.createListEndpoint("shop_news", "SELECT * FROM shop_news"))
-	mux.HandleFunc("/api/event-news", s.createListEndpoint("event_news", "SELECT * FROM event_news"))
-	mux.HandleFunc("/api/specials", s.createListEndpoint("specials", "SELECT * FROM specials"))
-	mux.HandleFunc("/api/sales", s.createListEndpoint("specials", "SELECT * FROM specials")) // Sales maps to specials
-	mux.HandleFunc("/api/genres", s.createListEndpoint("genres", "SELECT * FROM genres"))
+	mux.HandleFunc("/api/shop-news", s.handleShopNewsList)
+	mux.HandleFunc("/api/event-news", s.handleEventNewsList)
+	mux.HandleFunc("/api/specials", s.handleSpecialList)
+	mux.HandleFunc("/api/sales", s.handleSpecialList) // Sales maps to specials
+	mux.HandleFunc("/api/genres", s.handleGenreList)
 
 	// SSE Endpoint
 	mux.Handle("/api/events", s.Broker)
@@ -211,7 +211,8 @@ func (s *Server) createListEndpoint(tableName string, query string) http.Handler
 
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		encoder := json.NewEncoder(w)
-		encoder.SetIndent("", "  ")
+		encoder.SetEscapeHTML(false) // 追加: HTMLエスケープを無効化（文字化け対策の一つ）
+		encoder.SetIndent("", "")    // 変更: インデントを無しにして1行にする（SSEと形式を合わせる）
 		encoder.Encode(result)
 	}
 }
@@ -225,8 +226,275 @@ func (s *Server) handleShopList(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false) // 追加: HTMLエスケープを無効化
+	encoder.SetIndent("", "  ")    // 変更: プリティプリントを有効化
 	encoder.Encode(result)
+}
+
+// FetchEventNews retrieves event news from the database
+func (s *Server) FetchEventNews() ([]models.EventNewsItem, error) {
+	if s.DB.Conn == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	query := `SELECT 
+		event_id, title, body, categories, date_start, date_end, display_end, venues,
+		photo1, photo1_remote_url, photo1_local_path, update_date
+		FROM event_news`
+
+	rows, err := s.DB.Conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %v", err)
+	}
+	defer rows.Close()
+
+	var result []models.EventNewsItem
+
+	for rows.Next() {
+		var item models.EventNewsItem
+		var (
+			eventId, title, body, categories, dateStart, dateEnd, displayEnd, venues,
+			photo1, photo1RemoteUrl, photo1LocalPath, updateDate *string
+		)
+
+		if err := rows.Scan(
+			&eventId, &title, &body, &categories, &dateStart, &dateEnd, &displayEnd, &venues,
+			&photo1, &photo1RemoteUrl, &photo1LocalPath, &updateDate,
+		); err != nil {
+			fmt.Printf("Scan error: %v\n", err)
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.EventID = s(eventId)
+		item.Title = s(title)
+		item.Body = s(body)
+		item.Categories = s(categories)
+		item.DateStart = s(dateStart)
+		item.DateEnd = s(dateEnd)
+		item.DisplayEnd = s(displayEnd)
+		item.Venues = s(venues)
+		item.Photo1 = s(photo1)
+		item.Photo1RemoteURL = s(photo1RemoteUrl)
+		item.Photo1LocalPath = s(photo1LocalPath)
+		item.UpdateDate = s(updateDate)
+
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+// FetchShopNews retrieves shop news from the database
+func (s *Server) FetchShopNews() ([]models.ShopNewsItem, error) {
+	if s.DB.Conn == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	query := `SELECT 
+		shop_news_id, shop_id, shop_name, shop_logo, shop_floors_name, title, body, categories,
+		date_start, date_end, photo1, photo1_remote_url, photo1_local_path,
+		shop_logo_remote_url, shop_logo_local_path, update_date
+		FROM shop_news`
+
+	rows, err := s.DB.Conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %v", err)
+	}
+	defer rows.Close()
+
+	var result []models.ShopNewsItem
+
+	for rows.Next() {
+		var item models.ShopNewsItem
+		var (
+			shopNewsId, shopId, shopName, shopLogo, shopFloorsName, title, body, categories,
+			dateStart, dateEnd, photo1, photo1RemoteUrl, photo1LocalPath,
+			shopLogoRemoteUrl, shopLogoLocalPath, updateDate *string
+		)
+
+		if err := rows.Scan(
+			&shopNewsId, &shopId, &shopName, &shopLogo, &shopFloorsName, &title, &body, &categories,
+			&dateStart, &dateEnd, &photo1, &photo1RemoteUrl, &photo1LocalPath,
+			&shopLogoRemoteUrl, &shopLogoLocalPath, &updateDate,
+		); err != nil {
+			fmt.Printf("Scan error: %v\n", err)
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.ShopNewsID = s(shopNewsId)
+		item.ShopID = s(shopId)
+		item.ShopName = s(shopName)
+		item.ShopLogo = s(shopLogo)
+		item.ShopFloorsName = s(shopFloorsName)
+		item.Title = s(title)
+		item.Body = s(body)
+		item.Categories = s(categories)
+		item.DateStart = s(dateStart)
+		item.DateEnd = s(dateEnd)
+		item.Photo1 = s(photo1)
+		item.Photo1RemoteURL = s(photo1RemoteUrl)
+		item.Photo1LocalPath = s(photo1LocalPath)
+		item.ShopLogoRemoteURL = s(shopLogoRemoteUrl)
+		item.ShopLogoLocalPath = s(shopLogoLocalPath)
+		item.UpdateDate = s(updateDate)
+
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+// FetchSpecials retrieves specials from the database
+func (s *Server) FetchSpecials() ([]models.SpecialItem, error) {
+	if s.DB.Conn == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	query := `SELECT 
+		special_id, special_title, title, special_sub_body, category_name,
+		shop_id, shop_name, update_date, special_image_local_path
+		FROM specials`
+
+	rows, err := s.DB.Conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %v", err)
+	}
+	defer rows.Close()
+
+	var result []models.SpecialItem
+
+	for rows.Next() {
+		var item models.SpecialItem
+		var (
+			specialId, specialTitle, title, specialSubBody, categoryName,
+			shopId, shopName, updateDate, specialImageLocalPath *string
+		)
+
+		if err := rows.Scan(
+			&specialId, &specialTitle, &title, &specialSubBody, &categoryName,
+			&shopId, &shopName, &updateDate, &specialImageLocalPath,
+		); err != nil {
+			fmt.Printf("Scan error: %v\n", err)
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.SpecialID = s(specialId)
+		item.SpecialTitle = s(specialTitle)
+		item.Title = s(title)
+		item.SpecialSubBody = s(specialSubBody)
+		item.CategoryName = s(categoryName)
+		item.ShopID = s(shopId)
+		item.ShopName = s(shopName)
+		item.UpdateDate = s(updateDate)
+		item.SpecialImageLocalPath = s(specialImageLocalPath)
+
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+// FetchGenres retrieves genres from the database
+func (s *Server) FetchGenres() ([]models.GenreItem, error) {
+	if s.DB.Conn == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	query := `SELECT genre_id, genre_name, genre_slug FROM genres`
+
+	rows, err := s.DB.Conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %v", err)
+	}
+	defer rows.Close()
+
+	var result []models.GenreItem
+
+	for rows.Next() {
+		var item models.GenreItem
+		var genreId, genreName, genreSlug *string
+
+		if err := rows.Scan(&genreId, &genreName, &genreSlug); err != nil {
+			fmt.Printf("Scan error: %v\n", err)
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.GenreID = s(genreId)
+		item.GenreName = s(genreName)
+		item.GenreSlug = s(genreSlug)
+
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+func (s *Server) handleEventNewsList(w http.ResponseWriter, r *http.Request) {
+	result, err := s.FetchEventNews()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, result)
+}
+
+func (s *Server) handleShopNewsList(w http.ResponseWriter, r *http.Request) {
+	result, err := s.FetchShopNews()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, result)
+}
+
+func (s *Server) handleSpecialList(w http.ResponseWriter, r *http.Request) {
+	result, err := s.FetchSpecials()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, result)
+}
+
+func (s *Server) handleGenreList(w http.ResponseWriter, r *http.Request) {
+	result, err := s.FetchGenres()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, result)
+}
+
+func (s *Server) respondJSON(w http.ResponseWriter, data interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	encoder.Encode(data)
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -270,3 +538,6 @@ func (s *Server) handleBridgeJS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript")
 	w.Write([]byte(js))
 }
+
+
+

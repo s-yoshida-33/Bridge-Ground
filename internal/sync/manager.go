@@ -68,57 +68,12 @@ func (m *Manager) notifyDataUpdate(resourceName string) {
 	}
 }
 
-func (m *Manager) getLastUpdateDateAll(key string) (string, error) {
-	var val string
-	// Check if table exists first? No, InitializeSchema ensures it exists.
-	// But during first run after migration, it might be empty.
-	err := m.DB.Conn.QueryRow("SELECT value FROM sync_meta WHERE key = ?", key).Scan(&val)
-	if err != nil {
-		// sql.ErrNoRows or other error
-		return "", nil
-	}
-	return val, nil
-}
 
 func (m *Manager) setLastUpdateDateAll(key, value string) error {
 	_, err := m.DB.Conn.Exec("INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)", key, value)
 	return err
 }
 
-func (m *Manager) getExistingUpdateDates(tableName, idCol string) (map[string]string, error) {
-	query := fmt.Sprintf("SELECT %s, update_date FROM %s", idCol, tableName)
-	rows, err := m.DB.Conn.Query(query)
-	if err != nil {
-		// Table might not exist yet on first run
-		return make(map[string]string), nil
-	}
-	defer rows.Close()
-
-	result := make(map[string]string)
-	for rows.Next() {
-		var id string
-		var date interface{} // Use interface{} to handle potential NULLs or various types
-		if err := rows.Scan(&id, &date); err != nil {
-			continue
-		}
-
-		id = strings.TrimSpace(id) // Ensure ID is trimmed
-		if date == nil {
-			result[id] = ""
-		} else {
-			// Convert to string safely
-			switch v := date.(type) {
-			case []byte:
-				result[id] = string(v)
-			case string:
-				result[id] = v
-			default:
-				result[id] = fmt.Sprintf("%v", v)
-			}
-		}
-	}
-	return result, nil
-}
 
 // StartSync executes the full synchronization process
 func (m *Manager) StartSync() (bool, error) {
@@ -246,7 +201,7 @@ func (m *Manager) StartSync() (bool, error) {
 			anyUpdated = true
 			m.notifyDataUpdate("genres")
 		}
-		// Genre updates are not tracked for "updated" flag currently (always 0)
+		updateStats["genres"] = count
 	} else {
 		fmt.Println("Skipping genres sync (disabled in config)")
 	}
@@ -406,11 +361,6 @@ func (m *Manager) syncShops() (int, error) {
 	// Create XML decoder with CharsetReader to handle non-UTF-8 encodings (like Shift_JIS)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
-		// 簡易的な実装: 実際には iconv ライブラリなどを使うのがベストだが、
-		// Go標準ではサポートが薄いため、必要ならここに変換ロジックを入れる。
-		// 現在は "utf-8" 以外が来た場合もそのまま通しているが、
-		// 文字化けの原因がXMLパース時のエンコーディング不一致にあるならここで対処が必要。
-		// もしサーバーが "Windows-31J" や "Shift_JIS" を返しているなら変換が必要。
 		return input, nil
 	}
 
@@ -418,24 +368,20 @@ func (m *Manager) syncShops() (int, error) {
 		return 0, err
 	}
 
-	if resp.UpdateDateAll != "" {
-		lastUpdate, _ := m.getLastUpdateDateAll("shops")
-		if lastUpdate == resp.UpdateDateAll {
-			fmt.Println("Shops data is up to date (UpdateDateAll match). Skipping.")
-			return 0, nil
-		}
+	// Always load existing data to detect ANY changes
+	existingShops, err := m.loadAllShops()
+	if err != nil {
+		// If table doesn't exist, it might be fine on first run, but loadAllShops handles that via empty map if needed?
+		// Actually loadAllShops returns error if query fails. But syncShops is called after InitializeSchema so it should be fine.
+		// If query fails for other reasons, we might want to proceed as empty.
+		fmt.Printf("Warning: Failed to load existing shops: %v. Assuming empty.\n", err)
+		existingShops = make(map[string]models.ShopItem)
 	}
 
-	existing, _ := m.getExistingUpdateDates("shops", "shop_id")
-	// Make a copy or just assume existing map will be used to track deletions
-	// But `existing` map is also used to check old date.
-	// We will delete keys from `existing` as we process them.
-	// Remaining keys will be deleted from DB.
-
-	fmt.Printf("Initial existing shops count: %d\n", len(existing))
+	fmt.Printf("Initial existing shops count: %d\n", len(existingShops))
 
 	updateCount := 0
-
+	
 	tx, err := m.DB.Conn.Begin()
 	if err != nil {
 		return 0, err
@@ -459,48 +405,9 @@ func (m *Manager) syncShops() (int, error) {
 	var downloadJobs []DownloadJob
 
 	for _, item := range resp.Items {
-		item.ShopID = strings.TrimSpace(item.ShopID) // Trim ID to ensure match
-
-		// Check update date
-		oldDate, exists := existing[item.ShopID]
-		if exists {
-			delete(existing, item.ShopID) // Mark as seen
-		}
-
-		// Determine if update is needed
-		isNew := !exists
-		isUpdated := exists && oldDate != item.UpdateDate
-
-		// If both old and new dates are empty, treat as no update needed to prevent loop
-		if exists && oldDate == "" && item.UpdateDate == "" {
-			isUpdated = false
-		}
-
-		// Additional check: Trim space to avoid formatting issues
-		if exists && strings.TrimSpace(oldDate) == strings.TrimSpace(item.UpdateDate) {
-			isUpdated = false
-		}
-
-		if isNew || isUpdated {
-			updateCount++
-		}
-
-		if item.Photo1 != "" {
-			item.Photo1RemoteURL = m.resolveURL(item.Photo1)
-			item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
-			downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
-		}
-		if item.Photo2 != "" {
-			item.Photo2RemoteURL = m.resolveURL(item.Photo2)
-			item.Photo2LocalPath = m.resolveLocalPath(baseFileDir, item.Photo2)
-			downloadJobs = append(downloadJobs, DownloadJob{item.Photo2RemoteURL, item.Photo2LocalPath})
-		}
-		if item.ShopLogo != "" {
-			item.ShopLogoRemoteURL = m.resolveURL(item.ShopLogo)
-			item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
-			downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
-		}
-
+		item.ShopID = strings.TrimSpace(item.ShopID)
+		
+		// Repair Mojibake first
 		item.ShopName = repairMojibake(item.ShopName)
 		item.ShopNameKana = repairMojibake(item.ShopNameKana)
 		item.ShopNameEnglish = repairMojibake(item.ShopNameEnglish)
@@ -516,32 +423,64 @@ func (m *Manager) syncShops() (int, error) {
 		item.AreaSub = repairMojibake(item.AreaSub)
 		item.OpenTime = repairMojibake(item.OpenTime)
 
-		stmt.Exec(
-			item.ShopID, item.ShopName, item.ShopNameKana, item.ShopNameEnglish, item.Searches,
-			item.Genre, item.GenreSub, item.GenreSubEnglish, item.GenreMemo, item.GenreMemoEnglish,
-			item.GroupID, item.Tel, item.Floors, item.Area, item.AreaSub, item.Number, item.CloseFlg,
-			item.OpenTime, item.Description,
-			item.Photo1, item.Photo2, item.ShopLogo, item.UpdateDate,
-			item.Photo1RemoteURL, item.Photo1LocalPath,
-			item.Photo2RemoteURL, item.Photo2LocalPath,
-			item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
-		)
+		// Check against existing
+		existingItem, exists := existingShops[item.ShopID]
+		needsUpdate := true
+		
+		if exists {
+			// Compare fields
+			if shopsEqual(item, existingItem) {
+				needsUpdate = false
+			}
+			// Mark as processed by removing from map
+			delete(existingShops, item.ShopID)
+		}
+
+		if needsUpdate {
+			updateCount++
+			
+			// Handle images only if updating (or always? safe to resolve again)
+			if item.Photo1 != "" {
+				item.Photo1RemoteURL = m.resolveURL(item.Photo1)
+				item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
+				downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
+			}
+			if item.Photo2 != "" {
+				item.Photo2RemoteURL = m.resolveURL(item.Photo2)
+				item.Photo2LocalPath = m.resolveLocalPath(baseFileDir, item.Photo2)
+				downloadJobs = append(downloadJobs, DownloadJob{item.Photo2RemoteURL, item.Photo2LocalPath})
+			}
+			if item.ShopLogo != "" {
+				item.ShopLogoRemoteURL = m.resolveURL(item.ShopLogo)
+				item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
+				downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
+			}
+
+			stmt.Exec(
+				item.ShopID, item.ShopName, item.ShopNameKana, item.ShopNameEnglish, item.Searches,
+				item.Genre, item.GenreSub, item.GenreSubEnglish, item.GenreMemo, item.GenreMemoEnglish,
+				item.GroupID, item.Tel, item.Floors, item.Area, item.AreaSub, item.Number, item.CloseFlg,
+				item.OpenTime, item.Description,
+				item.Photo1, item.Photo2, item.ShopLogo, item.UpdateDate,
+				item.Photo1RemoteURL, item.Photo1LocalPath,
+				item.Photo2RemoteURL, item.Photo2LocalPath,
+				item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
+			)
+		}
 	}
 
-	// Delete obsolete records
+	// Delete obsolete records (remaining in existingShops)
 	deletedCount := 0
-	if len(existing) > 0 {
-		fmt.Printf("Deleting %d obsolete shops\n", len(existing))
+	if len(existingShops) > 0 {
+		fmt.Printf("Deleting %d obsolete shops\n", len(existingShops))
 		delStmt, err := tx.Prepare("DELETE FROM shops WHERE shop_id = ?")
 		if err != nil {
 			return 0, err
 		}
 		defer delStmt.Close()
-		for id := range existing {
+		for id := range existingShops {
 			if _, err := delStmt.Exec(id); err == nil {
 				deletedCount++
-			} else {
-				fmt.Printf("Failed to delete shop %s: %v\n", id, err)
 			}
 		}
 		fmt.Printf("Deleted %d shops\n", deletedCount)
@@ -556,7 +495,9 @@ func (m *Manager) syncShops() (int, error) {
 	}
 
 	m.processDownloads(downloadJobs)
-	return updateCount - deletedCount, nil
+	
+	// Return total changes
+	return updateCount + deletedCount, nil
 }
 
 func (m *Manager) syncShopNews() (int, error) {
@@ -572,23 +513,18 @@ func (m *Manager) syncShopNews() (int, error) {
 	}
 
 	var resp models.ShopNewsResponse
-
-	// Use decoder for consistent handling
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
 	fmt.Printf("Parsed %d items from XML for Shop News\n", len(resp.Items))
 
-	if resp.UpdateDateAll != "" {
-		lastUpdate, _ := m.getLastUpdateDateAll("shop_news")
-		if lastUpdate == resp.UpdateDateAll {
-			fmt.Println("Shop News data is up to date (UpdateDateAll match). Skipping.")
-			return 0, nil
-		}
+	existingNews, err := m.loadAllShopNews()
+	if err != nil {
+		fmt.Printf("Warning: Failed to load existing shop news: %v. Assuming empty.\n", err)
+		existingNews = make(map[string]models.ShopNewsItem)
 	}
 
-	existing, _ := m.getExistingUpdateDates("shop_news", "shop_news_id")
 	updateCount := 0
 
 	tx, err := m.DB.Conn.Begin()
@@ -611,26 +547,6 @@ func (m *Manager) syncShopNews() (int, error) {
 
 	for _, item := range resp.Items {
 		item.ShopNewsID = strings.TrimSpace(item.ShopNewsID)
-		// Check update date
-		oldDate, exists := existing[item.ShopNewsID]
-		if exists {
-			delete(existing, item.ShopNewsID)
-		}
-
-		if !exists || (oldDate != item.UpdateDate && item.UpdateDate != "" && strings.TrimSpace(oldDate) != strings.TrimSpace(item.UpdateDate)) {
-			updateCount++
-		}
-
-		if item.Photo1 != "" {
-			item.Photo1RemoteURL = m.resolveURL(item.Photo1)
-			item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
-			downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
-		}
-		if item.ShopLogo != "" {
-			item.ShopLogoRemoteURL = m.resolveURL(item.ShopLogo)
-			item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
-			downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
-		}
 
 		item.Title = repairMojibake(item.Title)
 		item.Body = repairMojibake(item.Body)
@@ -638,26 +554,46 @@ func (m *Manager) syncShopNews() (int, error) {
 		item.ShopName = repairMojibake(item.ShopName)
 		item.ShopFloorsName = repairMojibake(item.ShopFloorsName)
 
-		_, err := stmt.Exec(
-			item.ShopNewsID, item.ShopID, item.ShopName, item.ShopLogo, item.ShopFloorsName,
-			item.Title, item.Body, item.Categories, item.DateStart, item.DateEnd, item.Photo1,
-			item.Photo1RemoteURL, item.Photo1LocalPath, item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
-			item.UpdateDate,
-		)
-		if err != nil {
-			fmt.Printf("Error inserting shop news %s: %v\n", item.ShopNewsID, err)
+		existingItem, exists := existingNews[item.ShopNewsID]
+		needsUpdate := true
+		if exists {
+			if shopNewsEqual(item, existingItem) {
+				needsUpdate = false
+			}
+			delete(existingNews, item.ShopNewsID)
+		}
+
+		if needsUpdate {
+			updateCount++
+
+			if item.Photo1 != "" {
+				item.Photo1RemoteURL = m.resolveURL(item.Photo1)
+				item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
+				downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
+			}
+			if item.ShopLogo != "" {
+				item.ShopLogoRemoteURL = m.resolveURL(item.ShopLogo)
+				item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
+				downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
+			}
+
+			stmt.Exec(
+				item.ShopNewsID, item.ShopID, item.ShopName, item.ShopLogo, item.ShopFloorsName,
+				item.Title, item.Body, item.Categories, item.DateStart, item.DateEnd, item.Photo1,
+				item.Photo1RemoteURL, item.Photo1LocalPath, item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
+				item.UpdateDate,
+			)
 		}
 	}
 
-	// Delete obsolete records
 	deletedCount := 0
-	if len(existing) > 0 {
+	if len(existingNews) > 0 {
 		delStmt, err := tx.Prepare("DELETE FROM shop_news WHERE shop_news_id = ?")
 		if err != nil {
 			return 0, err
 		}
 		defer delStmt.Close()
-		for id := range existing {
+		for id := range existingNews {
 			if _, err := delStmt.Exec(id); err == nil {
 				deletedCount++
 			}
@@ -673,7 +609,7 @@ func (m *Manager) syncShopNews() (int, error) {
 	}
 
 	m.processDownloads(downloadJobs)
-	return updateCount - deletedCount, nil
+	return updateCount + deletedCount, nil
 }
 
 func (m *Manager) syncEventNews() (int, error) {
@@ -689,23 +625,18 @@ func (m *Manager) syncEventNews() (int, error) {
 	}
 
 	var resp models.EventNewsResponse
-
-	// Use decoder for consistent handling
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
 	fmt.Printf("Parsed %d items from XML for Event News\n", len(resp.Items))
 
-	if resp.UpdateDateAll != "" {
-		lastUpdate, _ := m.getLastUpdateDateAll("event_news")
-		if lastUpdate == resp.UpdateDateAll {
-			fmt.Println("Event News data is up to date (UpdateDateAll match). Skipping.")
-			return 0, nil
-		}
+	existingEvents, err := m.loadAllEventNews()
+	if err != nil {
+		fmt.Printf("Warning: Failed to load existing event news: %v. Assuming empty.\n", err)
+		existingEvents = make(map[string]models.EventNewsItem)
 	}
 
-	existing, _ := m.getExistingUpdateDates("event_news", "event_id")
 	updateCount := 0
 
 	tx, err := m.DB.Conn.Begin()
@@ -726,48 +657,46 @@ func (m *Manager) syncEventNews() (int, error) {
 
 	for _, item := range resp.Items {
 		item.EventID = strings.TrimSpace(item.EventID)
-		// Check update date
-		oldDate, exists := existing[item.EventID]
-		if exists {
-			delete(existing, item.EventID)
-		}
 
-		if !exists || (oldDate != item.UpdateDate && item.UpdateDate != "" && strings.TrimSpace(oldDate) != strings.TrimSpace(item.UpdateDate)) {
-			updateCount++
-		}
-
-		// Normalize Venues (remove surrounding whitespace which might happen with CDATA formatting in XML)
 		item.Venues = strings.TrimSpace(item.Venues)
-
 		item.Title = repairMojibake(item.Title)
 		item.Body = repairMojibake(item.Body)
 		item.Categories = repairMojibake(item.Categories)
 		item.Venues = repairMojibake(item.Venues)
 
-		if item.Photo1 != "" {
-			item.Photo1RemoteURL = m.resolveURL(item.Photo1)
-			item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
-			downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
+		existingItem, exists := existingEvents[item.EventID]
+		needsUpdate := true
+		if exists {
+			if eventNewsEqual(item, existingItem) {
+				needsUpdate = false
+			}
+			delete(existingEvents, item.EventID)
 		}
-		_, err := stmt.Exec(
-			item.EventID, item.Title, item.Body, item.Categories, item.DateStart, item.DateEnd,
-			item.DisplayEnd, item.Venues, item.Photo1,
-			item.Photo1RemoteURL, item.Photo1LocalPath, item.UpdateDate,
-		)
-		if err != nil {
-			fmt.Printf("Error inserting event news %s: %v\n", item.EventID, err)
+
+		if needsUpdate {
+			updateCount++
+
+			if item.Photo1 != "" {
+				item.Photo1RemoteURL = m.resolveURL(item.Photo1)
+				item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
+				downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
+			}
+			stmt.Exec(
+				item.EventID, item.Title, item.Body, item.Categories, item.DateStart, item.DateEnd,
+				item.DisplayEnd, item.Venues, item.Photo1,
+				item.Photo1RemoteURL, item.Photo1LocalPath, item.UpdateDate,
+			)
 		}
 	}
 
-	// Delete obsolete records
 	deletedCount := 0
-	if len(existing) > 0 {
+	if len(existingEvents) > 0 {
 		delStmt, err := tx.Prepare("DELETE FROM event_news WHERE event_id = ?")
 		if err != nil {
 			return 0, err
 		}
 		defer delStmt.Close()
-		for id := range existing {
+		for id := range existingEvents {
 			if _, err := delStmt.Exec(id); err == nil {
 				deletedCount++
 			}
@@ -783,7 +712,7 @@ func (m *Manager) syncEventNews() (int, error) {
 	}
 
 	m.processDownloads(downloadJobs)
-	return updateCount - deletedCount, nil
+	return updateCount + deletedCount, nil
 }
 
 func (m *Manager) syncSpecials() (int, error) {
@@ -799,22 +728,17 @@ func (m *Manager) syncSpecials() (int, error) {
 	}
 
 	var resp models.SpecialListResponse
-
-	// Use decoder for consistent handling
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
 
-	if resp.UpdateDateAll != "" {
-		lastUpdate, _ := m.getLastUpdateDateAll("specials")
-		if lastUpdate == resp.UpdateDateAll {
-			fmt.Println("Specials data is up to date (UpdateDateAll match). Skipping.")
-			return 0, nil
-		}
+	existingSpecials, err := m.loadAllSpecials()
+	if err != nil {
+		fmt.Printf("Warning: Failed to load existing specials: %v. Assuming empty.\n", err)
+		existingSpecials = make(map[string]models.SpecialItem)
 	}
 
-	existing, _ := m.getExistingUpdateDates("specials", "special_id")
 	updateCount := 0
 
 	tx, err := m.DB.Conn.Begin()
@@ -830,34 +754,15 @@ func (m *Manager) syncSpecials() (int, error) {
 	baseFileDir := m.getBaseFileDir()
 	var downloadJobs []DownloadJob
 
-	// Specials are nested in specialTitle items
 	for _, parent := range resp.Items {
-		// Iterate over sub-items
 		for _, item := range parent.Items {
 			if item.Type != "special" {
 				continue
 			}
 
-			// Use parent properties where appropriate
 			item.SpecialTitle = parent.SpecialTitle
 			item.UpdateDate = parent.UpdateDate
-
 			item.SpecialID = strings.TrimSpace(item.SpecialID)
-			// Check update date
-			oldDate, exists := existing[item.SpecialID]
-			if exists {
-				delete(existing, item.SpecialID)
-			}
-
-			if !exists || (oldDate != item.UpdateDate && item.UpdateDate != "" && strings.TrimSpace(oldDate) != strings.TrimSpace(item.UpdateDate)) {
-				updateCount++
-			}
-
-			if item.SpecialImage != "" {
-				item.SpecialImageRemoteURL = m.resolveURL(item.SpecialImage)
-				item.SpecialImageLocalPath = m.resolveLocalPath(baseFileDir, item.SpecialImage)
-				downloadJobs = append(downloadJobs, DownloadJob{item.SpecialImageRemoteURL, item.SpecialImageLocalPath})
-			}
 
 			item.SpecialTitle = repairMojibake(item.SpecialTitle)
 			item.Title = repairMojibake(item.Title)
@@ -865,19 +770,37 @@ func (m *Manager) syncSpecials() (int, error) {
 			item.CategoryName = repairMojibake(item.CategoryName)
 			item.ShopName = repairMojibake(item.ShopName)
 
-			stmt.Exec(item.SpecialID, item.SpecialTitle, item.Title, item.SpecialSubBody, item.CategoryName, item.ShopID, item.ShopName, item.UpdateDate, item.SpecialImageLocalPath)
+			existingItem, exists := existingSpecials[item.SpecialID]
+			needsUpdate := true
+			if exists {
+				if specialsEqual(item, existingItem) {
+					needsUpdate = false
+				}
+				delete(existingSpecials, item.SpecialID)
+			}
+
+			if needsUpdate {
+				updateCount++
+
+				if item.SpecialImage != "" {
+					item.SpecialImageRemoteURL = m.resolveURL(item.SpecialImage)
+					item.SpecialImageLocalPath = m.resolveLocalPath(baseFileDir, item.SpecialImage)
+					downloadJobs = append(downloadJobs, DownloadJob{item.SpecialImageRemoteURL, item.SpecialImageLocalPath})
+				}
+
+				stmt.Exec(item.SpecialID, item.SpecialTitle, item.Title, item.SpecialSubBody, item.CategoryName, item.ShopID, item.ShopName, item.UpdateDate, item.SpecialImageLocalPath)
+			}
 		}
 	}
 
-	// Delete obsolete records
 	deletedCount := 0
-	if len(existing) > 0 {
+	if len(existingSpecials) > 0 {
 		delStmt, err := tx.Prepare("DELETE FROM specials WHERE special_id = ?")
 		if err != nil {
 			return 0, err
 		}
 		defer delStmt.Close()
-		for id := range existing {
+		for id := range existingSpecials {
 			if _, err := delStmt.Exec(id); err == nil {
 				deletedCount++
 			}
@@ -893,7 +816,7 @@ func (m *Manager) syncSpecials() (int, error) {
 	}
 
 	m.processDownloads(downloadJobs)
-	return updateCount - deletedCount, nil
+	return updateCount + deletedCount, nil
 }
 
 func (m *Manager) syncGenres() (int, error) {
@@ -909,20 +832,18 @@ func (m *Manager) syncGenres() (int, error) {
 	}
 
 	var resp models.GenreListResponse
-
-	// Use decoder for consistent handling
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
 
-	if resp.UpdateDateAll != "" {
-		lastUpdate, _ := m.getLastUpdateDateAll("genres")
-		if lastUpdate == resp.UpdateDateAll {
-			fmt.Println("Genres data is up to date (UpdateDateAll match). Skipping.")
-			return 0, nil
-		}
+	existingGenres, err := m.loadAllGenres()
+	if err != nil {
+		fmt.Printf("Warning: Failed to load existing genres: %v. Assuming empty.\n", err)
+		existingGenres = make(map[string]models.GenreItem)
 	}
+
+	updateCount := 0
 
 	tx, err := m.DB.Conn.Begin()
 	if err != nil {
@@ -934,14 +855,38 @@ func (m *Manager) syncGenres() (int, error) {
 	}
 	defer stmt.Close()
 
-	// Genres don't have update_date, so we treat all as processed but not necessarily "updated".
-	// However, since we don't track changes for genres, we can either return 0 or the count of items.
-	// Returning 0 maintains the behavior that genres don't trigger "new updates" notifications usually.
 	for _, item := range resp.Items {
-		stmt.Exec(item.GenreID, item.GenreName, item.GenreSlug)
+		item.GenreID = strings.TrimSpace(item.GenreID)
+
+		existingItem, exists := existingGenres[item.GenreID]
+		needsUpdate := true
+		if exists {
+			if genresEqual(item, existingItem) {
+				needsUpdate = false
+			}
+			delete(existingGenres, item.GenreID)
+		}
+
+		if needsUpdate {
+			updateCount++
+			stmt.Exec(item.GenreID, item.GenreName, item.GenreSlug)
+		}
 	}
-	// Genres don't have update_date, assume false or maybe we should hash?
-	// For now, returning false as they are master data and rarely change
+
+	deletedCount := 0
+	if len(existingGenres) > 0 {
+		delStmt, err := tx.Prepare("DELETE FROM genres WHERE genre_id = ?")
+		if err != nil {
+			return 0, err
+		}
+		defer delStmt.Close()
+		for id := range existingGenres {
+			if _, err := delStmt.Exec(id); err == nil {
+				deletedCount++
+			}
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
@@ -950,7 +895,7 @@ func (m *Manager) syncGenres() (int, error) {
 		m.setLastUpdateDateAll("genres", resp.UpdateDateAll)
 	}
 
-	return 0, nil
+	return updateCount + deletedCount, nil
 }
 
 func (m *Manager) cleanupOrphanedFiles() error {
@@ -1180,4 +1125,330 @@ func repairMojibake(s string) string {
 	}
 	// If not valid UTF-8, return original
 	return s
+}
+
+// --- Helper Functions for Robust Sync ---
+
+func (m *Manager) loadAllShops() (map[string]models.ShopItem, error) {
+	query := `SELECT 
+		shop_id, shop_name, shop_name_kana, shop_name_english, searches,
+		genre, genre_sub, genre_sub_english, genre_memo, genre_memo_english,
+		group_id, tel, floors, area, area_sub, number, close_flg,
+		open_time, description, photo1, photo2, shop_logo, update_date
+		FROM shops`
+
+	rows, err := m.DB.Conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]models.ShopItem)
+	for rows.Next() {
+		var item models.ShopItem
+		var (
+			shopId, shopName, shopNameKana, shopNameEnglish, searches,
+			genre, genreSub, genreSubEnglish, genreMemo, genreMemoEnglish,
+			groupId, tel, floors, area, areaSub, number, closeFlg,
+			openTime, description, photo1, photo2, shopLogo, updateDate *string
+		)
+
+		if err := rows.Scan(
+			&shopId, &shopName, &shopNameKana, &shopNameEnglish, &searches,
+			&genre, &genreSub, &genreSubEnglish, &genreMemo, &genreMemoEnglish,
+			&groupId, &tel, &floors, &area, &areaSub, &number, &closeFlg,
+			&openTime, &description, &photo1, &photo2, &shopLogo, &updateDate,
+		); err != nil {
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.ShopID = s(shopId)
+		item.ShopName = s(shopName)
+		item.ShopNameKana = s(shopNameKana)
+		item.ShopNameEnglish = s(shopNameEnglish)
+		item.Searches = s(searches)
+		item.Genre = s(genre)
+		item.GenreSub = s(genreSub)
+		item.GenreSubEnglish = s(genreSubEnglish)
+		item.GenreMemo = s(genreMemo)
+		item.GenreMemoEnglish = s(genreMemoEnglish)
+		item.GroupID = s(groupId)
+		item.Tel = s(tel)
+		item.Floors = s(floors)
+		item.Area = s(area)
+		item.AreaSub = s(areaSub)
+		item.Number = s(number)
+		item.CloseFlg = s(closeFlg)
+		item.OpenTime = s(openTime)
+		item.Description = s(description)
+		item.Photo1 = s(photo1)
+		item.Photo2 = s(photo2)
+		item.ShopLogo = s(shopLogo)
+		item.UpdateDate = s(updateDate)
+
+		result[item.ShopID] = item
+	}
+	return result, nil
+}
+
+func shopsEqual(a, b models.ShopItem) bool {
+	return a.ShopID == b.ShopID &&
+		a.ShopName == b.ShopName &&
+		a.ShopNameKana == b.ShopNameKana &&
+		a.ShopNameEnglish == b.ShopNameEnglish &&
+		a.Searches == b.Searches &&
+		a.Genre == b.Genre &&
+		a.GenreSub == b.GenreSub &&
+		a.GenreSubEnglish == b.GenreSubEnglish &&
+		a.GenreMemo == b.GenreMemo &&
+		a.GenreMemoEnglish == b.GenreMemoEnglish &&
+		a.GroupID == b.GroupID &&
+		a.Tel == b.Tel &&
+		a.Floors == b.Floors &&
+		a.Area == b.Area &&
+		a.AreaSub == b.AreaSub &&
+		a.Number == b.Number &&
+		a.CloseFlg == b.CloseFlg &&
+		a.OpenTime == b.OpenTime &&
+		a.Description == b.Description &&
+		a.Photo1 == b.Photo1 &&
+		a.Photo2 == b.Photo2 &&
+		a.ShopLogo == b.ShopLogo &&
+		a.UpdateDate == b.UpdateDate
+}
+
+func (m *Manager) loadAllShopNews() (map[string]models.ShopNewsItem, error) {
+	query := `SELECT 
+		shop_news_id, shop_id, shop_name, shop_logo, shop_floors_name, title, body, categories,
+		date_start, date_end, photo1, update_date
+		FROM shop_news`
+
+	rows, err := m.DB.Conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]models.ShopNewsItem)
+	for rows.Next() {
+		var item models.ShopNewsItem
+		var (
+			shopNewsId, shopId, shopName, shopLogo, shopFloorsName, title, body, categories,
+			dateStart, dateEnd, photo1, updateDate *string
+		)
+
+		if err := rows.Scan(
+			&shopNewsId, &shopId, &shopName, &shopLogo, &shopFloorsName, &title, &body, &categories,
+			&dateStart, &dateEnd, &photo1, &updateDate,
+		); err != nil {
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.ShopNewsID = s(shopNewsId)
+		item.ShopID = s(shopId)
+		item.ShopName = s(shopName)
+		item.ShopLogo = s(shopLogo)
+		item.ShopFloorsName = s(shopFloorsName)
+		item.Title = s(title)
+		item.Body = s(body)
+		item.Categories = s(categories)
+		item.DateStart = s(dateStart)
+		item.DateEnd = s(dateEnd)
+		item.Photo1 = s(photo1)
+		item.UpdateDate = s(updateDate)
+
+		result[item.ShopNewsID] = item
+	}
+	return result, nil
+}
+
+func shopNewsEqual(a, b models.ShopNewsItem) bool {
+	return a.ShopNewsID == b.ShopNewsID &&
+		a.ShopID == b.ShopID &&
+		a.ShopName == b.ShopName &&
+		a.ShopLogo == b.ShopLogo &&
+		a.ShopFloorsName == b.ShopFloorsName &&
+		a.Title == b.Title &&
+		a.Body == b.Body &&
+		a.Categories == b.Categories &&
+		a.DateStart == b.DateStart &&
+		a.DateEnd == b.DateEnd &&
+		a.Photo1 == b.Photo1 &&
+		a.UpdateDate == b.UpdateDate
+}
+
+func (m *Manager) loadAllEventNews() (map[string]models.EventNewsItem, error) {
+	query := `SELECT 
+		event_id, title, body, categories, date_start, date_end, display_end, venues,
+		photo1, update_date
+		FROM event_news`
+
+	rows, err := m.DB.Conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]models.EventNewsItem)
+	for rows.Next() {
+		var item models.EventNewsItem
+		var (
+			eventId, title, body, categories, dateStart, dateEnd, displayEnd, venues,
+			photo1, updateDate *string
+		)
+
+		if err := rows.Scan(
+			&eventId, &title, &body, &categories, &dateStart, &dateEnd, &displayEnd, &venues,
+			&photo1, &updateDate,
+		); err != nil {
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.EventID = s(eventId)
+		item.Title = s(title)
+		item.Body = s(body)
+		item.Categories = s(categories)
+		item.DateStart = s(dateStart)
+		item.DateEnd = s(dateEnd)
+		item.DisplayEnd = s(displayEnd)
+		item.Venues = s(venues)
+		item.Photo1 = s(photo1)
+		item.UpdateDate = s(updateDate)
+
+		result[item.EventID] = item
+	}
+	return result, nil
+}
+
+func eventNewsEqual(a, b models.EventNewsItem) bool {
+	return a.EventID == b.EventID &&
+		a.Title == b.Title &&
+		a.Body == b.Body &&
+		a.Categories == b.Categories &&
+		a.DateStart == b.DateStart &&
+		a.DateEnd == b.DateEnd &&
+		a.DisplayEnd == b.DisplayEnd &&
+		a.Venues == b.Venues &&
+		a.Photo1 == b.Photo1 &&
+		a.UpdateDate == b.UpdateDate
+}
+
+func (m *Manager) loadAllSpecials() (map[string]models.SpecialItem, error) {
+	query := `SELECT 
+		special_id, special_title, title, special_sub_body, category_name,
+		shop_id, shop_name, update_date
+		FROM specials`
+
+	rows, err := m.DB.Conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]models.SpecialItem)
+	for rows.Next() {
+		var item models.SpecialItem
+		var (
+			specialId, specialTitle, title, specialSubBody, categoryName,
+			shopId, shopName, updateDate *string
+		)
+
+		if err := rows.Scan(
+			&specialId, &specialTitle, &title, &specialSubBody, &categoryName,
+			&shopId, &shopName, &updateDate,
+		); err != nil {
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.SpecialID = s(specialId)
+		item.SpecialTitle = s(specialTitle)
+		item.Title = s(title)
+		item.SpecialSubBody = s(specialSubBody)
+		item.CategoryName = s(categoryName)
+		item.ShopID = s(shopId)
+		item.ShopName = s(shopName)
+		item.UpdateDate = s(updateDate)
+
+		result[item.SpecialID] = item
+	}
+	return result, nil
+}
+
+func specialsEqual(a, b models.SpecialItem) bool {
+	return a.SpecialID == b.SpecialID &&
+		a.SpecialTitle == b.SpecialTitle &&
+		a.Title == b.Title &&
+		a.SpecialSubBody == b.SpecialSubBody &&
+		a.CategoryName == b.CategoryName &&
+		a.ShopID == b.ShopID &&
+		a.ShopName == b.ShopName &&
+		a.UpdateDate == b.UpdateDate
+}
+
+func (m *Manager) loadAllGenres() (map[string]models.GenreItem, error) {
+	query := `SELECT genre_id, genre_name, genre_slug FROM genres`
+
+	rows, err := m.DB.Conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]models.GenreItem)
+	for rows.Next() {
+		var item models.GenreItem
+		var genreId, genreName, genreSlug *string
+
+		if err := rows.Scan(&genreId, &genreName, &genreSlug); err != nil {
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.GenreID = s(genreId)
+		item.GenreName = s(genreName)
+		item.GenreSlug = s(genreSlug)
+
+		result[item.GenreID] = item
+	}
+	return result, nil
+}
+
+func genresEqual(a, b models.GenreItem) bool {
+	return a.GenreID == b.GenreID &&
+		a.GenreName == b.GenreName &&
+		a.GenreSlug == b.GenreSlug
 }

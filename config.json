@@ -1,16 +1,16 @@
 {
   "apiSettings": {
-    "baseUrl": "https://suzaka.aeonmall.com/api",
+    "baseUrl": "https://sakaikitahanada-aeonmall.com/api",
     "apiKey": "",
-    "username": "groundapi_suzaka",
-    "password": "w3HxZV0f"
+    "username": "sakaikitahanada-api",
+    "password": "zc7xuw"
   },
   "syncSettings": {
     "syncIntervalMinutes": 10,
     "syncOnStartup": false,
     "autoSyncEnabled": true,
     "syncTargets": {
-      "shops": false,
+      "shops": true,
       "shopNews": false,
       "eventNews": false,
       "specials": false,

@@ -193,6 +193,20 @@ func (m *Manager) InitializeSchema() error {
 		"ALTER TABLE shop_news ADD COLUMN date_start TEXT",
 		"ALTER TABLE shop_news ADD COLUMN date_end TEXT",
 		"ALTER TABLE shop_news ADD COLUMN photo1 TEXT",
+		
+		// Thumbnail columns
+		"ALTER TABLE shops ADD COLUMN photo1_thumb_w640 TEXT",
+		"ALTER TABLE shops ADD COLUMN photo1_thumb_w640_remote_url TEXT",
+		"ALTER TABLE shops ADD COLUMN photo1_thumb_w640_local_path TEXT",
+		"ALTER TABLE shops ADD COLUMN photo2_thumb_w640 TEXT",
+		"ALTER TABLE shops ADD COLUMN photo2_thumb_w640_remote_url TEXT",
+		"ALTER TABLE shops ADD COLUMN photo2_thumb_w640_local_path TEXT",
+		"ALTER TABLE shops ADD COLUMN shop_logo_thumb_640x640 TEXT",
+		"ALTER TABLE shops ADD COLUMN shop_logo_thumb_640x640_remote_url TEXT",
+		"ALTER TABLE shops ADD COLUMN shop_logo_thumb_640x640_local_path TEXT",
+		"ALTER TABLE shops ADD COLUMN shop_logo_thumb_w640 TEXT",
+		"ALTER TABLE shops ADD COLUMN shop_logo_thumb_w640_remote_url TEXT",
+		"ALTER TABLE shops ADD COLUMN shop_logo_thumb_w640_local_path TEXT",
 	}
 
 	for _, query := range migrations {

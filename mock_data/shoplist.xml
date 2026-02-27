@@ -23,6 +23,10 @@
         <photo1>http://localhost:8080/images/photo1.jpg</photo1>
         <photo2></photo2>
         <shopLogo></shopLogo>
+        <photo1ThumbW640>http://localhost:8080/images/photo1_thumb_w640.jpg</photo1ThumbW640>
+        <photo2ThumbW640></photo2ThumbW640>
+        <shopLogoThumb640x640></shopLogoThumb640x640>
+        <shopLogoThumbW640></shopLogoThumbW640>
         <updateDate>2024-01-01 10:00:00</updateDate>
     </item>
     <item>

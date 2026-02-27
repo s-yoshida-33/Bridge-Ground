@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 )
 
@@ -39,6 +40,12 @@ type Manager struct {
 type DownloadJob struct {
 	RemoteURL string
 	LocalPath string
+}
+
+type DownloadResult struct {
+	LocalPath string
+	Success   bool
+	Error     error
 }
 
 func NewManager(cfg *config.Config, db *db.Manager) *Manager {
@@ -222,11 +229,58 @@ func (m *Manager) StartSync() (bool, error) {
 	return anyUpdated, nil
 }
 
+// shouldDownloadImage determines if image file should be downloaded
+// Returns true if: file doesn't exist OR file is older than API update date
+func (m *Manager) shouldDownloadImage(destPath string, updateDateStr string, oldImagePath string) bool {
+	// Always download if path changed
+	if destPath != oldImagePath {
+		fmt.Printf("[Download] Path changed: %q -> %q, will download\n", oldImagePath, destPath)
+		return true
+	}
+
+	// Check if file exists
+	fileInfo, err := os.Stat(destPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Printf("[Download] File doesn't exist: %q, will download\n", destPath)
+			return true
+		}
+		// Unknown error - download to be safe
+		fmt.Printf("[Download] Stat error: %v, downloading to be safe\n", err)
+		return true
+	}
+
+	// File exists - compare timestamps
+	fileMTime := fileInfo.ModTime()
+
+	// Parse API update date string (format: "2024-01-15 10:30:00")
+	apiUpdateTime, err := time.Parse("2006-01-02 15:04:05", updateDateStr)
+	if err != nil {
+		fmt.Printf("[Download] Failed to parse update date %q: %v, downloading to be safe\n", updateDateStr, err)
+		return true
+	}
+
+	// If API is newer, download
+	if apiUpdateTime.After(fileMTime) {
+		fmt.Printf("[Download] API newer than file: API=%v, File=%v, will download %q\n", apiUpdateTime, fileMTime, destPath)
+		return true
+	}
+
+	fmt.Printf("[Download] File is up-to-date (API=%v, File=%v), skipping %q\n", apiUpdateTime, fileMTime, destPath)
+	return false
+}
+
 // downloadWorker processes download jobs from the channel
-func (m *Manager) downloadWorker(jobs <-chan DownloadJob, wg *sync.WaitGroup) {
+func (m *Manager) downloadWorker(jobs <-chan DownloadJob, results chan<- DownloadResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for job := range jobs {
-		if err := m.downloadFile(job.RemoteURL, job.LocalPath); err != nil {
+		err := m.downloadFile(job.RemoteURL, job.LocalPath)
+		results <- DownloadResult{
+			LocalPath: job.LocalPath,
+			Success:   err == nil,
+			Error:     err,
+		}
+		if err != nil {
 			// Log error
 			fmt.Printf("[Worker] Failed to download %s: %v\n", job.RemoteURL, err)
 		}
@@ -235,11 +289,7 @@ func (m *Manager) downloadWorker(jobs <-chan DownloadJob, wg *sync.WaitGroup) {
 
 func (m *Manager) downloadFile(url, destPath string) error {
 	if url == "" || destPath == "" {
-		return nil
-	}
-
-	// Skip if exists (optional optimization)
-	if _, err := os.Stat(destPath); err == nil {
+		fmt.Printf("[Download] Skipped (empty URL or dest): URL=%q, Dest=%q\n", url, destPath)
 		return nil
 	}
 
@@ -325,14 +375,21 @@ func (m *Manager) resolveLocalPath(baseDir, relativePath string) string {
 	return filepath.Join(baseDir, cleanRel)
 }
 
-func (m *Manager) processDownloads(jobs []DownloadJob) {
+func (m *Manager) processDownloads(jobs []DownloadJob) int {
+	fmt.Printf("=== Processing %d download jobs ===\n", len(jobs))
+	for i, job := range jobs {
+		fmt.Printf("  [%d] URL: %s\n", i+1, job.RemoteURL)
+		fmt.Printf("       To: %s\n", job.LocalPath)
+	}
+	
 	jobChan := make(chan DownloadJob, len(jobs))
+	resultChan := make(chan DownloadResult, len(jobs))
 	var wg sync.WaitGroup
 
 	workerCount := 5
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
-		go m.downloadWorker(jobChan, &wg)
+		go m.downloadWorker(jobChan, resultChan, &wg)
 	}
 
 	for _, job := range jobs {
@@ -340,6 +397,26 @@ func (m *Manager) processDownloads(jobs []DownloadJob) {
 	}
 	close(jobChan)
 	wg.Wait()
+	close(resultChan)
+	
+	// Count successful downloads
+	successCount := 0
+	for result := range resultChan {
+		if result.Success {
+			successCount++
+			// Verify file exists after download
+			if _, err := os.Stat(result.LocalPath); err != nil {
+				fmt.Printf("[Verify] WARNING: File not found after successful download: %q\n", result.LocalPath)
+			} else {
+				fmt.Printf("[Verify] OK: File exists after download: %q\n", result.LocalPath)
+			}
+		} else if result.Error != nil {
+			fmt.Printf("[Download] FAILED: %s (error: %v)\n", result.LocalPath, result.Error)
+		}
+	}
+	
+	fmt.Printf("=== Download processing completed: %d successful ===\n", successCount)
+	return successCount
 }
 
 // --- Sync Implementations ---
@@ -367,8 +444,16 @@ func (m *Manager) syncShops() (int, error) {
 	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
-
-	// Always load existing data to detect ANY changes
+	
+	fmt.Printf("Parsed %d shops from XML\n", len(resp.Items))
+	if len(resp.Items) > 0 {
+		firstItem := resp.Items[0]
+		fmt.Printf("[First shop #%s] Thumbnails:\n", firstItem.ShopID)
+		fmt.Printf("  Photo1ThumbW640: %q\n", firstItem.Photo1ThumbW640)
+		fmt.Printf("  Photo2ThumbW640: %q\n", firstItem.Photo2ThumbW640)
+		fmt.Printf("  ShopLogoThumb640x640: %q\n", firstItem.ShopLogoThumb640x640)
+		fmt.Printf("  ShopLogoThumbW640: %q\n", firstItem.ShopLogoThumbW640)
+	}
 	existingShops, err := m.loadAllShops()
 	if err != nil {
 		// If table doesn't exist, it might be fine on first run, but loadAllShops handles that via empty map if needed?
@@ -443,44 +528,86 @@ func (m *Manager) syncShops() (int, error) {
 		if needsUpdate {
 			updateCount++
 			
-			// Handle images only if updating (or always? safe to resolve again)
+			fmt.Printf("[Shop %s] Processing images...\n", item.ShopID)
+			
+			// Handle images: download if path changed or file doesn't exist
 			if item.Photo1 != "" {
 				item.Photo1RemoteURL = m.resolveURL(item.Photo1)
 				item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
-				downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
+				fmt.Printf("  [Photo1] Remote=%q, Local=%q\n", item.Photo1RemoteURL, item.Photo1LocalPath)
+				if m.shouldDownloadImage(item.Photo1LocalPath, item.UpdateDate, existingItem.Photo1) {
+					fmt.Printf("  [Photo1] Adding to download queue\n")
+					downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
+				}
 			}
 			if item.Photo2 != "" {
 				item.Photo2RemoteURL = m.resolveURL(item.Photo2)
 				item.Photo2LocalPath = m.resolveLocalPath(baseFileDir, item.Photo2)
-				downloadJobs = append(downloadJobs, DownloadJob{item.Photo2RemoteURL, item.Photo2LocalPath})
+				if m.shouldDownloadImage(item.Photo2LocalPath, item.UpdateDate, existingItem.Photo2) {
+					downloadJobs = append(downloadJobs, DownloadJob{item.Photo2RemoteURL, item.Photo2LocalPath})
+				}
 			}
 			if item.ShopLogo != "" {
 				item.ShopLogoRemoteURL = m.resolveURL(item.ShopLogo)
 				item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
-				downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
+				if m.shouldDownloadImage(item.ShopLogoLocalPath, item.UpdateDate, existingItem.ShopLogo) {
+					downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
+				}
 			}
 			if item.Photo1ThumbW640 != "" {
 				item.Photo1ThumbW640RemoteURL = m.resolveURL(item.Photo1ThumbW640)
 				item.Photo1ThumbW640LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1ThumbW640)
-				downloadJobs = append(downloadJobs, DownloadJob{item.Photo1ThumbW640RemoteURL, item.Photo1ThumbW640LocalPath})
+				fmt.Printf("  [Photo1ThumbW640] Remote=%q, Local=%q\n", item.Photo1ThumbW640RemoteURL, item.Photo1ThumbW640LocalPath)
+				if m.shouldDownloadImage(item.Photo1ThumbW640LocalPath, item.UpdateDate, existingItem.Photo1ThumbW640) {
+					fmt.Printf("  [Photo1ThumbW640] Adding to download queue\n")
+					downloadJobs = append(downloadJobs, DownloadJob{item.Photo1ThumbW640RemoteURL, item.Photo1ThumbW640LocalPath})
+				} else {
+					fmt.Printf("  [Photo1ThumbW640] Skip download\n")
+				}
+			} else {
+				fmt.Printf("  [Photo1ThumbW640] Empty (no thumbnail)\n")
 			}
 			if item.Photo2ThumbW640 != "" {
 				item.Photo2ThumbW640RemoteURL = m.resolveURL(item.Photo2ThumbW640)
 				item.Photo2ThumbW640LocalPath = m.resolveLocalPath(baseFileDir, item.Photo2ThumbW640)
-				downloadJobs = append(downloadJobs, DownloadJob{item.Photo2ThumbW640RemoteURL, item.Photo2ThumbW640LocalPath})
+				fmt.Printf("  [Photo2ThumbW640] Remote=%q, Local=%q\n", item.Photo2ThumbW640RemoteURL, item.Photo2ThumbW640LocalPath)
+				if m.shouldDownloadImage(item.Photo2ThumbW640LocalPath, item.UpdateDate, existingItem.Photo2ThumbW640) {
+					fmt.Printf("  [Photo2ThumbW640] Adding to download queue\n")
+					downloadJobs = append(downloadJobs, DownloadJob{item.Photo2ThumbW640RemoteURL, item.Photo2ThumbW640LocalPath})
+				} else {
+					fmt.Printf("  [Photo2ThumbW640] Skip download\n")
+				}
+			} else {
+				fmt.Printf("  [Photo2ThumbW640] Empty (no thumbnail)\n")
 			}
 			if item.ShopLogoThumb640x640 != "" {
 				item.ShopLogoThumb640x640RemoteURL = m.resolveURL(item.ShopLogoThumb640x640)
 				item.ShopLogoThumb640x640LocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogoThumb640x640)
-				downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoThumb640x640RemoteURL, item.ShopLogoThumb640x640LocalPath})
+				fmt.Printf("  [ShopLogoThumb640x640] Remote=%q, Local=%q\n", item.ShopLogoThumb640x640RemoteURL, item.ShopLogoThumb640x640LocalPath)
+				if m.shouldDownloadImage(item.ShopLogoThumb640x640LocalPath, item.UpdateDate, existingItem.ShopLogoThumb640x640) {
+					fmt.Printf("  [ShopLogoThumb640x640] Adding to download queue\n")
+					downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoThumb640x640RemoteURL, item.ShopLogoThumb640x640LocalPath})
+				} else {
+					fmt.Printf("  [ShopLogoThumb640x640] Skip download\n")
+				}
+			} else {
+				fmt.Printf("  [ShopLogoThumb640x640] Empty (no thumbnail)\n")
 			}
 			if item.ShopLogoThumbW640 != "" {
 				item.ShopLogoThumbW640RemoteURL = m.resolveURL(item.ShopLogoThumbW640)
 				item.ShopLogoThumbW640LocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogoThumbW640)
-				downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoThumbW640RemoteURL, item.ShopLogoThumbW640LocalPath})
+				fmt.Printf("  [ShopLogoThumbW640] Remote=%q, Local=%q\n", item.ShopLogoThumbW640RemoteURL, item.ShopLogoThumbW640LocalPath)
+				if m.shouldDownloadImage(item.ShopLogoThumbW640LocalPath, item.UpdateDate, existingItem.ShopLogoThumbW640) {
+					fmt.Printf("  [ShopLogoThumbW640] Adding to download queue\n")
+					downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoThumbW640RemoteURL, item.ShopLogoThumbW640LocalPath})
+				} else {
+					fmt.Printf("  [ShopLogoThumbW640] Skip download\n")
+				}
+			} else {
+				fmt.Printf("  [ShopLogoThumbW640] Empty (no thumbnail)\n")
 			}
 
-			stmt.Exec(
+			if _, err := stmt.Exec(
 				item.ShopID, item.ShopName, item.ShopNameKana, item.ShopNameEnglish, item.Searches,
 				item.Genre, item.GenreSub, item.GenreSubEnglish, item.GenreMemo, item.GenreMemoEnglish,
 				item.GroupID, item.Tel, item.Floors, item.Area, item.AreaSub, item.Number, item.CloseFlg,
@@ -493,7 +620,11 @@ func (m *Manager) syncShops() (int, error) {
 				item.Photo2ThumbW640, item.Photo2ThumbW640RemoteURL, item.Photo2ThumbW640LocalPath,
 				item.ShopLogoThumb640x640, item.ShopLogoThumb640x640RemoteURL, item.ShopLogoThumb640x640LocalPath,
 				item.ShopLogoThumbW640, item.ShopLogoThumbW640RemoteURL, item.ShopLogoThumbW640LocalPath,
-			)
+			); err != nil {
+				tx.Rollback()
+				fmt.Printf("ERROR: Failed to insert shop %s: %v\n", item.ShopID, err)
+				return 0, fmt.Errorf("insert shop failed: %w", err)
+			}
 		}
 	}
 
@@ -522,10 +653,15 @@ func (m *Manager) syncShops() (int, error) {
 		m.setLastUpdateDateAll("shops", resp.UpdateDateAll)
 	}
 
-	m.processDownloads(downloadJobs)
+	fmt.Printf("=== syncShops: About to process downloads: %d jobs total ===\n", len(downloadJobs))
+	downloadedCount := m.processDownloads(downloadJobs)
 	
-	// Return total changes
-	return updateCount + deletedCount, nil
+	// Return total changes: updates + deletes + successful downloads
+	// If images were downloaded successfully, we consider that a data update for SSE notification
+	totalChanges := updateCount + deletedCount + downloadedCount
+	fmt.Printf("=== syncShops result: updateCount=%d, deletedCount=%d, downloadedCount=%d, total=%d ===\n", 
+		updateCount, deletedCount, downloadedCount, totalChanges)
+	return totalChanges, nil
 }
 
 func (m *Manager) syncShopNews() (int, error) {
@@ -605,12 +741,16 @@ func (m *Manager) syncShopNews() (int, error) {
 				downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
 			}
 
-			stmt.Exec(
+			if _, err := stmt.Exec(
 				item.ShopNewsID, item.ShopID, item.ShopName, item.ShopLogo, item.ShopFloorsName,
 				item.Title, item.Body, item.Categories, item.DateStart, item.DateEnd, item.Photo1,
 				item.Photo1RemoteURL, item.Photo1LocalPath, item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
 				item.UpdateDate,
-			)
+			); err != nil {
+				tx.Rollback()
+				fmt.Printf("ERROR: Failed to insert shop news %s: %v\n", item.ShopNewsID, err)
+				return 0, fmt.Errorf("insert shop news failed: %w", err)
+			}
 		}
 	}
 
@@ -709,11 +849,15 @@ func (m *Manager) syncEventNews() (int, error) {
 				item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
 				downloadJobs = append(downloadJobs, DownloadJob{item.Photo1RemoteURL, item.Photo1LocalPath})
 			}
-			stmt.Exec(
+			if _, err := stmt.Exec(
 				item.EventID, item.Title, item.Body, item.Categories, item.DateStart, item.DateEnd,
 				item.DisplayEnd, item.Venues, item.Photo1,
 				item.Photo1RemoteURL, item.Photo1LocalPath, item.UpdateDate,
-			)
+			); err != nil {
+				tx.Rollback()
+				fmt.Printf("ERROR: Failed to insert event %s: %v\n", item.EventID, err)
+				return 0, fmt.Errorf("insert event failed: %w", err)
+			}
 		}
 	}
 
@@ -816,7 +960,11 @@ func (m *Manager) syncSpecials() (int, error) {
 					downloadJobs = append(downloadJobs, DownloadJob{item.SpecialImageRemoteURL, item.SpecialImageLocalPath})
 				}
 
-				stmt.Exec(item.SpecialID, item.SpecialTitle, item.Title, item.SpecialSubBody, item.CategoryName, item.ShopID, item.ShopName, item.UpdateDate, item.SpecialImageLocalPath)
+				if _, err := stmt.Exec(item.SpecialID, item.SpecialTitle, item.Title, item.SpecialSubBody, item.CategoryName, item.ShopID, item.ShopName, item.UpdateDate, item.SpecialImageLocalPath); err != nil {
+					tx.Rollback()
+					fmt.Printf("ERROR: Failed to insert special %s: %v\n", item.SpecialID, err)
+					return 0, fmt.Errorf("insert special failed: %w", err)
+				}
 			}
 		}
 	}
@@ -897,7 +1045,11 @@ func (m *Manager) syncGenres() (int, error) {
 
 		if needsUpdate {
 			updateCount++
-			stmt.Exec(item.GenreID, item.GenreName, item.GenreSlug)
+			if _, err := stmt.Exec(item.GenreID, item.GenreName, item.GenreSlug); err != nil {
+				tx.Rollback()
+				fmt.Printf("ERROR: Failed to insert genre %s: %v\n", item.GenreID, err)
+				return 0, fmt.Errorf("insert genre failed: %w", err)
+			}
 		}
 	}
 
@@ -936,6 +1088,10 @@ func (m *Manager) cleanupOrphanedFiles() error {
 		"SELECT photo1_local_path FROM shops WHERE photo1_local_path != ''",
 		"SELECT photo2_local_path FROM shops WHERE photo2_local_path != ''",
 		"SELECT shop_logo_local_path FROM shops WHERE shop_logo_local_path != ''",
+		"SELECT photo1_thumb_w640_local_path FROM shops WHERE photo1_thumb_w640_local_path != ''",
+		"SELECT photo2_thumb_w640_local_path FROM shops WHERE photo2_thumb_w640_local_path != ''",
+		"SELECT shop_logo_thumb_640x640_local_path FROM shops WHERE shop_logo_thumb_640x640_local_path != ''",
+		"SELECT shop_logo_thumb_w640_local_path FROM shops WHERE shop_logo_thumb_w640_local_path != ''",
 		"SELECT photo1_local_path FROM shop_news WHERE photo1_local_path != ''",
 		"SELECT shop_logo_local_path FROM shop_news WHERE shop_logo_local_path != ''",
 		"SELECT photo1_local_path FROM event_news WHERE photo1_local_path != ''",
@@ -1162,7 +1318,8 @@ func (m *Manager) loadAllShops() (map[string]models.ShopItem, error) {
 		shop_id, shop_name, shop_name_kana, shop_name_english, searches,
 		genre, genre_sub, genre_sub_english, genre_memo, genre_memo_english,
 		group_id, tel, floors, area, area_sub, number, close_flg,
-		open_time, description, photo1, photo2, shop_logo, update_date
+		open_time, description, photo1, photo2, shop_logo, update_date,
+		photo1_thumb_w640, photo2_thumb_w640, shop_logo_thumb_640x640, shop_logo_thumb_w640
 		FROM shops`
 
 	rows, err := m.DB.Conn.Query(query)
@@ -1178,7 +1335,8 @@ func (m *Manager) loadAllShops() (map[string]models.ShopItem, error) {
 			shopId, shopName, shopNameKana, shopNameEnglish, searches,
 			genre, genreSub, genreSubEnglish, genreMemo, genreMemoEnglish,
 			groupId, tel, floors, area, areaSub, number, closeFlg,
-			openTime, description, photo1, photo2, shopLogo, updateDate *string
+			openTime, description, photo1, photo2, shopLogo, updateDate,
+			photo1ThumbW640, photo2ThumbW640, shopLogoThumb640x640, shopLogoThumbW640 *string
 		)
 
 		if err := rows.Scan(
@@ -1186,6 +1344,7 @@ func (m *Manager) loadAllShops() (map[string]models.ShopItem, error) {
 			&genre, &genreSub, &genreSubEnglish, &genreMemo, &genreMemoEnglish,
 			&groupId, &tel, &floors, &area, &areaSub, &number, &closeFlg,
 			&openTime, &description, &photo1, &photo2, &shopLogo, &updateDate,
+			&photo1ThumbW640, &photo2ThumbW640, &shopLogoThumb640x640, &shopLogoThumbW640,
 		); err != nil {
 			continue
 		}
@@ -1220,6 +1379,10 @@ func (m *Manager) loadAllShops() (map[string]models.ShopItem, error) {
 		item.Photo2 = s(photo2)
 		item.ShopLogo = s(shopLogo)
 		item.UpdateDate = s(updateDate)
+		item.Photo1ThumbW640 = s(photo1ThumbW640)
+		item.Photo2ThumbW640 = s(photo2ThumbW640)
+		item.ShopLogoThumb640x640 = s(shopLogoThumb640x640)
+		item.ShopLogoThumbW640 = s(shopLogoThumbW640)
 
 		result[item.ShopID] = item
 	}
@@ -1249,7 +1412,11 @@ func shopsEqual(a, b models.ShopItem) bool {
 		a.Photo1 == b.Photo1 &&
 		a.Photo2 == b.Photo2 &&
 		a.ShopLogo == b.ShopLogo &&
-		a.UpdateDate == b.UpdateDate
+		a.UpdateDate == b.UpdateDate &&
+		a.Photo1ThumbW640 == b.Photo1ThumbW640 &&
+		a.Photo2ThumbW640 == b.Photo2ThumbW640 &&
+		a.ShopLogoThumb640x640 == b.ShopLogoThumb640x640 &&
+		a.ShopLogoThumbW640 == b.ShopLogoThumbW640
 }
 
 func (m *Manager) loadAllShopNews() (map[string]models.ShopNewsItem, error) {

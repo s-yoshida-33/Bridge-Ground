@@ -80,7 +80,9 @@ func (s *Server) FetchShopList() ([]models.ShopItem, error) {
 		genre, genre_sub, genre_sub_english, genre_memo, genre_memo_english,
 		group_id, tel, floors, area, area_sub, number, close_flg,
 		open_time, description, photo1, photo2, shop_logo, update_date,
-		photo1_local_path, photo2_local_path, shop_logo_local_path
+		photo1_local_path, photo2_local_path, shop_logo_local_path,
+		photo1_thumb_w640_local_path, photo2_thumb_w640_local_path,
+		shop_logo_thumb_640x640_local_path, shop_logo_thumb_w640_local_path
 		FROM shops`
 
 	rows, err := s.DB.Conn.Query(query)
@@ -98,7 +100,9 @@ func (s *Server) FetchShopList() ([]models.ShopItem, error) {
 			genre, genreSub, genreSubEnglish, genreMemo, genreMemoEnglish,
 			groupId, tel, floors, area, areaSub, number, closeFlg,
 			openTime, description, photo1, photo2, shopLogo, updateDate,
-			photo1LocalPath, photo2LocalPath, shopLogoLocalPath *string
+			photo1LocalPath, photo2LocalPath, shopLogoLocalPath,
+			photo1ThumbW640LocalPath, photo2ThumbW640LocalPath,
+			shopLogoThumb640x640LocalPath, shopLogoThumbW640LocalPath *string
 		)
 
 		if err := rows.Scan(
@@ -107,6 +111,8 @@ func (s *Server) FetchShopList() ([]models.ShopItem, error) {
 			&groupId, &tel, &floors, &area, &areaSub, &number, &closeFlg,
 			&openTime, &description, &photo1, &photo2, &shopLogo, &updateDate,
 			&photo1LocalPath, &photo2LocalPath, &shopLogoLocalPath,
+			&photo1ThumbW640LocalPath, &photo2ThumbW640LocalPath,
+			&shopLogoThumb640x640LocalPath, &shopLogoThumbW640LocalPath,
 		); err != nil {
 			fmt.Printf("Scan error: %v\n", err)
 			continue
@@ -145,6 +151,10 @@ func (s *Server) FetchShopList() ([]models.ShopItem, error) {
 		item.Photo1LocalPath = s(photo1LocalPath)
 		item.Photo2LocalPath = s(photo2LocalPath)
 		item.ShopLogoLocalPath = s(shopLogoLocalPath)
+		item.Photo1ThumbW640LocalPath = s(photo1ThumbW640LocalPath)
+		item.Photo2ThumbW640LocalPath = s(photo2ThumbW640LocalPath)
+		item.ShopLogoThumb640x640LocalPath = s(shopLogoThumb640x640LocalPath)
+		item.ShopLogoThumbW640LocalPath = s(shopLogoThumbW640LocalPath)
 
 		result = append(result, item)
 	}

@@ -1,5 +1,5 @@
 @echo off
-set "VERSION=3.0.1"
+set "VERSION=3.1.0"
 set "PACKAGE_NAME=BridgeGround_v%VERSION%"
 
 echo Creating distribution package...
@@ -15,6 +15,9 @@ copy config.json "%PACKAGE_NAME%\" >nul
 
 echo Copying resources...
 xcopy /S /E /Y /I src "%PACKAGE_NAME%\src" >nul
+
+echo Copying documentation...
+copy README.md "%PACKAGE_NAME%\" >nul
 
 echo.
 echo Package created in directory: %PACKAGE_NAME%

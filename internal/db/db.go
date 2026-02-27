@@ -103,7 +103,19 @@ func (m *Manager) InitializeSchema() error {
 			photo2_remote_url TEXT,
 			photo2_local_path TEXT,
 			shop_logo_remote_url TEXT,
-			shop_logo_local_path TEXT
+			shop_logo_local_path TEXT,
+			photo1_thumb_w640 TEXT,
+			photo1_thumb_w640_remote_url TEXT,
+			photo1_thumb_w640_local_path TEXT,
+			photo2_thumb_w640 TEXT,
+			photo2_thumb_w640_remote_url TEXT,
+			photo2_thumb_w640_local_path TEXT,
+			shop_logo_thumb_640x640 TEXT,
+			shop_logo_thumb_640x640_remote_url TEXT,
+			shop_logo_thumb_640x640_local_path TEXT,
+			shop_logo_thumb_w640 TEXT,
+			shop_logo_thumb_w640_remote_url TEXT,
+			shop_logo_thumb_w640_local_path TEXT
 		)`,
 		`CREATE TABLE IF NOT EXISTS event_news (
 			event_id TEXT PRIMARY KEY,

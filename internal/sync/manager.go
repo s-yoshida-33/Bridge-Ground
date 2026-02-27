@@ -394,8 +394,12 @@ func (m *Manager) syncShops() (int, error) {
 		photo1, photo2, shop_logo, update_date,
 		photo1_remote_url, photo1_local_path, 
 		photo2_remote_url, photo2_local_path, 
-		shop_logo_remote_url, shop_logo_local_path
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		shop_logo_remote_url, shop_logo_local_path,
+		photo1_thumb_w640, photo1_thumb_w640_remote_url, photo1_thumb_w640_local_path,
+		photo2_thumb_w640, photo2_thumb_w640_remote_url, photo2_thumb_w640_local_path,
+		shop_logo_thumb_640x640, shop_logo_thumb_640x640_remote_url, shop_logo_thumb_640x640_local_path,
+		shop_logo_thumb_w640, shop_logo_thumb_w640_remote_url, shop_logo_thumb_w640_local_path
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, err
 	}
@@ -455,6 +459,26 @@ func (m *Manager) syncShops() (int, error) {
 				item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
 				downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
 			}
+			if item.Photo1ThumbW640 != "" {
+				item.Photo1ThumbW640RemoteURL = m.resolveURL(item.Photo1ThumbW640)
+				item.Photo1ThumbW640LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1ThumbW640)
+				downloadJobs = append(downloadJobs, DownloadJob{item.Photo1ThumbW640RemoteURL, item.Photo1ThumbW640LocalPath})
+			}
+			if item.Photo2ThumbW640 != "" {
+				item.Photo2ThumbW640RemoteURL = m.resolveURL(item.Photo2ThumbW640)
+				item.Photo2ThumbW640LocalPath = m.resolveLocalPath(baseFileDir, item.Photo2ThumbW640)
+				downloadJobs = append(downloadJobs, DownloadJob{item.Photo2ThumbW640RemoteURL, item.Photo2ThumbW640LocalPath})
+			}
+			if item.ShopLogoThumb640x640 != "" {
+				item.ShopLogoThumb640x640RemoteURL = m.resolveURL(item.ShopLogoThumb640x640)
+				item.ShopLogoThumb640x640LocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogoThumb640x640)
+				downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoThumb640x640RemoteURL, item.ShopLogoThumb640x640LocalPath})
+			}
+			if item.ShopLogoThumbW640 != "" {
+				item.ShopLogoThumbW640RemoteURL = m.resolveURL(item.ShopLogoThumbW640)
+				item.ShopLogoThumbW640LocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogoThumbW640)
+				downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoThumbW640RemoteURL, item.ShopLogoThumbW640LocalPath})
+			}
 
 			stmt.Exec(
 				item.ShopID, item.ShopName, item.ShopNameKana, item.ShopNameEnglish, item.Searches,
@@ -465,6 +489,10 @@ func (m *Manager) syncShops() (int, error) {
 				item.Photo1RemoteURL, item.Photo1LocalPath,
 				item.Photo2RemoteURL, item.Photo2LocalPath,
 				item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
+				item.Photo1ThumbW640, item.Photo1ThumbW640RemoteURL, item.Photo1ThumbW640LocalPath,
+				item.Photo2ThumbW640, item.Photo2ThumbW640RemoteURL, item.Photo2ThumbW640LocalPath,
+				item.ShopLogoThumb640x640, item.ShopLogoThumb640x640RemoteURL, item.ShopLogoThumb640x640LocalPath,
+				item.ShopLogoThumbW640, item.ShopLogoThumbW640RemoteURL, item.ShopLogoThumbW640LocalPath,
 			)
 		}
 	}

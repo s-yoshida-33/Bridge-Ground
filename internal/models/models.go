@@ -35,12 +35,29 @@ type ShopItem struct {
 	ShopLogo string `xml:"shopLogo" db:"shop_logo" json:"shopLogo"`
 	ShopLogoLocalPath string `db:"shop_logo_local_path" json:"shopLogoLocalPath"`
 
+	// Thumbnail images (Original values from XML)
+	Photo1ThumbW640   string `xml:"photo1ThumbW640" db:"photo1_thumb_w640" json:"photo1ThumbW640"`
+	Photo1ThumbW640LocalPath   string `db:"photo1_thumb_w640_local_path" json:"photo1ThumbW640LocalPath"`
+
+	Photo2ThumbW640   string `xml:"photo2ThumbW640" db:"photo2_thumb_w640" json:"photo2ThumbW640"`
+	Photo2ThumbW640LocalPath   string `db:"photo2_thumb_w640_local_path" json:"photo2ThumbW640LocalPath"`
+
+	ShopLogoThumb640x640 string `xml:"shopLogoThumb640x640" db:"shop_logo_thumb_640x640" json:"shopLogoThumb640x640"`
+	ShopLogoThumb640x640LocalPath string `db:"shop_logo_thumb_640x640_local_path" json:"shopLogoThumb640x640LocalPath"`
+
+	ShopLogoThumbW640 string `xml:"shopLogoThumbW640" db:"shop_logo_thumb_w640" json:"shopLogoThumbW640"`
+	ShopLogoThumbW640LocalPath string `db:"shop_logo_thumb_w640_local_path" json:"shopLogoThumbW640LocalPath"`
+
 	UpdateDate string `xml:"updateDate" db:"update_date" json:"updateDate"`
 
 	// Internal fields for downloaded files (not in XML, but needed for DB/App logic)
 	Photo1RemoteURL   string `db:"photo1_remote_url" json:"-"`
 	Photo2RemoteURL   string `db:"photo2_remote_url" json:"-"`
+	Photo1ThumbW640RemoteURL   string `db:"photo1_thumb_w640_remote_url" json:"-"`
+	Photo2ThumbW640RemoteURL   string `db:"photo2_thumb_w640_remote_url" json:"-"`
 	ShopLogoRemoteURL string `db:"shop_logo_remote_url" json:"-"`
+	ShopLogoThumb640x640RemoteURL string `db:"shop_logo_thumb_640x640_remote_url" json:"-"`
+	ShopLogoThumbW640RemoteURL string `db:"shop_logo_thumb_w640_remote_url" json:"-"`
 }
 
 // CDATAString handles cases where data might be wrapped in CDATA or have whitespace

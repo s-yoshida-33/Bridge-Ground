@@ -41,6 +41,7 @@ type SyncTargets struct {
 	EventNews bool `json:"eventNews"`
 	Specials  bool `json:"specials"`
 	Genres    bool `json:"genres"`
+	Floors    bool `json:"floors"`
 }
 
 type ServerSettings struct {
@@ -87,6 +88,7 @@ func LoadConfig() (*Config, error) {
 					EventNews: false,
 					Specials:  false,
 					Genres:    false,
+					Floors:    false,
 				},
 			},
 			ServerSettings: ServerSettings{

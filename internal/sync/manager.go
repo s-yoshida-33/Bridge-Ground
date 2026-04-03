@@ -113,6 +113,7 @@ func (m *Manager) StartSync() (bool, error) {
 			EventNews: true,
 			Specials:  true,
 			Genres:    true,
+			Floors:    true,
 		}
 	}
 
@@ -198,7 +199,7 @@ func (m *Manager) StartSync() (bool, error) {
 	// 5. Sync Genres
 	if targets.Genres {
 		m.notifyProgress(SyncProgress{
-			Main: &ProgressDetail{Percentage: 90, Message: "ジャンルデータを同期中..."},
+			Main: &ProgressDetail{Percentage: 85, Message: "ジャンルデータを同期中..."},
 		})
 		count, err := m.syncGenres()
 		if err != nil {
@@ -211,6 +212,24 @@ func (m *Manager) StartSync() (bool, error) {
 		updateStats["genres"] = count
 	} else {
 		fmt.Println("Skipping genres sync (disabled in config)")
+	}
+
+	// 6. Sync Floors
+	if targets.Floors {
+		m.notifyProgress(SyncProgress{
+			Main: &ProgressDetail{Percentage: 90, Message: "フロアデータを同期中..."},
+		})
+		count, err := m.syncFloors()
+		if err != nil {
+			fmt.Printf("Error syncing floors: %v\n", err)
+		}
+		if count != 0 {
+			anyUpdated = true
+			m.notifyDataUpdate("floors")
+		}
+		updateStats["floors"] = count
+	} else {
+		fmt.Println("Skipping floors sync (disabled in config)")
 	}
 
 	// 6. Cleanup Orphaned Files
@@ -472,19 +491,50 @@ func (m *Manager) syncShops() (int, error) {
 		return 0, err
 	}
 	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO shops (
-		shop_id, shop_name, shop_name_kana, shop_name_english, searches, 
-		genre, genre_sub, genre_sub_english, genre_memo, genre_memo_english, 
-		group_id, tel, floors, area, area_sub, number, close_flg, 
-		open_time, description, 
-		photo1, photo2, shop_logo, update_date,
-		photo1_remote_url, photo1_local_path, 
-		photo2_remote_url, photo2_local_path, 
-		shop_logo_remote_url, shop_logo_local_path,
+		shop_id, shop_name, shop_name_kana, shop_name_english,
+		shop_name_china_cn, shop_name_china_tw, shop_name_korea, shop_name_france, shop_name_vietnam, shop_name_thai,
+		abbr, web_status, searches,
+		genre, genre_sub, genre_sub_english,
+		genre_memo, genre_memo_english, genre_memo_china_cn, genre_memo_china_tw, genre_memo_korea, genre_memo_france, genre_memo_vietnam, genre_memo_thai,
+		group_id, tenant_code, tel, user_url,
+		floor, floors, area, area_sub, number,
+		open_year, open_month, open_day, close_flg, pub_start, pub_end, open_time, description,
+		qr, food_class, seats, smoking, reservation, lunch_menu, dinner_menu, take_out, childrens_menu, baby_seat, alcohol, options,
+		photo1, photo1_remote_url, photo1_local_path,
+		photo2, photo2_remote_url, photo2_local_path,
+		shop_logo, shop_logo_remote_url, shop_logo_local_path,
+		photo1_thumb, photo1_thumb_150x150, photo1_thumb_640x640, photo1_thumb_w320,
 		photo1_thumb_w640, photo1_thumb_w640_remote_url, photo1_thumb_w640_local_path,
+		photo2_thumb, photo2_thumb_150x150, photo2_thumb_640x640, photo2_thumb_w320,
 		photo2_thumb_w640, photo2_thumb_w640_remote_url, photo2_thumb_w640_local_path,
+		shop_logo_thumb, shop_logo_thumb_150x150,
 		shop_logo_thumb_640x640, shop_logo_thumb_640x640_remote_url, shop_logo_thumb_640x640_local_path,
-		shop_logo_thumb_w640, shop_logo_thumb_w640_remote_url, shop_logo_thumb_w640_local_path
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		shop_logo_thumb_w320,
+		shop_logo_thumb_w640, shop_logo_thumb_w640_remote_url, shop_logo_thumb_w640_local_path,
+		update_date
+	) VALUES (
+		?, ?, ?, ?,
+		?, ?, ?, ?, ?, ?,
+		?, ?, ?,
+		?, ?, ?,
+		?, ?, ?, ?, ?, ?, ?, ?,
+		?, ?, ?, ?,
+		?, ?, ?, ?, ?,
+		?, ?, ?, ?, ?, ?, ?, ?,
+		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+		?, ?, ?,
+		?, ?, ?,
+		?, ?, ?,
+		?, ?, ?, ?,
+		?, ?, ?,
+		?, ?, ?, ?,
+		?, ?, ?,
+		?, ?,
+		?, ?, ?,
+		?,
+		?, ?, ?,
+		?
+	)`)
 	if err != nil {
 		return 0, err
 	}
@@ -500,12 +550,24 @@ func (m *Manager) syncShops() (int, error) {
 		item.ShopName = repairMojibake(item.ShopName)
 		item.ShopNameKana = repairMojibake(item.ShopNameKana)
 		item.ShopNameEnglish = repairMojibake(item.ShopNameEnglish)
+		item.ShopNameChinaCN = repairMojibake(item.ShopNameChinaCN)
+		item.ShopNameChinaTW = repairMojibake(item.ShopNameChinaTW)
+		item.ShopNameKorea = repairMojibake(item.ShopNameKorea)
+		item.ShopNameFrance = repairMojibake(item.ShopNameFrance)
+		item.ShopNameVietnam = repairMojibake(item.ShopNameVietnam)
+		item.ShopNameThai = repairMojibake(item.ShopNameThai)
 		item.Description = repairMojibake(item.Description)
 		item.Genre = repairMojibake(item.Genre)
 		item.GenreSub = repairMojibake(item.GenreSub)
 		item.GenreSubEnglish = repairMojibake(item.GenreSubEnglish)
 		item.GenreMemo = repairMojibake(item.GenreMemo)
 		item.GenreMemoEnglish = repairMojibake(item.GenreMemoEnglish)
+		item.GenreMemoChinaCN = repairMojibake(item.GenreMemoChinaCN)
+		item.GenreMemoChinaTW = repairMojibake(item.GenreMemoChinaTW)
+		item.GenreMemoKorea = repairMojibake(item.GenreMemoKorea)
+		item.GenreMemoFrance = repairMojibake(item.GenreMemoFrance)
+		item.GenreMemoVietnam = repairMojibake(item.GenreMemoVietnam)
+		item.GenreMemoThai = repairMojibake(item.GenreMemoThai)
 		item.Searches = repairMojibake(item.Searches)
 		item.Floors = repairMojibake(item.Floors)
 		item.Area = repairMojibake(item.Area)
@@ -608,18 +670,27 @@ func (m *Manager) syncShops() (int, error) {
 			}
 
 			if _, err := stmt.Exec(
-				item.ShopID, item.ShopName, item.ShopNameKana, item.ShopNameEnglish, item.Searches,
-				item.Genre, item.GenreSub, item.GenreSubEnglish, item.GenreMemo, item.GenreMemoEnglish,
-				item.GroupID, item.Tel, item.Floors, item.Area, item.AreaSub, item.Number, item.CloseFlg,
-				item.OpenTime, item.Description,
-				item.Photo1, item.Photo2, item.ShopLogo, item.UpdateDate,
-				item.Photo1RemoteURL, item.Photo1LocalPath,
-				item.Photo2RemoteURL, item.Photo2LocalPath,
-				item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
+				item.ShopID, item.ShopName, item.ShopNameKana, item.ShopNameEnglish,
+				item.ShopNameChinaCN, item.ShopNameChinaTW, item.ShopNameKorea, item.ShopNameFrance, item.ShopNameVietnam, item.ShopNameThai,
+				item.Abbr, item.WebStatus, item.Searches,
+				item.Genre, item.GenreSub, item.GenreSubEnglish,
+				item.GenreMemo, item.GenreMemoEnglish, item.GenreMemoChinaCN, item.GenreMemoChinaTW, item.GenreMemoKorea, item.GenreMemoFrance, item.GenreMemoVietnam, item.GenreMemoThai,
+				item.GroupID, item.TenantCode, item.Tel, item.UserUrl,
+				item.Floor, item.Floors, item.Area, item.AreaSub, item.Number,
+				item.OpenYear, item.OpenMonth, item.OpenDay, item.CloseFlg, item.PubStart, item.PubEnd, item.OpenTime, item.Description,
+				item.Qr, item.FoodClass, item.Seats, item.Smoking, item.Reservation, item.LunchMenu, item.DinnerMenu, item.TakeOut, item.ChildrensMenu, item.BabySeat, item.Alcohol, item.Options,
+				item.Photo1, item.Photo1RemoteURL, item.Photo1LocalPath,
+				item.Photo2, item.Photo2RemoteURL, item.Photo2LocalPath,
+				item.ShopLogo, item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
+				item.Photo1Thumb, item.Photo1Thumb150x150, item.Photo1Thumb640x640, item.Photo1ThumbW320,
 				item.Photo1ThumbW640, item.Photo1ThumbW640RemoteURL, item.Photo1ThumbW640LocalPath,
+				item.Photo2Thumb, item.Photo2Thumb150x150, item.Photo2Thumb640x640, item.Photo2ThumbW320,
 				item.Photo2ThumbW640, item.Photo2ThumbW640RemoteURL, item.Photo2ThumbW640LocalPath,
+				item.ShopLogoThumb, item.ShopLogoThumb150x150,
 				item.ShopLogoThumb640x640, item.ShopLogoThumb640x640RemoteURL, item.ShopLogoThumb640x640LocalPath,
+				item.ShopLogoThumbW320,
 				item.ShopLogoThumbW640, item.ShopLogoThumbW640RemoteURL, item.ShopLogoThumbW640LocalPath,
+				item.UpdateDate,
 			); err != nil {
 				tx.Rollback()
 				fmt.Printf("ERROR: Failed to insert shop %s: %v\n", item.ShopID, err)
@@ -1314,11 +1385,19 @@ func repairMojibake(s string) string {
 // --- Helper Functions for Robust Sync ---
 
 func (m *Manager) loadAllShops() (map[string]models.ShopItem, error) {
-	query := `SELECT 
-		shop_id, shop_name, shop_name_kana, shop_name_english, searches,
-		genre, genre_sub, genre_sub_english, genre_memo, genre_memo_english,
-		group_id, tel, floors, area, area_sub, number, close_flg,
-		open_time, description, photo1, photo2, shop_logo, update_date,
+	query := `SELECT
+		shop_id, shop_name, shop_name_kana, shop_name_english,
+		COALESCE(shop_name_china_cn,''), COALESCE(shop_name_china_tw,''), COALESCE(shop_name_korea,''), COALESCE(shop_name_france,''), COALESCE(shop_name_vietnam,''), COALESCE(shop_name_thai,''),
+		COALESCE(abbr,''), COALESCE(web_status,''), searches,
+		genre, genre_sub, genre_sub_english,
+		genre_memo, genre_memo_english,
+		COALESCE(genre_memo_china_cn,''), COALESCE(genre_memo_china_tw,''), COALESCE(genre_memo_korea,''), COALESCE(genre_memo_france,''), COALESCE(genre_memo_vietnam,''), COALESCE(genre_memo_thai,''),
+		group_id, COALESCE(tenant_code,''), tel, COALESCE(user_url,''),
+		COALESCE(floor,''), floors, area, area_sub, number,
+		COALESCE(open_year,''), COALESCE(open_month,''), COALESCE(open_day,''), close_flg, COALESCE(pub_start,''), COALESCE(pub_end,''), open_time, description,
+		COALESCE(qr,''), COALESCE(food_class,''), COALESCE(seats,''), COALESCE(smoking,''), COALESCE(reservation,''),
+		COALESCE(lunch_menu,''), COALESCE(dinner_menu,''), COALESCE(take_out,''), COALESCE(childrens_menu,''), COALESCE(baby_seat,''), COALESCE(alcohol,''), COALESCE(options,''),
+		photo1, photo2, shop_logo, update_date,
 		photo1_thumb_w640, photo2_thumb_w640, shop_logo_thumb_640x640, shop_logo_thumb_w640
 		FROM shops`
 
@@ -1332,18 +1411,34 @@ func (m *Manager) loadAllShops() (map[string]models.ShopItem, error) {
 	for rows.Next() {
 		var item models.ShopItem
 		var (
-			shopId, shopName, shopNameKana, shopNameEnglish, searches,
-			genre, genreSub, genreSubEnglish, genreMemo, genreMemoEnglish,
-			groupId, tel, floors, area, areaSub, number, closeFlg,
-			openTime, description, photo1, photo2, shopLogo, updateDate,
+			shopId, shopName, shopNameKana, shopNameEnglish,
+			shopNameChinaCN, shopNameChinaTW, shopNameKorea, shopNameFrance, shopNameVietnam, shopNameThai,
+			abbr, webStatus, searches,
+			genre, genreSub, genreSubEnglish,
+			genreMemo, genreMemoEnglish,
+			genreMemoChinaCN, genreMemoChinaTW, genreMemoKorea, genreMemoFrance, genreMemoVietnam, genreMemoThai,
+			groupId, tenantCode, tel, userUrl,
+			floor, floors, area, areaSub, number,
+			openYear, openMonth, openDay, closeFlg, pubStart, pubEnd, openTime, description,
+			qr, foodClass, seats, smoking, reservation,
+			lunchMenu, dinnerMenu, takeOut, childrensMenu, babySeat, alcohol, options,
+			photo1, photo2, shopLogo, updateDate,
 			photo1ThumbW640, photo2ThumbW640, shopLogoThumb640x640, shopLogoThumbW640 *string
 		)
 
 		if err := rows.Scan(
-			&shopId, &shopName, &shopNameKana, &shopNameEnglish, &searches,
-			&genre, &genreSub, &genreSubEnglish, &genreMemo, &genreMemoEnglish,
-			&groupId, &tel, &floors, &area, &areaSub, &number, &closeFlg,
-			&openTime, &description, &photo1, &photo2, &shopLogo, &updateDate,
+			&shopId, &shopName, &shopNameKana, &shopNameEnglish,
+			&shopNameChinaCN, &shopNameChinaTW, &shopNameKorea, &shopNameFrance, &shopNameVietnam, &shopNameThai,
+			&abbr, &webStatus, &searches,
+			&genre, &genreSub, &genreSubEnglish,
+			&genreMemo, &genreMemoEnglish,
+			&genreMemoChinaCN, &genreMemoChinaTW, &genreMemoKorea, &genreMemoFrance, &genreMemoVietnam, &genreMemoThai,
+			&groupId, &tenantCode, &tel, &userUrl,
+			&floor, &floors, &area, &areaSub, &number,
+			&openYear, &openMonth, &openDay, &closeFlg, &pubStart, &pubEnd, &openTime, &description,
+			&qr, &foodClass, &seats, &smoking, &reservation,
+			&lunchMenu, &dinnerMenu, &takeOut, &childrensMenu, &babySeat, &alcohol, &options,
+			&photo1, &photo2, &shopLogo, &updateDate,
 			&photo1ThumbW640, &photo2ThumbW640, &shopLogoThumb640x640, &shopLogoThumbW640,
 		); err != nil {
 			continue
@@ -1360,21 +1455,55 @@ func (m *Manager) loadAllShops() (map[string]models.ShopItem, error) {
 		item.ShopName = s(shopName)
 		item.ShopNameKana = s(shopNameKana)
 		item.ShopNameEnglish = s(shopNameEnglish)
+		item.ShopNameChinaCN = s(shopNameChinaCN)
+		item.ShopNameChinaTW = s(shopNameChinaTW)
+		item.ShopNameKorea = s(shopNameKorea)
+		item.ShopNameFrance = s(shopNameFrance)
+		item.ShopNameVietnam = s(shopNameVietnam)
+		item.ShopNameThai = s(shopNameThai)
+		item.Abbr = s(abbr)
+		item.WebStatus = s(webStatus)
 		item.Searches = s(searches)
 		item.Genre = s(genre)
 		item.GenreSub = s(genreSub)
 		item.GenreSubEnglish = s(genreSubEnglish)
 		item.GenreMemo = s(genreMemo)
 		item.GenreMemoEnglish = s(genreMemoEnglish)
+		item.GenreMemoChinaCN = s(genreMemoChinaCN)
+		item.GenreMemoChinaTW = s(genreMemoChinaTW)
+		item.GenreMemoKorea = s(genreMemoKorea)
+		item.GenreMemoFrance = s(genreMemoFrance)
+		item.GenreMemoVietnam = s(genreMemoVietnam)
+		item.GenreMemoThai = s(genreMemoThai)
 		item.GroupID = s(groupId)
+		item.TenantCode = s(tenantCode)
 		item.Tel = s(tel)
+		item.UserUrl = s(userUrl)
+		item.Floor = s(floor)
 		item.Floors = s(floors)
 		item.Area = s(area)
 		item.AreaSub = s(areaSub)
 		item.Number = s(number)
+		item.OpenYear = s(openYear)
+		item.OpenMonth = s(openMonth)
+		item.OpenDay = s(openDay)
 		item.CloseFlg = s(closeFlg)
+		item.PubStart = s(pubStart)
+		item.PubEnd = s(pubEnd)
 		item.OpenTime = s(openTime)
 		item.Description = s(description)
+		item.Qr = s(qr)
+		item.FoodClass = s(foodClass)
+		item.Seats = s(seats)
+		item.Smoking = s(smoking)
+		item.Reservation = s(reservation)
+		item.LunchMenu = s(lunchMenu)
+		item.DinnerMenu = s(dinnerMenu)
+		item.TakeOut = s(takeOut)
+		item.ChildrensMenu = s(childrensMenu)
+		item.BabySeat = s(babySeat)
+		item.Alcohol = s(alcohol)
+		item.Options = s(options)
 		item.Photo1 = s(photo1)
 		item.Photo2 = s(photo2)
 		item.ShopLogo = s(shopLogo)
@@ -1394,21 +1523,55 @@ func shopsEqual(a, b models.ShopItem) bool {
 		a.ShopName == b.ShopName &&
 		a.ShopNameKana == b.ShopNameKana &&
 		a.ShopNameEnglish == b.ShopNameEnglish &&
+		a.ShopNameChinaCN == b.ShopNameChinaCN &&
+		a.ShopNameChinaTW == b.ShopNameChinaTW &&
+		a.ShopNameKorea == b.ShopNameKorea &&
+		a.ShopNameFrance == b.ShopNameFrance &&
+		a.ShopNameVietnam == b.ShopNameVietnam &&
+		a.ShopNameThai == b.ShopNameThai &&
+		a.Abbr == b.Abbr &&
+		a.WebStatus == b.WebStatus &&
 		a.Searches == b.Searches &&
 		a.Genre == b.Genre &&
 		a.GenreSub == b.GenreSub &&
 		a.GenreSubEnglish == b.GenreSubEnglish &&
 		a.GenreMemo == b.GenreMemo &&
 		a.GenreMemoEnglish == b.GenreMemoEnglish &&
+		a.GenreMemoChinaCN == b.GenreMemoChinaCN &&
+		a.GenreMemoChinaTW == b.GenreMemoChinaTW &&
+		a.GenreMemoKorea == b.GenreMemoKorea &&
+		a.GenreMemoFrance == b.GenreMemoFrance &&
+		a.GenreMemoVietnam == b.GenreMemoVietnam &&
+		a.GenreMemoThai == b.GenreMemoThai &&
 		a.GroupID == b.GroupID &&
+		a.TenantCode == b.TenantCode &&
 		a.Tel == b.Tel &&
+		a.UserUrl == b.UserUrl &&
+		a.Floor == b.Floor &&
 		a.Floors == b.Floors &&
 		a.Area == b.Area &&
 		a.AreaSub == b.AreaSub &&
 		a.Number == b.Number &&
+		a.OpenYear == b.OpenYear &&
+		a.OpenMonth == b.OpenMonth &&
+		a.OpenDay == b.OpenDay &&
 		a.CloseFlg == b.CloseFlg &&
+		a.PubStart == b.PubStart &&
+		a.PubEnd == b.PubEnd &&
 		a.OpenTime == b.OpenTime &&
 		a.Description == b.Description &&
+		a.Qr == b.Qr &&
+		a.FoodClass == b.FoodClass &&
+		a.Seats == b.Seats &&
+		a.Smoking == b.Smoking &&
+		a.Reservation == b.Reservation &&
+		a.LunchMenu == b.LunchMenu &&
+		a.DinnerMenu == b.DinnerMenu &&
+		a.TakeOut == b.TakeOut &&
+		a.ChildrensMenu == b.ChildrensMenu &&
+		a.BabySeat == b.BabySeat &&
+		a.Alcohol == b.Alcohol &&
+		a.Options == b.Options &&
 		a.Photo1 == b.Photo1 &&
 		a.Photo2 == b.Photo2 &&
 		a.ShopLogo == b.ShopLogo &&
@@ -1646,4 +1809,127 @@ func genresEqual(a, b models.GenreItem) bool {
 	return a.GenreID == b.GenreID &&
 		a.GenreName == b.GenreName &&
 		a.GenreSlug == b.GenreSlug
+}
+
+func (m *Manager) syncFloors() (int, error) {
+	baseURL := m.Config.APISettings.BaseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	endpoint := baseURL + "floorlist?limit=1000"
+	fmt.Printf("Fetching floors from: %s\n", endpoint)
+	data, err := m.fetchXML(endpoint)
+	if err != nil {
+		return 0, err
+	}
+
+	var resp models.FloorListResponse
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&resp); err != nil {
+		return 0, err
+	}
+
+	existingFloors, err := m.loadAllFloors()
+	if err != nil {
+		fmt.Printf("Warning: Failed to load existing floors: %v. Assuming empty.\n", err)
+		existingFloors = make(map[string]models.FloorItem)
+	}
+
+	updateCount := 0
+
+	tx, err := m.DB.Conn.Begin()
+	if err != nil {
+		return 0, err
+	}
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO floors (floor_id, floor_name, sort_order) VALUES (?, ?, ?)`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	for _, item := range resp.Items {
+		item.FloorID = strings.TrimSpace(item.FloorID)
+
+		existingItem, exists := existingFloors[item.FloorID]
+		needsUpdate := true
+		if exists {
+			if floorsEqual(item, existingItem) {
+				needsUpdate = false
+			}
+			delete(existingFloors, item.FloorID)
+		}
+
+		if needsUpdate {
+			updateCount++
+			if _, err := stmt.Exec(item.FloorID, item.FloorName, item.SortOrder); err != nil {
+				tx.Rollback()
+				fmt.Printf("ERROR: Failed to insert floor %s: %v\n", item.FloorID, err)
+				return 0, fmt.Errorf("insert floor failed: %w", err)
+			}
+		}
+	}
+
+	deletedCount := 0
+	if len(existingFloors) > 0 {
+		delStmt, err := tx.Prepare("DELETE FROM floors WHERE floor_id = ?")
+		if err != nil {
+			return 0, err
+		}
+		defer delStmt.Close()
+		for id := range existingFloors {
+			if _, err := delStmt.Exec(id); err == nil {
+				deletedCount++
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	if resp.UpdateDateAll != "" {
+		m.setLastUpdateDateAll("floors", resp.UpdateDateAll)
+	}
+
+	return updateCount + deletedCount, nil
+}
+
+func (m *Manager) loadAllFloors() (map[string]models.FloorItem, error) {
+	query := `SELECT floor_id, floor_name, sort_order FROM floors`
+
+	rows, err := m.DB.Conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]models.FloorItem)
+	for rows.Next() {
+		var item models.FloorItem
+		var floorId, floorName, sortOrder *string
+
+		if err := rows.Scan(&floorId, &floorName, &sortOrder); err != nil {
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.FloorID = s(floorId)
+		item.FloorName = s(floorName)
+		item.SortOrder = s(sortOrder)
+
+		result[item.FloorID] = item
+	}
+	return result, nil
+}
+
+func floorsEqual(a, b models.FloorItem) bool {
+	return a.FloorID == b.FloorID &&
+		a.FloorName == b.FloorName &&
+		a.SortOrder == b.SortOrder
 }

@@ -3,6 +3,7 @@ module bridge-ground
 go 1.24.0
 
 require (
+	github.com/getlantern/systray v1.2.2
 	github.com/zserge/lorca v0.1.10
 	modernc.org/sqlite v1.40.1
 )
@@ -15,7 +16,6 @@ require (
 	github.com/getlantern/hex v0.0.0-20190417191902-c6586a6fe0b7 // indirect
 	github.com/getlantern/hidden v0.0.0-20190325191715-f02dbb02be55 // indirect
 	github.com/getlantern/ops v0.0.0-20190325191751-d70cb0d6f85f // indirect
-	github.com/getlantern/systray v1.2.2 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -29,10 +29,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-
-
-
-
-
-

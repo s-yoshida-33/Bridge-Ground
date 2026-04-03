@@ -67,38 +67,12 @@ func main() {
 		uiMutex.Unlock()
 	})
 
+	// 分離パターン: SSEは「何が更新されたか」だけを通知し、
+	// クライアントは必要なREST エンドポイントを自分で取得する。
 	syncMgr.SetDataUpdateCallback(func(dataType string) {
-		var data interface{}
-		var err error
-
-		switch dataType {
-		case "shops":
-			data, err = srv.FetchShopList()
-		case "shop_news":
-			data, err = srv.FetchShopNews()
-		case "event_news":
-			data, err = srv.FetchEventNews()
-		case "specials":
-			data, err = srv.FetchSpecials()
-		case "genres":
-			data, err = srv.FetchGenres()
-		default:
-			log.Printf("Unknown data type updated: %s", dataType)
-			return
-		}
-
-		if err != nil {
-			log.Printf("Failed to fetch updated data for %s: %v", dataType, err)
-			return
-		}
-
-		// イベント名をデータタイプそのものにする（例: "shops", "shop_news"）
-		// これまでは全て "update" イベントとして送信していたが、
-		// クライアント側で addEventListener("shops", ...) のように個別に待ち受けられるようにする。
 		srv.BroadcastEvent(dataType, map[string]interface{}{
-			"type":      dataType, // 互換性のためペイロード内にもtypeを残しておく
+			"action":    "updated",
 			"timestamp": time.Now().Format(time.RFC3339),
-			"data":      data,
 		})
 	})
 

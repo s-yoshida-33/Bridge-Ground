@@ -19,6 +19,7 @@ type DataCounts struct {
 	ShopNews  int `json:"shop_news"`
 	EventNews int `json:"event_news"`
 	Specials  int `json:"specials"`
+	Sales     int `json:"sales"`
 }
 
 func NewManager() *Manager {
@@ -383,6 +384,7 @@ func (m *Manager) GetDataCounts() (*DataCounts, error) {
 	m.Conn.QueryRow("SELECT COUNT(*) FROM shop_news").Scan(&counts.ShopNews)
 	m.Conn.QueryRow("SELECT COUNT(*) FROM event_news").Scan(&counts.EventNews)
 	m.Conn.QueryRow("SELECT COUNT(*) FROM specials").Scan(&counts.Specials)
+	m.Conn.QueryRow("SELECT COUNT(*) FROM sales").Scan(&counts.Sales)
 
 	return counts, nil
 }

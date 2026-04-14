@@ -178,13 +178,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Sync Targets
         const targets = config.syncSettings.syncTargets || {
-            shops: true, shopNews: true, eventNews: true, specials: true, genres: true
+            shops: true, shopNews: false, eventNews: false,
+            specials: false, sales: false, shopApp: false,
+            genres: false, floors: false
         };
         document.getElementById('sync-target-shops').checked = targets.shops;
         document.getElementById('sync-target-shop-news').checked = targets.shopNews;
         document.getElementById('sync-target-event-news').checked = targets.eventNews;
         document.getElementById('sync-target-specials').checked = targets.specials;
+        document.getElementById('sync-target-sales').checked = targets.sales || false;
+        document.getElementById('sync-target-shop-app').checked = targets.shopApp || false;
         document.getElementById('sync-target-genres').checked = targets.genres;
+        document.getElementById('sync-target-floors').checked = targets.floors || false;
     }
 
     function showMessage(type, text) {
@@ -231,7 +236,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     shopNews: document.getElementById('sync-target-shop-news').checked,
                     eventNews: document.getElementById('sync-target-event-news').checked,
                     specials: document.getElementById('sync-target-specials').checked,
-                    genres: document.getElementById('sync-target-genres').checked
+                    sales: document.getElementById('sync-target-sales').checked,
+                    shopApp: document.getElementById('sync-target-shop-app').checked,
+                    genres: document.getElementById('sync-target-genres').checked,
+                    floors: document.getElementById('sync-target-floors').checked
                 }
             }
         };
@@ -308,6 +316,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('count-shop-news').textContent = formatCount(counts.shop_news, 'shopNews');
             document.getElementById('count-event-news').textContent = formatCount(counts.event_news, 'eventNews');
             document.getElementById('count-specials').textContent = formatCount(counts.specials, 'specials');
+            document.getElementById('count-sales').textContent = formatCount(counts.sales, 'sales');
             
         } catch (error) {
             console.error("Failed to fetch data counts:", error);

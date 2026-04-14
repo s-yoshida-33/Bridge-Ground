@@ -5,6 +5,7 @@ import (
 	"bridge-ground/internal/db"
 	"bridge-ground/internal/models"
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -180,7 +181,7 @@ func (m *Manager) StartSync() (bool, error) {
 	// 4. Sync Specials
 	if targets.Specials {
 		m.notifyProgress(SyncProgress{
-			Main: &ProgressDetail{Percentage: 70, Message: "特集データを同期中..."},
+			Main: &ProgressDetail{Percentage: 60, Message: "特集データを同期中..."},
 		})
 		count, err := m.syncSpecials()
 		if err != nil {
@@ -194,6 +195,44 @@ func (m *Manager) StartSync() (bool, error) {
 	} else {
 		fmt.Println("Skipping specials sync (disabled in config)")
 		updateStats["specials"] = 0
+	}
+
+	// 4b. Sync Sales
+	if targets.Sales {
+		m.notifyProgress(SyncProgress{
+			Main: &ProgressDetail{Percentage: 70, Message: "セールデータを同期中..."},
+		})
+		count, err := m.syncSales()
+		if err != nil {
+			fmt.Printf("Error syncing sales: %v\n", err)
+		}
+		if count != 0 {
+			anyUpdated = true
+			m.notifyDataUpdate("sales")
+		}
+		updateStats["sales"] = count
+	} else {
+		fmt.Println("Skipping sales sync (disabled in config)")
+		updateStats["sales"] = 0
+	}
+
+	// 4c. Sync ShopApp options (must run after shops sync)
+	if targets.ShopApp {
+		m.notifyProgress(SyncProgress{
+			Main: &ProgressDetail{Percentage: 75, Message: "オプション情報を同期中..."},
+		})
+		count, err := m.syncShopApp()
+		if err != nil {
+			fmt.Printf("Error syncing shop app options: %v\n", err)
+		}
+		if count != 0 {
+			anyUpdated = true
+			m.notifyDataUpdate("shops")
+		}
+		updateStats["shopApp"] = count
+	} else {
+		fmt.Println("Skipping shopApp sync (disabled in config)")
+		updateStats["shopApp"] = 0
 	}
 
 	// 5. Sync Genres
@@ -972,6 +1011,9 @@ func (m *Manager) syncSpecials() (int, error) {
 
 	var resp models.SpecialListResponse
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+		return input, nil
+	}
 	if err := decoder.Decode(&resp); err != nil {
 		return 0, err
 	}
@@ -988,7 +1030,14 @@ func (m *Manager) syncSpecials() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO specials (special_id, special_title, title, special_sub_body, category_name, shop_id, shop_name, update_date, special_image_local_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO specials (
+		special_id, special_title_id, special_title,
+		title, sub_title, category_id, category_name, special_sub_body,
+		shop_id, shop_name, genre_memo, shop_logo, shop_logo_local_path,
+		shop_floor_name, shop_floors_name, venue,
+		pub_start, pub_end, update_date,
+		special_image_remote_url, special_image_local_path, special_image2_local_path
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, err
 	}
@@ -1003,15 +1052,21 @@ func (m *Manager) syncSpecials() (int, error) {
 				continue
 			}
 
+			item.SpecialTitleID = parent.SpecialTitleID
 			item.SpecialTitle = parent.SpecialTitle
+			item.PubStart = parent.PubStart
+			item.PubEnd = parent.PubEnd
 			item.UpdateDate = parent.UpdateDate
 			item.SpecialID = strings.TrimSpace(item.SpecialID)
 
 			item.SpecialTitle = repairMojibake(item.SpecialTitle)
 			item.Title = repairMojibake(item.Title)
+			item.SubTitle = repairMojibake(item.SubTitle)
 			item.SpecialSubBody = repairMojibake(item.SpecialSubBody)
 			item.CategoryName = repairMojibake(item.CategoryName)
 			item.ShopName = repairMojibake(item.ShopName)
+			item.GenreMemo = repairMojibake(item.GenreMemo)
+			item.Venue = repairMojibake(item.Venue)
 
 			existingItem, exists := existingSpecials[item.SpecialID]
 			needsUpdate := true
@@ -1031,7 +1086,26 @@ func (m *Manager) syncSpecials() (int, error) {
 					downloadJobs = append(downloadJobs, DownloadJob{item.SpecialImageRemoteURL, item.SpecialImageLocalPath})
 				}
 
-				if _, err := stmt.Exec(item.SpecialID, item.SpecialTitle, item.Title, item.SpecialSubBody, item.CategoryName, item.ShopID, item.ShopName, item.UpdateDate, item.SpecialImageLocalPath); err != nil {
+				var specialImage2LocalPath string
+				if item.SpecialImage2 != "" {
+					remoteURL2 := m.resolveURL(item.SpecialImage2)
+					specialImage2LocalPath = m.resolveLocalPath(baseFileDir, item.SpecialImage2)
+					downloadJobs = append(downloadJobs, DownloadJob{remoteURL2, specialImage2LocalPath})
+				}
+
+				if item.ShopLogo != "" {
+					item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
+					downloadJobs = append(downloadJobs, DownloadJob{m.resolveURL(item.ShopLogo), item.ShopLogoLocalPath})
+				}
+
+				if _, err := stmt.Exec(
+					item.SpecialID, item.SpecialTitleID, item.SpecialTitle,
+					item.Title, item.SubTitle, item.CategoryID, item.CategoryName, item.SpecialSubBody,
+					item.ShopID, item.ShopName, item.GenreMemo, item.ShopLogo, item.ShopLogoLocalPath,
+					item.ShopFloorName, item.ShopFloorsName, item.Venue,
+					item.PubStart, item.PubEnd, item.UpdateDate,
+					item.SpecialImageRemoteURL, item.SpecialImageLocalPath, specialImage2LocalPath,
+				); err != nil {
 					tx.Rollback()
 					fmt.Printf("ERROR: Failed to insert special %s: %v\n", item.SpecialID, err)
 					return 0, fmt.Errorf("insert special failed: %w", err)
@@ -1064,6 +1138,189 @@ func (m *Manager) syncSpecials() (int, error) {
 
 	m.processDownloads(downloadJobs)
 	return updateCount + deletedCount, nil
+}
+
+func (m *Manager) syncSales() (int, error) {
+	baseURL := m.Config.APISettings.BaseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	endpoint := baseURL + "salelist?limit=1000"
+	fmt.Printf("Fetching sales from: %s\n", endpoint)
+	data, err := m.fetchXML(endpoint)
+	if err != nil {
+		return 0, err
+	}
+
+	var resp models.SaleListResponse
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+		return input, nil
+	}
+	if err := decoder.Decode(&resp); err != nil {
+		return 0, err
+	}
+
+	existingSales, err := m.loadAllSales()
+	if err != nil {
+		fmt.Printf("Warning: Failed to load existing sales: %v. Assuming empty.\n", err)
+		existingSales = make(map[string]models.SaleItem)
+	}
+
+	updateCount := 0
+
+	tx, err := m.DB.Conn.Begin()
+	if err != nil {
+		return 0, err
+	}
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO sales (
+		sale_id, sale_title_id, sale_title,
+		sale_body, shop_id, shop_name, genre, genre_memo,
+		shop_logo, shop_logo_remote_url, shop_logo_local_path,
+		shop_floor_name, shop_floors_name, area, area_sub,
+		pub_start, pub_end, update_date
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	baseFileDir := m.getBaseFileDir()
+	var downloadJobs []DownloadJob
+
+	for _, parent := range resp.Items {
+		for _, item := range parent.Items {
+			if item.Type != "sale" {
+				continue
+			}
+
+			item.SaleTitleID = parent.SaleTitleID
+			item.SaleTitle = parent.SaleTitle
+			item.PubStart = parent.PubStart
+			item.PubEnd = parent.PubEnd
+			item.UpdateDate = parent.UpdateDate
+			item.SaleID = strings.TrimSpace(item.SaleID)
+
+			item.SaleTitle = repairMojibake(item.SaleTitle)
+			item.SaleBody = repairMojibake(item.SaleBody)
+			item.ShopName = repairMojibake(item.ShopName)
+			item.Genre = repairMojibake(item.Genre)
+			item.GenreMemo = repairMojibake(item.GenreMemo)
+
+			existingItem, exists := existingSales[item.SaleID]
+			needsUpdate := true
+			if exists {
+				if salesEqual(item, existingItem) {
+					needsUpdate = false
+				}
+				delete(existingSales, item.SaleID)
+			}
+
+			if needsUpdate {
+				updateCount++
+
+				if item.ShopLogo != "" {
+					item.ShopLogoRemoteURL = m.resolveURL(item.ShopLogo)
+					item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
+					downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
+				}
+
+				if _, err := stmt.Exec(
+					item.SaleID, item.SaleTitleID, item.SaleTitle,
+					item.SaleBody, item.ShopID, item.ShopName, item.Genre, item.GenreMemo,
+					item.ShopLogo, item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
+					item.ShopFloorName, item.ShopFloorsName, item.Area, item.AreaSub,
+					item.PubStart, item.PubEnd, item.UpdateDate,
+				); err != nil {
+					tx.Rollback()
+					fmt.Printf("ERROR: Failed to insert sale %s: %v\n", item.SaleID, err)
+					return 0, fmt.Errorf("insert sale failed: %w", err)
+				}
+			}
+		}
+	}
+
+	deletedCount := 0
+	if len(existingSales) > 0 {
+		delStmt, err := tx.Prepare("DELETE FROM sales WHERE sale_id = ?")
+		if err != nil {
+			return 0, err
+		}
+		defer delStmt.Close()
+		for id := range existingSales {
+			if _, err := delStmt.Exec(id); err == nil {
+				deletedCount++
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	if resp.UpdateDateAll != "" {
+		m.setLastUpdateDateAll("sales", resp.UpdateDateAll)
+	}
+
+	m.processDownloads(downloadJobs)
+	return updateCount + deletedCount, nil
+}
+
+func (m *Manager) syncShopApp() (int, error) {
+	baseURL := m.Config.APISettings.BaseURL
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+	endpoint := baseURL + "shoplist_app?limit=1000"
+	fmt.Printf("Fetching shop app options from: %s\n", endpoint)
+	data, err := m.fetchXML(endpoint)
+	if err != nil {
+		return 0, err
+	}
+
+	var resp models.ShopAppListResponse
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+		return input, nil
+	}
+	if err := decoder.Decode(&resp); err != nil {
+		return 0, err
+	}
+
+	updateCount := 0
+
+	for _, shopApp := range resp.Items {
+		shopID := strings.TrimSpace(shopApp.ShopID)
+		if shopID == "" {
+			continue
+		}
+
+		optionsJSON, err := json.Marshal(shopApp.Options.Items)
+		if err != nil {
+			fmt.Printf("Warning: Failed to marshal options for shop %s: %v\n", shopID, err)
+			continue
+		}
+
+		result, err := m.DB.Conn.Exec(
+			"UPDATE shops SET options = ? WHERE shop_id = ?",
+			string(optionsJSON), shopID,
+		)
+		if err != nil {
+			fmt.Printf("Warning: Failed to update options for shop %s: %v\n", shopID, err)
+			continue
+		}
+		rows, _ := result.RowsAffected()
+		if rows > 0 {
+			updateCount++
+		}
+	}
+
+	if resp.UpdateDateAll != "" {
+		m.setLastUpdateDateAll("shopApp", resp.UpdateDateAll)
+	}
+
+	fmt.Printf("syncShopApp: updated options for %d shops\n", updateCount)
+	return updateCount, nil
 }
 
 func (m *Manager) syncGenres() (int, error) {
@@ -1167,6 +1424,9 @@ func (m *Manager) cleanupOrphanedFiles() error {
 		"SELECT shop_logo_local_path FROM shop_news WHERE shop_logo_local_path != ''",
 		"SELECT photo1_local_path FROM event_news WHERE photo1_local_path != ''",
 		"SELECT special_image_local_path FROM specials WHERE special_image_local_path != ''",
+		"SELECT special_image2_local_path FROM specials WHERE special_image2_local_path != ''",
+		"SELECT shop_logo_local_path FROM specials WHERE shop_logo_local_path != ''",
+		"SELECT shop_logo_local_path FROM sales WHERE shop_logo_local_path != ''",
 	}
 
 	for _, q := range queries {
@@ -1713,9 +1973,11 @@ func eventNewsEqual(a, b models.EventNewsItem) bool {
 }
 
 func (m *Manager) loadAllSpecials() (map[string]models.SpecialItem, error) {
-	query := `SELECT 
-		special_id, special_title, title, special_sub_body, category_name,
-		shop_id, shop_name, update_date
+	query := `SELECT
+		special_id, COALESCE(special_title_id,''), special_title,
+		title, COALESCE(sub_title,''), COALESCE(category_id,''), category_name, special_sub_body,
+		shop_id, shop_name, COALESCE(genre_memo,''), COALESCE(shop_floor_name,''), COALESCE(shop_floors_name,''),
+		COALESCE(venue,''), COALESCE(pub_start,''), COALESCE(pub_end,''), update_date
 		FROM specials`
 
 	rows, err := m.DB.Conn.Query(query)
@@ -1728,13 +1990,17 @@ func (m *Manager) loadAllSpecials() (map[string]models.SpecialItem, error) {
 	for rows.Next() {
 		var item models.SpecialItem
 		var (
-			specialId, specialTitle, title, specialSubBody, categoryName,
-			shopId, shopName, updateDate *string
+			specialId, specialTitleId, specialTitle,
+			title, subTitle, categoryId, categoryName, specialSubBody,
+			shopId, shopName, genreMemo, shopFloorName, shopFloorsName,
+			venue, pubStart, pubEnd, updateDate *string
 		)
 
 		if err := rows.Scan(
-			&specialId, &specialTitle, &title, &specialSubBody, &categoryName,
-			&shopId, &shopName, &updateDate,
+			&specialId, &specialTitleId, &specialTitle,
+			&title, &subTitle, &categoryId, &categoryName, &specialSubBody,
+			&shopId, &shopName, &genreMemo, &shopFloorName, &shopFloorsName,
+			&venue, &pubStart, &pubEnd, &updateDate,
 		); err != nil {
 			continue
 		}
@@ -1747,12 +2013,21 @@ func (m *Manager) loadAllSpecials() (map[string]models.SpecialItem, error) {
 		}
 
 		item.SpecialID = s(specialId)
+		item.SpecialTitleID = s(specialTitleId)
 		item.SpecialTitle = s(specialTitle)
 		item.Title = s(title)
-		item.SpecialSubBody = s(specialSubBody)
+		item.SubTitle = s(subTitle)
+		item.CategoryID = s(categoryId)
 		item.CategoryName = s(categoryName)
+		item.SpecialSubBody = s(specialSubBody)
 		item.ShopID = s(shopId)
 		item.ShopName = s(shopName)
+		item.GenreMemo = s(genreMemo)
+		item.ShopFloorName = s(shopFloorName)
+		item.ShopFloorsName = s(shopFloorsName)
+		item.Venue = s(venue)
+		item.PubStart = s(pubStart)
+		item.PubEnd = s(pubEnd)
 		item.UpdateDate = s(updateDate)
 
 		result[item.SpecialID] = item
@@ -1762,12 +2037,106 @@ func (m *Manager) loadAllSpecials() (map[string]models.SpecialItem, error) {
 
 func specialsEqual(a, b models.SpecialItem) bool {
 	return a.SpecialID == b.SpecialID &&
+		a.SpecialTitleID == b.SpecialTitleID &&
 		a.SpecialTitle == b.SpecialTitle &&
 		a.Title == b.Title &&
-		a.SpecialSubBody == b.SpecialSubBody &&
+		a.SubTitle == b.SubTitle &&
+		a.CategoryID == b.CategoryID &&
 		a.CategoryName == b.CategoryName &&
+		a.SpecialSubBody == b.SpecialSubBody &&
 		a.ShopID == b.ShopID &&
 		a.ShopName == b.ShopName &&
+		a.GenreMemo == b.GenreMemo &&
+		a.ShopFloorName == b.ShopFloorName &&
+		a.ShopFloorsName == b.ShopFloorsName &&
+		a.Venue == b.Venue &&
+		a.PubStart == b.PubStart &&
+		a.PubEnd == b.PubEnd &&
+		a.UpdateDate == b.UpdateDate
+}
+
+func (m *Manager) loadAllSales() (map[string]models.SaleItem, error) {
+	query := `SELECT
+		sale_id, COALESCE(sale_title_id,''), COALESCE(sale_title,''),
+		COALESCE(sale_body,''), shop_id, shop_name,
+		COALESCE(genre,''), COALESCE(genre_memo,''),
+		COALESCE(shop_floor_name,''), COALESCE(shop_floors_name,''),
+		COALESCE(area,''), COALESCE(area_sub,''),
+		COALESCE(pub_start,''), COALESCE(pub_end,''), update_date
+		FROM sales`
+
+	rows, err := m.DB.Conn.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]models.SaleItem)
+	for rows.Next() {
+		var item models.SaleItem
+		var (
+			saleId, saleTitleId, saleTitle,
+			saleBody, shopId, shopName,
+			genre, genreMemo,
+			shopFloorName, shopFloorsName,
+			area, areaSub,
+			pubStart, pubEnd, updateDate *string
+		)
+
+		if err := rows.Scan(
+			&saleId, &saleTitleId, &saleTitle,
+			&saleBody, &shopId, &shopName,
+			&genre, &genreMemo,
+			&shopFloorName, &shopFloorsName,
+			&area, &areaSub,
+			&pubStart, &pubEnd, &updateDate,
+		); err != nil {
+			continue
+		}
+
+		s := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.SaleID = s(saleId)
+		item.SaleTitleID = s(saleTitleId)
+		item.SaleTitle = s(saleTitle)
+		item.SaleBody = s(saleBody)
+		item.ShopID = s(shopId)
+		item.ShopName = s(shopName)
+		item.Genre = s(genre)
+		item.GenreMemo = s(genreMemo)
+		item.ShopFloorName = s(shopFloorName)
+		item.ShopFloorsName = s(shopFloorsName)
+		item.Area = s(area)
+		item.AreaSub = s(areaSub)
+		item.PubStart = s(pubStart)
+		item.PubEnd = s(pubEnd)
+		item.UpdateDate = s(updateDate)
+
+		result[item.SaleID] = item
+	}
+	return result, nil
+}
+
+func salesEqual(a, b models.SaleItem) bool {
+	return a.SaleID == b.SaleID &&
+		a.SaleTitleID == b.SaleTitleID &&
+		a.SaleTitle == b.SaleTitle &&
+		a.SaleBody == b.SaleBody &&
+		a.ShopID == b.ShopID &&
+		a.ShopName == b.ShopName &&
+		a.Genre == b.Genre &&
+		a.GenreMemo == b.GenreMemo &&
+		a.ShopFloorName == b.ShopFloorName &&
+		a.ShopFloorsName == b.ShopFloorsName &&
+		a.Area == b.Area &&
+		a.AreaSub == b.AreaSub &&
+		a.PubStart == b.PubStart &&
+		a.PubEnd == b.PubEnd &&
 		a.UpdateDate == b.UpdateDate
 }
 

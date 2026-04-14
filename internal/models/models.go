@@ -155,31 +155,135 @@ type ShopNewsItem struct {
 
 // SpecialTitleItem represents the parent item for specials in XML
 type SpecialTitleItem struct {
-	XMLName      xml.Name      `xml:"item" json:"-"`
-	Type         string        `xml:"type,attr" json:"type"` // specialTitle or special
-	SpecialTitle string        `xml:"specialTitle" json:"specialTitle"`
-	UpdateDate   string        `xml:"updateDate" json:"updateDate"`
-	Items        []SpecialItem `xml:"item" json:"items"` // Nested items
+	XMLName          xml.Name      `xml:"item" json:"-"`
+	Type             string        `xml:"type,attr" json:"type"`
+	SpecialTitleID   string        `xml:"specialTitleId" json:"specialTitleId"`
+	SpecialTitle     string        `xml:"specialTitle" json:"specialTitle"`
+	SpecialTitleStr  string        `xml:"specialTitleStr" json:"specialTitleStr"`
+	SpecialTitleBody string        `xml:"specialTitleBody" json:"specialTitleBody"`
+	SpecialTitleImage string       `xml:"specialTitleImage" json:"specialTitleImage"`
+	StatusWeb        string        `xml:"statusWeb" json:"statusWeb"`
+	StatusSignage    string        `xml:"statusSignage" json:"statusSignage"`
+	PubStart         string        `xml:"pubStart" json:"pubStart"`
+	PubEnd           string        `xml:"pubEnd" json:"pubEnd"`
+	UpdateDate       string        `xml:"updateDate" json:"updateDate"`
+	Items            []SpecialItem `xml:"item" json:"items"`
 }
 
-// SpecialItem represents a special item (sometimes nested or flattened)
+// SpecialItem represents a special item nested inside a specialTitle
 type SpecialItem struct {
-	XMLName         xml.Name `xml:"item" json:"-"`
-	Type            string   `xml:"type,attr" json:"type"`
-	SpecialID       string   `xml:"specialId" db:"special_id" json:"specialId"`
-	Title           string   `xml:"title" db:"title" json:"title"`
-	SpecialSubBody  string   `xml:"specialSubBody" db:"special_sub_body" json:"specialSubBody"`
-	CategoryName    string   `xml:"categoryName" db:"category_name" json:"categoryName"`
-	ShopID          string   `xml:"shopId" db:"shop_id" json:"shopId"`
-	ShopName        string   `xml:"shopName" db:"shop_name" json:"shopName"`
-	
-	SpecialImage    string   `xml:"specialImage" json:"specialImage"`
-	
-	// Derived
+	XMLName                xml.Name `xml:"item" json:"-"`
+	Type                   string   `xml:"type,attr" json:"type"`
+	SpecialID              string   `xml:"specialId" db:"special_id" json:"specialId"`
+	Title                  string   `xml:"title" db:"title" json:"title"`
+	SubTitle               string   `xml:"subTitle" db:"sub_title" json:"subTitle"`
+	CategoryID             string   `xml:"categoryId" db:"category_id" json:"categoryId"`
+	CategoryName           string   `xml:"categoryName" db:"category_name" json:"categoryName"`
+	SpecialSubBody         string   `xml:"specialSubBody" db:"special_sub_body" json:"specialSubBody"`
+	ShopID                 string   `xml:"shopId" db:"shop_id" json:"shopId"`
+	ShopName               string   `xml:"shopName" db:"shop_name" json:"shopName"`
+	GenreMemo              string   `xml:"genreMemo" db:"genre_memo" json:"genreMemo"`
+	ShopFloorName          string   `xml:"shopFloorName" db:"shop_floor_name" json:"shopFloorName"`
+	ShopFloorsName         string   `xml:"shopFloorsName" db:"shop_floors_name" json:"shopFloorsName"`
+	Venue                  string   `xml:"venue" db:"venue" json:"venue"`
+
+	SpecialImage           string   `xml:"specialImage" json:"specialImage"`
+	SpecialImage2          string   `xml:"specialImage2" json:"specialImage2"`
+	SpecialImageThumbW1080 string   `xml:"specialImageThumbW1080" json:"specialImageThumbW1080"`
+
+	ShopLogo               string   `xml:"shopLogo" db:"shop_logo" json:"shopLogo"`
+	ShopLogoLocalPath      string   `db:"shop_logo_local_path" json:"shopLogoLocalPath"`
+
+	// Promoted from parent SpecialTitleItem
+	SpecialTitleID        string `db:"special_title_id" json:"specialTitleId"`
 	SpecialTitle          string `db:"special_title" json:"specialTitle"`
+	PubStart              string `db:"pub_start" json:"pubStart"`
+	PubEnd                string `db:"pub_end" json:"pubEnd"`
 	UpdateDate            string `db:"update_date" json:"updateDate"`
-	SpecialImageRemoteURL string `db:"special_image_remote_url" json:"-"` // Not in schema explicitly but good for logic
+
+	SpecialImageRemoteURL string `db:"special_image_remote_url" json:"-"`
 	SpecialImageLocalPath string `db:"special_image_local_path" json:"specialImageLocalPath"`
+}
+
+// SaleTitleItem represents the parent item for sales in XML
+type SaleTitleItem struct {
+	XMLName       xml.Name   `xml:"item" json:"-"`
+	Type          string     `xml:"type,attr" json:"type"`
+	SaleTitleID   string     `xml:"saleTitleId" json:"saleTitleId"`
+	SaleTitle     string     `xml:"saleTitle" json:"saleTitle"`
+	SaleTitleStr  string     `xml:"saleTitleStr" json:"saleTitleStr"`
+	SaleTitleImage string    `xml:"saleTitleImage" json:"saleTitleImage"`
+	StatusWeb     string     `xml:"statusWeb" json:"statusWeb"`
+	StatusSignage string     `xml:"statusSignage" json:"statusSignage"`
+	PubStart      string     `xml:"pubStart" json:"pubStart"`
+	PubEnd        string     `xml:"pubEnd" json:"pubEnd"`
+	UpdateDate    string     `xml:"updateDate" json:"updateDate"`
+	Items         []SaleItem `xml:"item" json:"items"`
+}
+
+// SaleItem represents an individual sale entry nested inside a saleTitle
+type SaleItem struct {
+	XMLName        xml.Name `xml:"item" json:"-"`
+	Type           string   `xml:"type,attr" json:"type"`
+	SaleID         string   `xml:"saleId" db:"sale_id" json:"saleId"`
+	SaleBody       string   `xml:"saleBody" db:"sale_body" json:"saleBody"`
+	ShopID         string   `xml:"shopId" db:"shop_id" json:"shopId"`
+	ShopName       string   `xml:"shopName" db:"shop_name" json:"shopName"`
+	Genre          string   `xml:"genre" db:"genre" json:"genre"`
+	GenreMemo      string   `xml:"genreMemo" db:"genre_memo" json:"genreMemo"`
+	ShopFloorName  string   `xml:"shopFloorName" db:"shop_floor_name" json:"shopFloorName"`
+	ShopFloorsName string   `xml:"shopFloorsName" db:"shop_floors_name" json:"shopFloorsName"`
+	Area           string   `xml:"area" db:"area" json:"area"`
+	AreaSub        string   `xml:"areaSub" db:"area_sub" json:"areaSub"`
+
+	ShopLogo          string `xml:"shopLogo" db:"shop_logo" json:"shopLogo"`
+	ShopLogoLocalPath string `db:"shop_logo_local_path" json:"shopLogoLocalPath"`
+
+	// Promoted from parent SaleTitleItem
+	SaleTitleID   string `db:"sale_title_id" json:"saleTitleId"`
+	SaleTitle     string `db:"sale_title" json:"saleTitle"`
+	PubStart      string `db:"pub_start" json:"pubStart"`
+	PubEnd        string `db:"pub_end" json:"pubEnd"`
+	UpdateDate    string `db:"update_date" json:"updateDate"`
+
+	ShopLogoRemoteURL string `db:"shop_logo_remote_url" json:"-"`
+}
+
+// SaleListResponse is the root wrapper for salelist XML
+type SaleListResponse struct {
+	XMLName       xml.Name       `xml:"data"`
+	UpdateDateAll string         `xml:"updateDateAll"`
+	Items         []SaleTitleItem `xml:"item"`
+}
+
+// OptionItem represents a single option/amenity tag on a shop (from shoplist_app)
+type OptionItem struct {
+	OptionID      string `xml:"optionId" json:"optionId"`
+	OptionName    string `xml:"optionName" json:"optionName"`
+	OptionNameStr string `xml:"optionNameStr" json:"optionNameStr"`
+	OptionSort    string `xml:"optionSort" json:"optionSort"`
+	OptionLogo    string `xml:"optionLogo" json:"optionLogo"`
+	OptionStatus  string `xml:"optionStatus" json:"optionStatus"`
+	OptionUpdate  string `xml:"optionUpdate" json:"optionUpdate"`
+}
+
+type optionList struct {
+	Items []OptionItem `xml:"item"`
+}
+
+// ShopAppItem holds the shop-id and options list parsed from shoplist_app
+type ShopAppItem struct {
+	XMLName    xml.Name   `xml:"item"`
+	ShopID     string     `xml:"shopId"`
+	Options    optionList `xml:"options"`
+	UpdateDate string     `xml:"updateDate"`
+}
+
+// ShopAppListResponse is the root wrapper for shoplist_app XML
+type ShopAppListResponse struct {
+	XMLName       xml.Name      `xml:"data"`
+	UpdateDateAll string        `xml:"updateDateAll"`
+	Items         []ShopAppItem `xml:"item"`
 }
 
 // GenreItem represents a genre definition

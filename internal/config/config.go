@@ -40,6 +40,8 @@ type SyncTargets struct {
 	ShopNews  bool `json:"shopNews"`
 	EventNews bool `json:"eventNews"`
 	Specials  bool `json:"specials"`
+	Sales     bool `json:"sales"`
+	ShopApp   bool `json:"shopApp"`
 	Genres    bool `json:"genres"`
 	Floors    bool `json:"floors"`
 }
@@ -87,6 +89,8 @@ func LoadConfig() (*Config, error) {
 					ShopNews:  false,
 					EventNews: false,
 					Specials:  false,
+					Sales:     false,
+					ShopApp:   false,
 					Genres:    false,
 					Floors:    false,
 				},
@@ -117,7 +121,10 @@ func LoadConfig() (*Config, error) {
 			ShopNews:  false,
 			EventNews: false,
 			Specials:  false,
+			Sales:     false,
+			ShopApp:   false,
 			Genres:    false,
+			Floors:    false,
 		}
 	}
 

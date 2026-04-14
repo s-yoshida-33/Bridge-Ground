@@ -31,7 +31,7 @@ func (s *Server) Start() {
 	mux.HandleFunc("/api/shop-news", s.handleShopNewsList)
 	mux.HandleFunc("/api/event-news", s.handleEventNewsList)
 	mux.HandleFunc("/api/specials", s.handleSpecialList)
-	mux.HandleFunc("/api/sales", s.handleSpecialList) // Sales maps to specials
+	mux.HandleFunc("/api/sales", s.handleSaleList)
 	mux.HandleFunc("/api/genres", s.handleGenreList)
 	mux.HandleFunc("/api/floors", s.createListEndpoint("floors", "SELECT floor_id, floor_name, sort_order FROM floors"))
 
@@ -470,9 +470,13 @@ func (s *Server) FetchSpecials() ([]models.SpecialItem, error) {
 		return nil, fmt.Errorf("database not connected")
 	}
 
-	query := `SELECT 
-		special_id, special_title, title, special_sub_body, category_name,
-		shop_id, shop_name, update_date, special_image_local_path
+	query := `SELECT
+		special_id, COALESCE(special_title_id,''), special_title,
+		title, COALESCE(sub_title,''), COALESCE(category_id,''), category_name, special_sub_body,
+		shop_id, shop_name, COALESCE(genre_memo,''), COALESCE(shop_logo,''), COALESCE(shop_logo_local_path,''),
+		COALESCE(shop_floor_name,''), COALESCE(shop_floors_name,''), COALESCE(venue,''),
+		COALESCE(pub_start,''), COALESCE(pub_end,''), update_date,
+		COALESCE(special_image_local_path,''), COALESCE(special_image2_local_path,'')
 		FROM specials`
 
 	rows, err := s.DB.Conn.Query(query)
@@ -486,34 +490,132 @@ func (s *Server) FetchSpecials() ([]models.SpecialItem, error) {
 	for rows.Next() {
 		var item models.SpecialItem
 		var (
-			specialId, specialTitle, title, specialSubBody, categoryName,
-			shopId, shopName, updateDate, specialImageLocalPath *string
+			specialId, specialTitleId, specialTitle,
+			title, subTitle, categoryId, categoryName, specialSubBody,
+			shopId, shopName, genreMemo, shopLogo, shopLogoLocalPath,
+			shopFloorName, shopFloorsName, venue,
+			pubStart, pubEnd, updateDate,
+			specialImageLocalPath, specialImage2LocalPath *string
 		)
 
 		if err := rows.Scan(
-			&specialId, &specialTitle, &title, &specialSubBody, &categoryName,
-			&shopId, &shopName, &updateDate, &specialImageLocalPath,
+			&specialId, &specialTitleId, &specialTitle,
+			&title, &subTitle, &categoryId, &categoryName, &specialSubBody,
+			&shopId, &shopName, &genreMemo, &shopLogo, &shopLogoLocalPath,
+			&shopFloorName, &shopFloorsName, &venue,
+			&pubStart, &pubEnd, &updateDate,
+			&specialImageLocalPath, &specialImage2LocalPath,
 		); err != nil {
 			fmt.Printf("Scan error: %v\n", err)
 			continue
 		}
 
-		s := func(ptr *string) string {
+		sv := func(ptr *string) string {
 			if ptr == nil {
 				return ""
 			}
 			return *ptr
 		}
 
-		item.SpecialID = s(specialId)
-		item.SpecialTitle = s(specialTitle)
-		item.Title = s(title)
-		item.SpecialSubBody = s(specialSubBody)
-		item.CategoryName = s(categoryName)
-		item.ShopID = s(shopId)
-		item.ShopName = s(shopName)
-		item.UpdateDate = s(updateDate)
-		item.SpecialImageLocalPath = s(specialImageLocalPath)
+		item.SpecialID = sv(specialId)
+		item.SpecialTitleID = sv(specialTitleId)
+		item.SpecialTitle = sv(specialTitle)
+		item.Title = sv(title)
+		item.SubTitle = sv(subTitle)
+		item.CategoryID = sv(categoryId)
+		item.CategoryName = sv(categoryName)
+		item.SpecialSubBody = sv(specialSubBody)
+		item.ShopID = sv(shopId)
+		item.ShopName = sv(shopName)
+		item.GenreMemo = sv(genreMemo)
+		item.ShopLogo = sv(shopLogo)
+		item.ShopLogoLocalPath = sv(shopLogoLocalPath)
+		item.ShopFloorName = sv(shopFloorName)
+		item.ShopFloorsName = sv(shopFloorsName)
+		item.Venue = sv(venue)
+		item.PubStart = sv(pubStart)
+		item.PubEnd = sv(pubEnd)
+		item.UpdateDate = sv(updateDate)
+		item.SpecialImageLocalPath = sv(specialImageLocalPath)
+
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+// FetchSales retrieves sales from the database
+func (s *Server) FetchSales() ([]models.SaleItem, error) {
+	if s.DB.Conn == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	query := `SELECT
+		sale_id, COALESCE(sale_title_id,''), COALESCE(sale_title,''),
+		COALESCE(sale_body,''), shop_id, shop_name,
+		COALESCE(genre,''), COALESCE(genre_memo,''),
+		COALESCE(shop_logo,''), COALESCE(shop_logo_local_path,''),
+		COALESCE(shop_floor_name,''), COALESCE(shop_floors_name,''),
+		COALESCE(area,''), COALESCE(area_sub,''),
+		COALESCE(pub_start,''), COALESCE(pub_end,''), update_date
+		FROM sales`
+
+	rows, err := s.DB.Conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %v", err)
+	}
+	defer rows.Close()
+
+	var result []models.SaleItem
+
+	for rows.Next() {
+		var item models.SaleItem
+		var (
+			saleId, saleTitleId, saleTitle,
+			saleBody, shopId, shopName,
+			genre, genreMemo,
+			shopLogo, shopLogoLocalPath,
+			shopFloorName, shopFloorsName,
+			area, areaSub,
+			pubStart, pubEnd, updateDate *string
+		)
+
+		if err := rows.Scan(
+			&saleId, &saleTitleId, &saleTitle,
+			&saleBody, &shopId, &shopName,
+			&genre, &genreMemo,
+			&shopLogo, &shopLogoLocalPath,
+			&shopFloorName, &shopFloorsName,
+			&area, &areaSub,
+			&pubStart, &pubEnd, &updateDate,
+		); err != nil {
+			fmt.Printf("Scan error: %v\n", err)
+			continue
+		}
+
+		sv := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.SaleID = sv(saleId)
+		item.SaleTitleID = sv(saleTitleId)
+		item.SaleTitle = sv(saleTitle)
+		item.SaleBody = sv(saleBody)
+		item.ShopID = sv(shopId)
+		item.ShopName = sv(shopName)
+		item.Genre = sv(genre)
+		item.GenreMemo = sv(genreMemo)
+		item.ShopLogo = sv(shopLogo)
+		item.ShopLogoLocalPath = sv(shopLogoLocalPath)
+		item.ShopFloorName = sv(shopFloorName)
+		item.ShopFloorsName = sv(shopFloorsName)
+		item.Area = sv(area)
+		item.AreaSub = sv(areaSub)
+		item.PubStart = sv(pubStart)
+		item.PubEnd = sv(pubEnd)
+		item.UpdateDate = sv(updateDate)
 
 		result = append(result, item)
 	}
@@ -581,6 +683,15 @@ func (s *Server) handleShopNewsList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSpecialList(w http.ResponseWriter, r *http.Request) {
 	result, err := s.FetchSpecials()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, result)
+}
+
+func (s *Server) handleSaleList(w http.ResponseWriter, r *http.Request) {
+	result, err := s.FetchSales()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

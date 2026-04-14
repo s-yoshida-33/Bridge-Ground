@@ -1,32 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
-<data>
-  <updateDateAll>2019-08-24 23:15:22</updateDateAll>
-  <item type="saleTitle">
-    <saleTitleId>049ab8ea-d018-49b9-84c5-ebdd084409d1</saleTitleId>
-    <saleTitle><![CDATA[お客さま感謝デー]]></saleTitle>
-    <saleTitleStr><![CDATA[]]></saleTitleStr>
-    <saleTitleImage><![CDATA[/files/shop_option/9/photo.png]]></saleTitleImage>
-    <statusWeb>1</statusWeb>
-    <statusSignage>1</statusSignage>
-    <item type="sale">
-      <saleId>5559446d-6a60-4698-966c-26c295d74f0e</saleId>
-      <saleBody><![CDATA[平常価格より5％OFF]]></saleBody>
-      <shopId>52af8736-36b2-4020-ab17-00e2e776ea91</shopId>
-      <shopName><![CDATA[ASBEE]]></shopName>
-      <genre><![CDATA[ファッション]]></genre>
-      <genreMemo><![CDATA[]]></genreMemo>
-      <shopLogo><![CDATA[/files/shop/61/shop_logo.png]]></shopLogo>
-      <shopFloorName><![CDATA[2F]]></shopFloorName>
-      <shopFloorsName><![CDATA[2F]]></shopFloorsName>
-      <area><![CDATA[]]></area>
-      <areaSub><![CDATA[]]></areaSub>
-    </item>
-    <!-- ... 同様の <item type="sale"> が複数並ぶ ... -->
-    <pubStart>2019-08-24 23:15:22</pubStart>
-    <pubEnd></pubEnd>
-    <updateDate>2019-08-24 23:15:22</updateDate>
-  </item>
-  <item type="saleTitle">
-    <!-- 同構造 -->
-  </item>
-</data>
+    <data>
+    <updateDateAll>2026-04-01 09:38:04</updateDateAll>
+    <item type="saleTitle">
+        <saleTitleId>6da3877a-3036-4af5-96db-18aa609534fb</saleTitleId>
+        <saleTitle><![CDATA[【新機能のご紹介】イオンモールアプリ]]></saleTitle>
+        <saleTitleStr><![CDATA[【新機能のご紹介】イオンモールアプリ]]></saleTitleStr>
+        <saleTitleImage><![CDATA[/files/42598599-3dc4-4add-9e0a-79adf325d646.jpg]]></saleTitleImage>
+        <statusWeb>1</statusWeb>
+        <statusSignage>1</statusSignage>
+        
+        <pubStart>2022-09-14 00:00:00</pubStart>
+        <pubEnd></pubEnd>
+        <updateDate>2026-03-19 16:41:18</updateDate>
+        </item><item type="saleTitle">
+        <saleTitleId>93455d77-cf46-4a80-92f3-32f75f51dc57</saleTitleId>
+        <saleTitle><![CDATA[イオンゴールドカード会員さま限定 イオンモール専門店でおトク！]]></saleTitle>
+        <saleTitleStr><![CDATA[イオンゴールドカード会員さま限定 イオンモール専門店でおトク！]]></saleTitleStr>
+        <saleTitleImage><![CDATA[/files/1bd4af23-790e-44d2-b5f7-abf28f5e9eba.jpg]]></saleTitleImage>
+        <statusWeb>1</statusWeb>
+        <statusSignage>1</statusSignage>
+        
+        <pubStart>2024-12-30 00:00:00</pubStart>
+        <pubEnd>2035-12-20 23:59:00</pubEnd>
+        <updateDate>2026-04-01 09:35:17</updateDate>
+        </item><item type="saleTitle">
+        <saleTitleId>db299c4e-0eb5-4d0b-b085-e7be28ee3051</saleTitleId>
+        <saleTitle><![CDATA[ポイントいつでも2倍]]></saleTitle>
+        <saleTitleStr><![CDATA[ポイントいつでも2倍]]></saleTitleStr>
+        <saleTitleImage><![CDATA[/files/970e2dfc-b86c-4c48-825f-3d6e01e647f7.jpg]]></saleTitleImage>
+        <statusWeb>1</statusWeb>
+        <statusSignage>1</statusSignage>
+        
+        <pubStart>2021-09-11 00:00:00</pubStart>
+        <pubEnd></pubEnd>
+        <updateDate>2026-03-23 09:48:56</updateDate>
+        </item><item type="saleTitle">
+        <saleTitleId>ea181993-8e32-4f97-8eb5-ba2e1e6c1312</saleTitleId>
+        <saleTitle><![CDATA[【毎月 5日！】WAON POINT10%ポイントバッグ]]></saleTitle>
+        <saleTitleStr><![CDATA[【毎月 5日！】WAON POINT10%ポイントバッグ]]></saleTitleStr>
+        <saleTitleImage><![CDATA[/files/d210bd84-651d-4618-9d92-89c46f3b8f19.jpg]]></saleTitleImage>
+        <statusWeb>1</statusWeb>
+        <statusSignage>1</statusSignage>
+        
+        <pubStart>2022-02-28 00:00:00</pubStart>
+        <pubEnd></pubEnd>
+        <updateDate>2026-04-01 09:38:04</updateDate>
+        </item>
+    </data>

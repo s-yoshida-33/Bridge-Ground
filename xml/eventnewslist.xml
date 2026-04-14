@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
     <data>
-    <updateDateAll>2026-04-14 12:17:53</updateDateAll>
+    <updateDateAll>2026-04-14 13:49:01</updateDateAll>
     <item type="eventnews">
         <eventId>0942fa68-9fb4-411e-bd39-4d8547a8a512</eventId>
         <title><![CDATA[【4月度】月1アプリ抽選会]]></title>
@@ -113,6 +113,48 @@
         <statusList>1</statusList>
         <statusSignage>1</statusSignage>
         <updateDate>2026-04-03 17:15:45</updateDate>
+        </item><item type="eventnews">
+        <eventId>561963aa-0fa2-4d61-9d2e-645bbff0db78</eventId>
+        <title><![CDATA[アルビオン 乳液体験]]></title>
+        <subTitle><![CDATA[アルビオン 乳液体験]]></subTitle>
+        <bodyShort><![CDATA[【参加無料】アルビオンフラルネブライトシリーズの乳液を中心に春の心地よいお肌作りをご提案させていただきます。]]></bodyShort>
+        <body><![CDATA[<p><span style="color: rgb(66, 66, 66); font-size: 16px;">参加無料</span><br><br><span style="color: rgb(66, 66, 66); font-size: 16px;">アルビオンフラルネブライトシリーズの乳液を中心に春の心地よいお肌作りをご提案させていただきます。</span></p>]]></body>
+        <categories><![CDATA[催事]]></categories>
+        <photo1><![CDATA[/files/3ff4d956-bde1-4ba4-8cc4-b3b2bb8d616e.jpg]]></photo1>
+        <photo1Thumb><![CDATA[/files/320x320_3ff4d956-bde1-4ba4-8cc4-b3b2bb8d616e.jpg]]></photo1Thumb>
+        <photo1Thumb150x150><![CDATA[/files/150x150_3ff4d956-bde1-4ba4-8cc4-b3b2bb8d616e.jpg]]></photo1Thumb150x150>
+        <photo1Thumb640x640><![CDATA[/files/640x640_3ff4d956-bde1-4ba4-8cc4-b3b2bb8d616e.jpg]]></photo1Thumb640x640>
+        <photo1ThumbW320><![CDATA[/files/w320_3ff4d956-bde1-4ba4-8cc4-b3b2bb8d616e.jpg]]></photo1ThumbW320>
+        <photo1ThumbW640><![CDATA[/files/w640_3ff4d956-bde1-4ba4-8cc4-b3b2bb8d616e.jpg]]></photo1ThumbW640>
+        <photo1ThumbW1080><![CDATA[/files/w1080_3ff4d956-bde1-4ba4-8cc4-b3b2bb8d616e.jpg]]></photo1ThumbW1080>
+        <photo2><![CDATA[]]></photo2>
+        <photo2Thumb><![CDATA[]]></photo2Thumb>
+        <photo2Thumb150x150><![CDATA[]]></photo2Thumb150x150>
+        <photo2Thumb640x640><![CDATA[]]></photo2Thumb640x640>
+        <photo2ThumbW320><![CDATA[]]></photo2ThumbW320>
+        <photo2ThumbW640><![CDATA[]]></photo2ThumbW640>
+        <photo2ThumbW1080><![CDATA[]]></photo2ThumbW1080>
+        <xy><![CDATA[]]></xy>
+        <dateStart>2026-04-25</dateStart>
+        <dateEnd>2026-04-26</dateEnd>
+        <item type="date">
+        <dateStart>2026-04-25</dateStart>
+        <dateEnd>2026-04-26</dateEnd>
+        </item>
+        <item type="display">
+            <displayDate>2026-04-25,2026-04-26</displayDate>
+            <displayTime>00:00:00,23:59:00</displayTime>
+            </item>
+        <time><![CDATA[4月25日(土) 10：30～17：30　26日(日) 10：00～17：00]]></time>
+        <place><![CDATA[1F つどいのひろば]]></place>
+        <venues><![CDATA[]]></venues>
+        <pubStart>2026-04-14 00:00:00</pubStart>
+        <pubEnd>2026-04-26 23:59:00</pubEnd>
+        <status>1</status>
+        <statusWeb>1</statusWeb>
+        <statusList>1</statusList>
+        <statusSignage>1</statusSignage>
+        <updateDate>2026-04-14 13:49:01</updateDate>
         </item><item type="eventnews">
         <eventId>81a77f95-93be-409c-85e5-61f197469619</eventId>
         <title><![CDATA[ペーパーフラワーdeみんなで巨大アートを作ろう！～Mothe's Day ver.～]]></title>

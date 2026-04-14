@@ -1,23 +1,14 @@
-<data>
-  <updateDateAll>2019-08-24 23:15:22</updateDateAll>
-  <item type="floor">
-    <floorId>66ecb8af-87b2-4028-950d-3f4308ece5fc</floorId>
-    <floorName>GF</floorName>
-  </item>
-  <item type="floor">
-    <floorId>e67097cd-09ef-4866-a86b-20255f7f19a2</floorId>
-    <floorName>1F</floorName>
-  </item>
-  <item type="floor">
-    <floorId>25487a8b-b4b4-4071-a265-8abd81e34c83</floorId>
-    <floorName>2F</floorName>
-  </item>
-  <item type="floor">
-    <floorId>9621196a-6c53-4539-8ea4-52b2a2497092</floorId>
-    <floorName>3F</floorName>
-  </item>
-  <item type="floor">
-    <floorId>fe7121be-f5f4-4089-a826-625240c9320d</floorId>
-    <floorName>4F</floorName>
-  </item>
-</data>
+<?xml version="1.0" encoding="utf-8"?>
+    <data>
+    <updateDateAll>2026-02-04 09:46:59</updateDateAll>
+    <item type="floor">
+        <floorId>7004e012-bd6c-4831-aa2e-a2883f1983b8</floorId>
+        <floorName>2F</floorName>
+        </item><item type="floor">
+        <floorId>90f68285-c4e0-4308-a3bc-3ee2ac11bad4</floorId>
+        <floorName>3F</floorName>
+        </item><item type="floor">
+        <floorId>dcbd04ac-2337-4dd4-a242-50b2165462c2</floorId>
+        <floorName>1F</floorName>
+        </item>
+    </data>

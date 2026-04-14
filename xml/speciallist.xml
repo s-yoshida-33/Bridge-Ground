@@ -1,36 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<data>
-  <updateDateAll>2019-08-24 23:15:22</updateDateAll>
-  <item type="specialTitle">
-    <specialTitleId>6434da25-3e42-4469-bbb5-6b3e539c78d4</specialTitleId>
-    <specialTitle><![CDATA[夏の手土産＆ギフト特集]]></specialTitle>
-    <specialTitleStr><![CDATA[]]></specialTitleStr>
-    <specialTitleBody><![CDATA[]]></specialTitleBody>
-    <specialTitleImage><![CDATA[]]></specialTitleImage>
-    <statusWeb>1</statusWeb>
-    <statusSignage>1</statusSignage>
-    <item type="special">
-      <title><![CDATA[カフェカルディ ドリップコーヒーギフト 20個（4種各5個） 税込3,850円]]></title>
-      <subTitle><![CDATA[カフェカルディ ドリップコーヒーギフト 20個（4種各5個） 税込3,850円]]></subTitle>
-      <specialId>ff0c9498-e8ec-43ed-aa63-a20358f9f7ec</specialId>
-      <categoryId>79c9f97a-3b51-4796-80be-082d538bfbf0</categoryId>
-      <categoryName><![CDATA[]]></categoryName>
-      <specialImage><![CDATA[]]></specialImage>
-      <specialImage2><![CDATA[]]></specialImage2>
-      <specialImageThumbW1080><![CDATA[]]></specialImageThumbW1080>
-      <specialImage2ThumbW1080> <![CDATA[]]></specialImage2ThumbW1080>
-      <specialSubBody><![CDATA[ブルーマウンテンブレンド、ツッカーノブルボン、有機プレミアムブレンド、プレミアムモカブレンド 各5個のセットです]]></specialSubBody>
-      <shopId>ff0c9498-e8ec-43ed-aa63-a20358f9f7ec</shopId>
-      <shopName><![CDATA[カルディコーヒーファーム]]></shopName>
-      <genreMemo><![CDATA[コーヒー豆・輸入食品]]></genreMemo>
-      <shopLogo><![CDATA[/files/shop/26/shop_logo.png.png]]></shopLogo>
-      <shopFloorName><![CDATA[1F]]></shopFloorName>
-      <shopFloorsName><![CDATA[1F]]></shopFloorsName>
-      <venue><![CDATA[]]></venue>
-    </item>
-    <!-- ... 同様の <item type="special"> が複数並ぶ ... -->
-    <pubStart>2025-07-15 09:00:00</pubStart>
-    <pubEnd></pubEnd>
-    <updateDate>2019-08-24 23:15:22</updateDate>
-  </item>
-</data>
+    <data>
+    <updateDateAll></updateDateAll>
+    
+    </data>

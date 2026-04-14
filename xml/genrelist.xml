@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+    <data>
+    <updateDateAll>2026-01-26 17:17:40</updateDateAll>
+    <item type="shopgenre">
+        <genreId>05e5d85b-0710-4142-a40d-a6302672ed8e</genreId>
+        <genreName>ショップ</genreName>
+        </item><item type="shopgenre">
+        <genreId>2644b81a-34ce-4ef0-8a95-d038c0cceb0a</genreId>
+        <genreName>レストラン</genreName>
+        </item><item type="shopgenre">
+        <genreId>28b7906d-f95a-4796-8315-3ac7630c0f9a</genreId>
+        <genreName>サービス</genreName>
+        </item><item type="shopgenre">
+        <genreId>2965c294-9181-41d2-b78a-b0d326322e36</genreId>
+        <genreName>グッズ</genreName>
+        </item><item type="shopgenre">
+        <genreId>383527da-c107-4dc6-8dc7-8c2464d3bd28</genreId>
+        <genreName>スポーツ＆アウトドア</genreName>
+        </item><item type="shopgenre">
+        <genreId>5670038a-28fc-406a-baf6-593cead78937</genreId>
+        <genreName>クリニック</genreName>
+        </item><item type="shopgenre">
+        <genreId>7bd78386-66e8-4bb9-b759-8db6110b902d</genreId>
+        <genreName>ファッション</genreName>
+        </item><item type="shopgenre">
+        <genreId>8b08701e-bba3-4734-903d-30a0c17b7df8</genreId>
+        <genreName>スイーツ/その他</genreName>
+        </item><item type="shopgenre">
+        <genreId>abd52f19-2bfd-4b6e-b8b3-4a21749f2bdd</genreId>
+        <genreName>総合スーパー/その他</genreName>
+        </item><item type="shopgenre">
+        <genreId>b7fe5b8f-51f2-43ac-8ff1-5ebb2b212c96</genreId>
+        <genreName>カフェ</genreName>
+        </item><item type="shopgenre">
+        <genreId>c323367c-ffd6-4406-8099-7471bbb7381d</genreId>
+        <genreName>グルメ</genreName>
+        </item><item type="shopgenre">
+        <genreId>d691daaf-0f72-4ea6-af28-09b39e5a9e18</genreId>
+        <genreName>エンターテインメント</genreName>
+        </item><item type="shopgenre">
+        <genreId>db785bda-e659-4cb1-a7f3-514213379a2d</genreId>
+        <genreName>食料品</genreName>
+        </item><item type="shopgenre">
+        <genreId>f5942e27-6e7e-4843-9096-d794fc34cc10</genreId>
+        <genreName>フードコート</genreName>
+        </item>
+    </data>

@@ -359,6 +359,10 @@ func (m *Manager) InitializeSchema() error {
 		"ALTER TABLE specials ADD COLUMN pub_end TEXT",
 		"ALTER TABLE specials ADD COLUMN special_image_remote_url TEXT",
 		"ALTER TABLE specials ADD COLUMN special_image2_local_path TEXT",
+
+		// Sales: title-level image columns
+		"ALTER TABLE sales ADD COLUMN sale_title_image TEXT",
+		"ALTER TABLE sales ADD COLUMN sale_title_image_local_path TEXT",
 	}
 
 	for _, query := range migrations {

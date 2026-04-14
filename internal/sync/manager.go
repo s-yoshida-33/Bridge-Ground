@@ -1178,8 +1178,9 @@ func (m *Manager) syncSales() (int, error) {
 		sale_body, shop_id, shop_name, genre, genre_memo,
 		shop_logo, shop_logo_remote_url, shop_logo_local_path,
 		shop_floor_name, shop_floors_name, area, area_sub,
+		sale_title_image, sale_title_image_local_path,
 		pub_start, pub_end, update_date
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, err
 	}
@@ -1189,53 +1190,52 @@ func (m *Manager) syncSales() (int, error) {
 	var downloadJobs []DownloadJob
 
 	for _, parent := range resp.Items {
-		for _, item := range parent.Items {
-			if item.Type != "sale" {
-				continue
+		if parent.Type != "saleTitle" {
+			continue
+		}
+
+		// Use saleTitle as the record itself (no nested sale items in this API)
+		var item models.SaleItem
+		item.SaleID = strings.TrimSpace(parent.SaleTitleID)
+		item.SaleTitleID = parent.SaleTitleID
+		item.SaleTitle = repairMojibake(parent.SaleTitle)
+		item.SaleTitleImage = parent.SaleTitleImage
+		item.PubStart = parent.PubStart
+		item.PubEnd = parent.PubEnd
+		item.UpdateDate = parent.UpdateDate
+
+		if item.SaleID == "" {
+			continue
+		}
+
+		existingItem, exists := existingSales[item.SaleID]
+		needsUpdate := true
+		if exists {
+			if salesEqual(item, existingItem) {
+				needsUpdate = false
+			}
+			delete(existingSales, item.SaleID)
+		}
+
+		if needsUpdate {
+			updateCount++
+
+			if item.SaleTitleImage != "" {
+				item.SaleTitleImageLocalPath = m.resolveLocalPath(baseFileDir, item.SaleTitleImage)
+				downloadJobs = append(downloadJobs, DownloadJob{m.resolveURL(item.SaleTitleImage), item.SaleTitleImageLocalPath})
 			}
 
-			item.SaleTitleID = parent.SaleTitleID
-			item.SaleTitle = parent.SaleTitle
-			item.PubStart = parent.PubStart
-			item.PubEnd = parent.PubEnd
-			item.UpdateDate = parent.UpdateDate
-			item.SaleID = strings.TrimSpace(item.SaleID)
-
-			item.SaleTitle = repairMojibake(item.SaleTitle)
-			item.SaleBody = repairMojibake(item.SaleBody)
-			item.ShopName = repairMojibake(item.ShopName)
-			item.Genre = repairMojibake(item.Genre)
-			item.GenreMemo = repairMojibake(item.GenreMemo)
-
-			existingItem, exists := existingSales[item.SaleID]
-			needsUpdate := true
-			if exists {
-				if salesEqual(item, existingItem) {
-					needsUpdate = false
-				}
-				delete(existingSales, item.SaleID)
-			}
-
-			if needsUpdate {
-				updateCount++
-
-				if item.ShopLogo != "" {
-					item.ShopLogoRemoteURL = m.resolveURL(item.ShopLogo)
-					item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
-					downloadJobs = append(downloadJobs, DownloadJob{item.ShopLogoRemoteURL, item.ShopLogoLocalPath})
-				}
-
-				if _, err := stmt.Exec(
-					item.SaleID, item.SaleTitleID, item.SaleTitle,
-					item.SaleBody, item.ShopID, item.ShopName, item.Genre, item.GenreMemo,
-					item.ShopLogo, item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
-					item.ShopFloorName, item.ShopFloorsName, item.Area, item.AreaSub,
-					item.PubStart, item.PubEnd, item.UpdateDate,
-				); err != nil {
-					tx.Rollback()
-					fmt.Printf("ERROR: Failed to insert sale %s: %v\n", item.SaleID, err)
-					return 0, fmt.Errorf("insert sale failed: %w", err)
-				}
+			if _, err := stmt.Exec(
+				item.SaleID, item.SaleTitleID, item.SaleTitle,
+				item.SaleBody, item.ShopID, item.ShopName, item.Genre, item.GenreMemo,
+				item.ShopLogo, item.ShopLogoRemoteURL, item.ShopLogoLocalPath,
+				item.ShopFloorName, item.ShopFloorsName, item.Area, item.AreaSub,
+				item.SaleTitleImage, item.SaleTitleImageLocalPath,
+				item.PubStart, item.PubEnd, item.UpdateDate,
+			); err != nil {
+				tx.Rollback()
+				fmt.Printf("ERROR: Failed to insert sale %s: %v\n", item.SaleID, err)
+				return 0, fmt.Errorf("insert sale failed: %w", err)
 			}
 		}
 	}
@@ -2058,10 +2058,11 @@ func specialsEqual(a, b models.SpecialItem) bool {
 func (m *Manager) loadAllSales() (map[string]models.SaleItem, error) {
 	query := `SELECT
 		sale_id, COALESCE(sale_title_id,''), COALESCE(sale_title,''),
-		COALESCE(sale_body,''), shop_id, shop_name,
+		COALESCE(sale_body,''), COALESCE(shop_id,''), COALESCE(shop_name,''),
 		COALESCE(genre,''), COALESCE(genre_memo,''),
 		COALESCE(shop_floor_name,''), COALESCE(shop_floors_name,''),
 		COALESCE(area,''), COALESCE(area_sub,''),
+		COALESCE(sale_title_image,''), COALESCE(sale_title_image_local_path,''),
 		COALESCE(pub_start,''), COALESCE(pub_end,''), update_date
 		FROM sales`
 
@@ -2080,6 +2081,7 @@ func (m *Manager) loadAllSales() (map[string]models.SaleItem, error) {
 			genre, genreMemo,
 			shopFloorName, shopFloorsName,
 			area, areaSub,
+			saleTitleImage, saleTitleImageLocalPath,
 			pubStart, pubEnd, updateDate *string
 		)
 
@@ -2089,6 +2091,7 @@ func (m *Manager) loadAllSales() (map[string]models.SaleItem, error) {
 			&genre, &genreMemo,
 			&shopFloorName, &shopFloorsName,
 			&area, &areaSub,
+			&saleTitleImage, &saleTitleImageLocalPath,
 			&pubStart, &pubEnd, &updateDate,
 		); err != nil {
 			continue
@@ -2113,6 +2116,8 @@ func (m *Manager) loadAllSales() (map[string]models.SaleItem, error) {
 		item.ShopFloorsName = s(shopFloorsName)
 		item.Area = s(area)
 		item.AreaSub = s(areaSub)
+		item.SaleTitleImage = s(saleTitleImage)
+		item.SaleTitleImageLocalPath = s(saleTitleImageLocalPath)
 		item.PubStart = s(pubStart)
 		item.PubEnd = s(pubEnd)
 		item.UpdateDate = s(updateDate)
@@ -2126,6 +2131,7 @@ func salesEqual(a, b models.SaleItem) bool {
 	return a.SaleID == b.SaleID &&
 		a.SaleTitleID == b.SaleTitleID &&
 		a.SaleTitle == b.SaleTitle &&
+		a.SaleTitleImage == b.SaleTitleImage &&
 		a.SaleBody == b.SaleBody &&
 		a.ShopID == b.ShopID &&
 		a.ShopName == b.ShopName &&

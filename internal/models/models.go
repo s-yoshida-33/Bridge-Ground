@@ -239,6 +239,10 @@ type SaleItem struct {
 	ShopLogo          string `xml:"shopLogo" db:"shop_logo" json:"shopLogo"`
 	ShopLogoLocalPath string `db:"shop_logo_local_path" json:"shopLogoLocalPath"`
 
+	// Title-level image (saleTitleImage from saleTitle items)
+	SaleTitleImage          string `db:"sale_title_image" json:"saleTitleImage"`
+	SaleTitleImageLocalPath string `db:"sale_title_image_local_path" json:"saleTitleImageLocalPath"`
+
 	// Promoted from parent SaleTitleItem
 	SaleTitleID   string `db:"sale_title_id" json:"saleTitleId"`
 	SaleTitle     string `db:"sale_title" json:"saleTitle"`

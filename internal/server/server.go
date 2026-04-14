@@ -551,11 +551,12 @@ func (s *Server) FetchSales() ([]models.SaleItem, error) {
 
 	query := `SELECT
 		sale_id, COALESCE(sale_title_id,''), COALESCE(sale_title,''),
-		COALESCE(sale_body,''), shop_id, shop_name,
+		COALESCE(sale_body,''), COALESCE(shop_id,''), COALESCE(shop_name,''),
 		COALESCE(genre,''), COALESCE(genre_memo,''),
 		COALESCE(shop_logo,''), COALESCE(shop_logo_local_path,''),
 		COALESCE(shop_floor_name,''), COALESCE(shop_floors_name,''),
 		COALESCE(area,''), COALESCE(area_sub,''),
+		COALESCE(sale_title_image,''), COALESCE(sale_title_image_local_path,''),
 		COALESCE(pub_start,''), COALESCE(pub_end,''), update_date
 		FROM sales`
 
@@ -576,6 +577,7 @@ func (s *Server) FetchSales() ([]models.SaleItem, error) {
 			shopLogo, shopLogoLocalPath,
 			shopFloorName, shopFloorsName,
 			area, areaSub,
+			saleTitleImage, saleTitleImageLocalPath,
 			pubStart, pubEnd, updateDate *string
 		)
 
@@ -586,6 +588,7 @@ func (s *Server) FetchSales() ([]models.SaleItem, error) {
 			&shopLogo, &shopLogoLocalPath,
 			&shopFloorName, &shopFloorsName,
 			&area, &areaSub,
+			&saleTitleImage, &saleTitleImageLocalPath,
 			&pubStart, &pubEnd, &updateDate,
 		); err != nil {
 			fmt.Printf("Scan error: %v\n", err)
@@ -613,6 +616,8 @@ func (s *Server) FetchSales() ([]models.SaleItem, error) {
 		item.ShopFloorsName = sv(shopFloorsName)
 		item.Area = sv(area)
 		item.AreaSub = sv(areaSub)
+		item.SaleTitleImage = sv(saleTitleImage)
+		item.SaleTitleImageLocalPath = sv(saleTitleImageLocalPath)
 		item.PubStart = sv(pubStart)
 		item.PubEnd = sv(pubEnd)
 		item.UpdateDate = sv(updateDate)

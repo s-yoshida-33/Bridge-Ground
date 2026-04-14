@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data>
+  <updateDateAll>2019-08-24 23:15:22</updateDateAll>
+  <item type="saleTitle">
+    <saleTitleId>049ab8ea-d018-49b9-84c5-ebdd084409d1</saleTitleId>
+    <saleTitle><![CDATA[お客さま感謝デー]]></saleTitle>
+    <saleTitleStr><![CDATA[]]></saleTitleStr>
+    <saleTitleImage><![CDATA[/files/shop_option/9/photo.png]]></saleTitleImage>
+    <statusWeb>1</statusWeb>
+    <statusSignage>1</statusSignage>
+    <item type="sale">
+      <saleId>5559446d-6a60-4698-966c-26c295d74f0e</saleId>
+      <saleBody><![CDATA[平常価格より5％OFF]]></saleBody>
+      <shopId>52af8736-36b2-4020-ab17-00e2e776ea91</shopId>
+      <shopName><![CDATA[ASBEE]]></shopName>
+      <genre><![CDATA[ファッション]]></genre>
+      <genreMemo><![CDATA[]]></genreMemo>
+      <shopLogo><![CDATA[/files/shop/61/shop_logo.png]]></shopLogo>
+      <shopFloorName><![CDATA[2F]]></shopFloorName>
+      <shopFloorsName><![CDATA[2F]]></shopFloorsName>
+      <area><![CDATA[]]></area>
+      <areaSub><![CDATA[]]></areaSub>
+    </item>
+    <!-- ... 同様の <item type="sale"> が複数並ぶ ... -->
+    <pubStart>2019-08-24 23:15:22</pubStart>
+    <pubEnd></pubEnd>
+    <updateDate>2019-08-24 23:15:22</updateDate>
+  </item>
+  <item type="saleTitle">
+    <!-- 同構造 -->
+  </item>
+</data>

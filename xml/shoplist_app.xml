@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data>
+  <updateDateAll>2019-08-24 23:15:22</updateDateAll>
+  <areasName><![CDATA[森のキッチンコート(フードコート), レストラン街, グランマルシェ, カフェ&フード]]></areasName>
+  <areasNamesStr><![CDATA[Forest Kitchen Court (food court), Restaurant Street, Grand Marché, Cafe & Food]]></areasNamesStr>
+  <genresName><![CDATA[ショップ, ファッション, グッズ, …]]></genresName>
+  <genresNameStr><![CDATA[shop, fashion, goods, …]]></genresNameStr>
+  <floorsName><![CDATA[GF, 1F, 2F, 3F, 4F]]></floorsName>
+  <floorsNameStr><![CDATA[GF, 1F, 2F, 3F, 4F]]></floorsNameStr>
+  <optionsName><![CDATA[WAON POINT, AEON Pay, …]]></optionsName>
+  <optionsNameStr><![CDATA[WAON POINT, AEON Pay, …]]></optionsNameStr>
+  <item type="shop">
+    <shopId>497f6eca-6276-4993-bfeb-53cbbbba6f08</shopId>
+    <shopName><![CDATA[STARBUCKS COFFEE]]></shopName>
+    <shopNameKana><![CDATA[STARBUCKS COFFEE]]></shopNameKana>
+    <shopNameEnglish><![CDATA[]]></shopNameEnglish>
+    <shopNameChinaCN><![CDATA[]]></shopNameChinaCN>
+    <shopNameChinaTW><![CDATA[]]></shopNameChinaTW>
+    <shopNameKorea><![CDATA[]]></shopNameKorea>
+    <shopNameFrance><![CDATA[]]></shopNameFrance>
+    <shopNameVietnam><![CDATA[]]></shopNameVietnam>
+    <shopNameThai><![CDATA[]]></shopNameThai>
+    <abbr><![CDATA[]]></abbr>
+    <webStatus>1</webStatus>
+    <mailMagStatus>0</mailMagStatus>
+    <searches><![CDATA[]]></searches>
+    <genre><![CDATA[グルメ]]></genre>
+    <genreSort>0</genreSort>
+    <genrePhoto1><![CDATA[]]></genrePhoto1>
+    <genrePhoto1WH360x240><![CDATA[]]></genrePhoto1WH360x240>
+    <genrePhoto1WH240x160><![CDATA[]]></genrePhoto1WH240x160>
+    <genrePhoto1S><![CDATA[]]></genrePhoto1S>
+    <genrePhoto1M><![CDATA[]]></genrePhoto1M>
+    <genrePhoto1Thumb><![CDATA[]]></genrePhoto1Thumb>
+    <genrePhoto1Thumb150x150><![CDATA[]]></genrePhoto1Thumb150x150>
+    <genrePhoto1Thumb640x640><![CDATA[]]></genrePhoto1Thumb640x640>
+    <genrePhoto1ThumbW320><![CDATA[]]></genrePhoto1ThumbW320>
+    <genrePhoto1ThumbW640><![CDATA[]]></genrePhoto1ThumbW640>
+    <genreUpdate>2019-08-24 23:15:22</genreUpdate>
+    <genreSubs>
+      <item type="genreSub">
+        <genreSubId>fd9ef4a1-3f64-4563-9835-ae1bec62c494</genreSubId>
+        <genreSubName><![CDATA[カフェ]]></genreSubName>
+        <genreSubNameEng><![CDATA[]]></genreSubNameEng>
+        <genreSubSort></genreSubSort>
+        <genreSubPhoto1><![CDATA[]]></genreSubPhoto1>
+        <genreSubPhoto1WH360x240><![CDATA[]]></genreSubPhoto1WH360x240>
+        <genreSubPhoto1WH240x160><![CDATA[]]></genreSubPhoto1WH240x160>
+        <genreSubPhoto1S><![CDATA[]]></genreSubPhoto1S>
+        <genreSubPhoto1M><![CDATA[]]></genreSubPhoto1M>
+        <genreSubPhoto1Thumb><![CDATA[]]></genreSubPhoto1Thumb>
+        <genreSubPhoto1Thumb150x150><![CDATA[]]></genreSubPhoto1Thumb150x150>
+        <genreSubPhoto1Thumb640x640><![CDATA[]]></genreSubPhoto1Thumb640x640>
+        <genreSubPhoto1ThumbW320><![CDATA[]]></genreSubPhoto1ThumbW320>
+        <genreSubPhoto1ThumbW640><![CDATA[]]></genreSubPhoto1ThumbW640>
+        <genreSubUpdate></genreSubUpdate>
+      </item>
+    </genreSubs>
+    <genreMemo><![CDATA[スペシャリティ コーヒーストア]]></genreMemo>
+    <genreMemoEnglish><![CDATA[]]></genreMemoEnglish>
+    <genreMemoChinaCN><![CDATA[]]></genreMemoChinaCN>
+    <genreMemoChinaTW><![CDATA[]]></genreMemoChinaTW>
+    <genreMemoKorea><![CDATA[]]></genreMemoKorea>
+    <genreMemoFrance><![CDATA[]]></genreMemoFrance>
+    <genreMemoVietnam><![CDATA[]]></genreMemoVietnam>
+    <genreMemoThai><![CDATA[]]></genreMemoThai>
+    <groupId><![CDATA[]]></groupId>
+    <tenantCode><![CDATA[]]></tenantCode>
+    <tel><![CDATA[042-582-6481]]></tel>
+    <userUrl><![CDATA[]]></userUrl>
+    <userUrlSm><![CDATA[]]></userUrlSm>
+    <userUrlMb><![CDATA[]]></userUrlMb>
+    <floor><![CDATA[2F]]></floor>
+    <floors><![CDATA[2F]]></floors>
+    <area><![CDATA[カフェ&フード]]></area>
+    <areaSort></areaSort>
+    <areaColor><![CDATA[]]></areaColor>
+    <areaLogo><![CDATA[]]></areaLogo>
+    <areaIcon><![CDATA[]]></areaIcon>
+    <areaUpdate></areaUpdate>
+    <areaSub><![CDATA[]]></areaSub>
+    <areaSubSort></areaSubSort>
+    <areaSubColor><![CDATA[]]></areaSubColor>
+    <areaSubLogo><![CDATA[]]></areaSubLogo>
+    <areaSubIcon><![CDATA[]]></areaSubIcon>
+    <areaeSubUpdate></areaeSubUpdate>
+    <areaSubSub><![CDATA[]]></areaSubSub>
+    <areaSubSubSort></areaSubSubSort>
+    <areaSubSubColor><![CDATA[]]></areaSubSubColor>
+    <areaSubSubLogo><![CDATA[]]></areaSubSubLogo>
+    <areaSubSubIcon><![CDATA[]]></areaSubSubIcon>
+    <areaeSubSubUpdate></areaeSubSubUpdate>
+    <number><![CDATA[2003]]></number>
+    <openYear><![CDATA[]]></openYear>
+    <openMonth><![CDATA[]]></openMonth>
+    <closeFlg>0</closeFlg>
+    <pubStart>2019-08-24 23:15:22</pubStart>
+    <pubEnd></pubEnd>
+    <restaurantavailability></restaurantavailability>
+    <openDay><![CDATA[]]></openDay>
+    <openTime><![CDATA[10:00～21:00]]></openTime>
+    <description><![CDATA[バラエティ豊かなエスプレッソドリンクをお楽しみいただけます。]]></description>
+    <photo1><![CDATA[https://test-aeonmall.com/files/shop/152/photo1]]></photo1>
+    <photo1WH360x240><![CDATA[https://test-aeonmall.com/files/shop/152/photo1?width=360&height=240&fit=bounds]]></photo1WH360x240>
+    <photo1WH240x160><![CDATA[https://test-aeonmall.com/files/shop/152/photo1?width=240&height=160&fit=bounds]]></photo1WH240x160>
+    <photo1Thumb><![CDATA[https://test-aeonmall.com/files/shop/152/photo1?width=320&height=320&fit=bounds]]></photo1Thumb>
+    <photo1Thumb150x150><![CDATA[https://test-aeonmall.com/files/shop/152/photo1?width=150&height=150&fit=bounds]]></photo1Thumb150x150>
+    <photo1Thumb640x640><![CDATA[https://test-aeonmall.com/files/shop/152/photo1?width=640&height=640&fit=bounds]]></photo1Thumb640x640>
+    <photo1ThumbW320><![CDATA[https://test-aeonmall.com/files/shop/152/photo1?width=320]]></photo1ThumbW320>
+    <photo1ThumbW480><![CDATA[https://test-aeonmall.com/files/shop/152/photo1?width=480]]></photo1ThumbW480>
+    <photo1ThumbW640><![CDATA[https://test-aeonmall.com/files/shop/152/photo1?width=640]]></photo1ThumbW640>
+    <photo2><![CDATA[https://test-aeonmall.com/files/shop/152/photo2]]></photo2>
+    <photo2WH360x240><![CDATA[https://test-aeonmall.com/files/shop/152/photo2?width=360&height=240&fit=bounds]]></photo2WH360x240>
+    <photo2WH240x160><![CDATA[https://test-aeonmall.com/files/shop/152/photo2?width=240&height=160&fit=bounds]]></photo2WH240x160>
+    <photo2Thumb><![CDATA[https://test-aeonmall.com/files/shop/152/photo2?width=320&height=320&fit=bounds]]></photo2Thumb>
+    <photo2Thumb150x150><![CDATA[https://test-aeonmall.com/files/shop/152/photo2?width=150&height=150&fit=bounds]]></photo2Thumb150x150>
+    <photo2Thumb640x640><![CDATA[https://test-aeonmall.com/files/shop/152/photo2?width=320]]></photo2Thumb640x640>
+    <photo2ThumbW320><![CDATA[https://test-aeonmall.com/files/shop/152/photo2?width=320]]></photo2ThumbW320>
+    <photo2ThumbW480><![CDATA[https://test-aeonmall.com/files/shop/152/photo2?width=480]]></photo2ThumbW480>
+    <photo2ThumbW640><![CDATA[https://test-aeonmall.com/files/shop/152/photo2?width=640]]></photo2ThumbW640>
+    <shopLogo><![CDATA[https://test-aeonmall.com/files/shop/152/shop_logo.png]]></shopLogo>
+    <shopLogoWH230x80><![CDATA[https://test-aeonmall.com/files/shop/152/shop_logo.png?width=230&height=80&fit=bounds]]></shopLogoWH230x80>
+    <shopLogoWH100x50><![CDATA[https://test-aeonmall.com/files/shop/152/shop_logo.png?width=100&height=50&fit=bounds]]></shopLogoWH100x50>
+    <shopLogoThumb><![CDATA[https://test-aeonmall.com/files/shop/152/shop_logo.png?width=320&height=320&fit=bounds]]></shopLogoThumb>
+    <shopLogoThumb150x150><![CDATA[https://test-aeonmall.com/files/shop/152/shop_logo.png?width=150&height=150&fit=bounds]]></shopLogoThumb150x150>
+    <shopLogoThumb640x640><![CDATA[https://test-aeonmall.com/files/shop/152/shop_logo.png?width=640&height=640&fit=bounds]]></shopLogoThumb640x640>
+    <shopLogoThumbW320><![CDATA[https://test-aeonmall.com/files/shop/152/shop_logo.png?width=320]]></shopLogoThumbW320>
+    <shopLogoThumbW480><![CDATA[https://test-aeonmall.com/files/shop/152/shop_logo.png?width=480]]></shopLogoThumbW480>
+    <shopLogoThumbW640><![CDATA[https://test-aeonmall.com/files/shop/152/shop_logo.png?width=640]]></shopLogoThumbW640>
+    <privilege><![CDATA[]]></privilege>
+    <privilegeWH230x230><![CDATA[]]></privilegeWH230x230>
+    <privilegeWH100x100><![CDATA[]]></privilegeWH100x100>
+    <privilegeThumb><![CDATA[]]></privilegeThumb>
+    <privilegeThumb150x150><![CDATA[]]></privilegeThumb150x150>
+    <privilegeThumb640x640><![CDATA[]]></privilegeThumb640x640>
+    <privilegeThumbW320><![CDATA[]]></privilegeThumbW320>
+    <privilegeThumbW480><![CDATA[]]></privilegeThumbW480>
+    <privilegeThumbW640><![CDATA[]]></privilegeThumbW640>
+    <privilegeDescription><![CDATA[]]></privilegeDescription>
+    <qr><![CDATA[]]></qr>
+    <youtubeIframe><![CDATA[]]></youtubeIframe>
+    <youtubeIframeSp><![CDATA[]]></youtubeIframeSp>
+    <mapIframe><![CDATA[]]></mapIframe>
+    <isEatingPlace></isEatingPlace>
+    <foodClass><![CDATA[]]></foodClass>
+    <seats><![CDATA[]]></seats>
+    <smoking>0</smoking>
+    <reservation>0</reservation>
+    <lunchMenu>0</lunchMenu>
+    <dinnerMenu>0</dinnerMenu>
+    <takeOut>0</takeOut>
+    <childrensMenu>0</childrensMenu>
+    <subDescription><![CDATA[]]></subDescription>
+    <alcohol>0</alcohol>
+    <pet>0</pet>
+    <petDescription><![CDATA[]]></petDescription>
+    <brand><![CDATA[]]></brand>
+    <sort>0</sort>
+    <rankingSort></rankingSort>
+    <shufooOnline><![CDATA[]]></shufooOnline>
+    <options>
+      <item type="option">
+        <optionId>f8975532-30ea-459c-abd2-bfb9466208cc</optionId>
+        <optionName><![CDATA[キッズ関連]]></optionName>
+        <optionNameStr><![CDATA[]]></optionNameStr>
+        <optionSort>0</optionSort>
+        <optionLogo><![CDATA[]]></optionLogo>
+        <optionStatus>0</optionStatus>
+        <optionUpdate>2019-08-24 23:15:22</optionUpdate>
+      </item>
+      <item type="option">
+        <optionId>1015c400-806f-4bfe-a7a4-23218f76ad10</optionId>
+        <optionName><![CDATA[WAON POINT]]></optionName>
+        <optionNameStr><![CDATA[]]></optionNameStr>
+        <optionSort>0</optionSort>
+        <optionLogo><![CDATA[https://test-aeonmall.com/files/shop_option/3/logo.png]]></optionLogo>
+        <optionStatus>0</optionStatus>
+        <optionUpdate>2019-08-24 23:15:22</optionUpdate>
+      </item>
+      <item type="option">
+        <optionId>f9cba515-9f6e-4c0a-8a0e-5a4b81abf316</optionId>
+        <optionName><![CDATA[PayPay]]></optionName>
+        <optionNameStr><![CDATA[]]></optionNameStr>
+        <optionSort>0</optionSort>
+        <optionLogo><![CDATA[https://test-aeonmall.com/files/shop_option/10/logo.png]]></optionLogo>
+        <optionStatus>0</optionStatus>
+        <optionUpdate>2019-08-24 23:15:22</optionUpdate>
+      </item>
+      <item type="option">
+        <optionId>490e23c17-db40-45c0-841a-12ea92ffe46b</optionId>
+        <optionName><![CDATA[電子マネーWAON]]></optionName>
+        <optionNameStr></optionNameStr>
+        <optionSort>0</optionSort>
+        <optionLogo><![CDATA[https://test-aeonmall.com/files/shop_option/4/logo.png]]></optionLogo>
+        <optionStatus>0</optionStatus>
+        <optionUpdate>2019-08-24 23:15:22</optionUpdate>
+      </item>
+      <item type="option">
+        <optionId>86fdf955-9fb9-41b7-8aaa-f51953783e71</optionId>
+        <optionName><![CDATA[TAXFREE]]></optionName>
+        <optionNameStr><![CDATA[]]></optionNameStr>
+        <optionSort>0</optionSort>
+        <optionLogo><![CDATA[https://test-aeonmall.com/files/shop_option/14/logo.png]]></optionLogo>
+        <optionStatus>0</optionStatus>
+        <optionUpdate>2019-08-24 23:15:22</optionUpdate>
+      </item>
+    </options>
+    <updateDate>2019-08-24 23:15:22</updateDate>
+  </item>
+</data>

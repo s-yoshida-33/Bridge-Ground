@@ -1,12 +1,12 @@
 {
   "apiSettings": {
-    "baseUrl": "https://sakaikitahanada-aeonmall.com/api",
+    "baseUrl": "",
     "apiKey": "",
-    "username": "sakaikitahanada-api",
-    "password": "zc7xuw"
+    "username": "",
+    "password": ""
   },
   "syncSettings": {
-    "syncIntervalMinutes": 10,
+    "syncIntervalMinutes": 60,
     "syncOnStartup": false,
     "autoSyncEnabled": true,
     "syncTargets": {

@@ -5,6 +5,7 @@ package main
 import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
+	"bridge-ground/internal/logging"
 	"bridge-ground/internal/server"
 	appSync "bridge-ground/internal/sync"
 	"encoding/json"
@@ -30,21 +31,33 @@ var (
 )
 
 func main() {
-	fmt.Printf("Starting BridgeGround v%s (Golang with Lorca)...\n", config.Version)
+	// Initialize file logging before anything else.
+	// Redirects Go's standard logger (log.Printf etc.) to both stderr and the log file.
+	logging.CleanupOldLogs(30)
+	if err := logging.Init(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
+	}
+	defer logging.Close()
+
+	logging.Info("SYSTEM", fmt.Sprintf("Starting BridgeGround v%s", config.Version))
 
 	// 1. Load Config
 	var err error
 	globalCfg, err = config.LoadConfig()
 	if err != nil {
-		fmt.Printf("Failed to load config: %v. Using defaults.\n", err)
+		logging.Warn("CONFIG", fmt.Sprintf("Failed to load config: %v — using defaults", err))
+	} else {
+		logging.Info("CONFIG", "Config loaded successfully")
 	}
 
 	// 2. Initialize Managers
 	dbMgr = db.NewManager()
 	if err := dbMgr.Connect(); err != nil {
+		logging.Fatal("DB", fmt.Sprintf("Failed to connect to database: %v", err))
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer dbMgr.Close()
+	logging.Info("DB", "Database connected")
 
 	syncMgr = appSync.NewManager(globalCfg, dbMgr)
 
@@ -53,6 +66,7 @@ func main() {
 	go func() {
 		srv.Start()
 	}()
+	logging.Info("SERVER", fmt.Sprintf("HTTP server starting on port %d", globalCfg.ServerSettings.Port))
 
 	// 4. Setup Progress Callback (Thread-safe)
 	syncMgr.SetProgressCallback(func(p appSync.SyncProgress) {
@@ -83,20 +97,18 @@ func main() {
 		case "genres":
 			data, err = srv.FetchGenres()
 		default:
-			log.Printf("Unknown data type updated: %s", dataType)
+			logging.Warn("SSE", fmt.Sprintf("Unknown data type updated: %s", dataType))
 			return
 		}
 
 		if err != nil {
-			log.Printf("Failed to fetch updated data for %s: %v", dataType, err)
+			logging.Error("SSE", fmt.Sprintf("Failed to fetch updated data for %s: %v", dataType, err))
 			return
 		}
 
-		// イベント名をデータタイプそのものにする（例: "shops", "shop_news"）
-		// これまでは全て "update" イベントとして送信していたが、
-		// クライアント側で addEventListener("shops", ...) のように個別に待ち受けられるようにする。
+		logging.Info("SSE", fmt.Sprintf("Broadcasting %s update to SSE clients", dataType))
 		srv.BroadcastEvent(dataType, map[string]interface{}{
-			"type":      dataType, // 互換性のためペイロード内にもtypeを残しておく
+			"type":      dataType,
 			"timestamp": time.Now().Format(time.RFC3339),
 			"data":      data,
 		})
@@ -107,14 +119,17 @@ func main() {
 		go func() {
 			// Delay slightly to let server start
 			time.Sleep(3 * time.Second)
+			logging.Info("SYNC", "Starting startup sync")
 			syncMgr.StartSync()
 		}()
 	}
 
 	if globalCfg.SyncSettings.AutoSyncEnabled {
+		logging.Info("SYNC", fmt.Sprintf("Auto-sync enabled, interval: %d minutes", globalCfg.SyncSettings.SyncIntervalMinutes))
 		go func() {
 			ticker := time.NewTicker(time.Duration(globalCfg.SyncSettings.SyncIntervalMinutes) * time.Minute)
 			for range ticker.C {
+				logging.Info("SYNC", "Starting scheduled sync")
 				syncMgr.StartSync()
 			}
 		}()
@@ -126,19 +141,7 @@ func main() {
 }
 
 func onReady() {
-	// Try to load icon
-	// Look for icon in standard locations
 	iconPath := "src/assets/icon.ico"
-	if _, err := os.Stat(iconPath); os.IsNotExist(err) {
-		// Try finding it relative to executable if not in current dir
-		if exePath, err := os.Executable(); err == nil {
-			// Assume standard deployment structure: root/Bridge Ground.exe, root/src/assets/...
-			// Or root/bin/exe, root/src...
-			// Let's try simple relative path first
-			_ = exePath // Prevent unused variable error
-		}
-	}
-
 	iconData, err := os.ReadFile(iconPath)
 	if err == nil {
 		systray.SetIcon(iconData)
@@ -158,6 +161,7 @@ func onReady() {
 			case <-mOpen.ClickedCh:
 				openUI()
 			case <-mQuit.ClickedCh:
+				logging.Info("SYSTEM", "Quit requested via system tray")
 				systray.Quit()
 			}
 		}
@@ -170,6 +174,7 @@ func onReady() {
 }
 
 func onExit() {
+	logging.Info("SYSTEM", "BridgeGround shutting down")
 	uiMutex.Lock()
 	if ui != nil {
 		ui.Close()
@@ -186,12 +191,10 @@ func openUI() {
 		return
 	}
 
-	// Create UI Window
 	var err error
-	// Use --remote-allow-origins=* to fix connection issue with newer Chrome versions
 	newUI, err := lorca.New("data:text/html,<h1>Loading BridgeGround...</h1>", "", 1000, 800, "--remote-allow-origins=*")
 	if err != nil {
-		log.Println("Failed to start Lorca (Chrome/Edge not found?):", err)
+		logging.Error("UI", fmt.Sprintf("Failed to start Lorca (Chrome/Edge not found?): %v", err))
 		return
 	}
 
@@ -208,24 +211,22 @@ func openUI() {
 		if err := config.SaveConfig(&newCfg); err != nil {
 			return err
 		}
-
-		// Update startup settings
 		if err := updateStartupRegistry(newCfg.SystemSettings.RunOnStartup); err != nil {
-			fmt.Printf("Failed to update startup registry: %v\n", err)
+			logging.Warn("CONFIG", fmt.Sprintf("Failed to update startup registry: %v", err))
 		}
-
 		*globalCfg = newCfg
+		logging.Info("CONFIG", "Config saved")
 		return nil
 	})
 
 	newUI.Bind("go_startManualSync", func() map[string]interface{} {
+		logging.Info("SYNC", "Manual sync started via UI")
 		_, err := syncMgr.StartSync()
 		if err != nil {
+			logging.Error("SYNC", fmt.Sprintf("Manual sync failed: %v", err))
 			return map[string]interface{}{"success": false, "message": err.Error()}
 		}
-
-		// Updates are broadcasted via callback in StartSync
-
+		logging.Info("SYNC", "Manual sync completed")
 		return map[string]interface{}{"success": true}
 	})
 
@@ -238,12 +239,12 @@ func openUI() {
 	port := globalCfg.ServerSettings.Port
 	url := fmt.Sprintf("http://localhost:%d/index.html", port)
 
-	// Wait for server to start before loading UI
 	if !waitForServer(url, 10*time.Second) {
-		log.Printf("Warning: Server did not respond within timeout at %s", url)
+		logging.Warn("SERVER", fmt.Sprintf("Server did not respond within timeout at %s", url))
 	}
 
 	newUI.Load(url)
+	logging.Info("UI", fmt.Sprintf("UI window opened: %s", url))
 
 	ui = newUI
 
@@ -255,7 +256,7 @@ func openUI() {
 			ui = nil
 		}
 		uiMutex.Unlock()
-		// Do NOT call systray.Quit() here, as we want to keep running in background
+		logging.Info("UI", "UI window closed")
 	}(newUI)
 }
 

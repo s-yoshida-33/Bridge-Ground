@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+    <data>
+    <updateDateAll>2026-02-04 09:46:59</updateDateAll>
+    <item type="floor">
+        <floorId>7004e012-bd6c-4831-aa2e-a2883f1983b8</floorId>
+        <floorName>2F</floorName>
+        </item><item type="floor">
+        <floorId>90f68285-c4e0-4308-a3bc-3ee2ac11bad4</floorId>
+        <floorName>3F</floorName>
+        </item><item type="floor">
+        <floorId>dcbd04ac-2337-4dd4-a242-50b2165462c2</floorId>
+        <floorName>1F</floorName>
+        </item>
+    </data>

@@ -31,8 +31,9 @@ func (s *Server) Start() {
 	mux.HandleFunc("/api/shop-news", s.handleShopNewsList)
 	mux.HandleFunc("/api/event-news", s.handleEventNewsList)
 	mux.HandleFunc("/api/specials", s.handleSpecialList)
-	mux.HandleFunc("/api/sales", s.handleSpecialList) // Sales maps to specials
+	mux.HandleFunc("/api/sales", s.handleSaleList)
 	mux.HandleFunc("/api/genres", s.handleGenreList)
+	mux.HandleFunc("/api/floors", s.createListEndpoint("floors", "SELECT floor_id, floor_name, sort_order FROM floors"))
 
 	// SSE Endpoint
 	mux.Handle("/api/events", s.Broker)
@@ -75,16 +76,30 @@ func (s *Server) FetchShopList() ([]models.ShopItem, error) {
 		return nil, fmt.Errorf("database not connected")
 	}
 
-	query := `SELECT 
-		shop_id, shop_name, shop_name_kana, shop_name_english, searches,
-		genre, genre_sub, genre_sub_english, genre_memo, genre_memo_english,
-		group_id, tel, floors, area, area_sub, number, close_flg,
-		open_time, description, photo1, photo2, shop_logo, update_date,
-		photo1_local_path, photo2_local_path, shop_logo_local_path,
-		photo1_thumb_w640, photo1_thumb_w640_local_path, 
+	query := `SELECT
+		shop_id, shop_name, shop_name_kana, shop_name_english,
+		COALESCE(shop_name_china_cn,''), COALESCE(shop_name_china_tw,''), COALESCE(shop_name_korea,''), COALESCE(shop_name_france,''), COALESCE(shop_name_vietnam,''), COALESCE(shop_name_thai,''),
+		COALESCE(abbr,''), COALESCE(web_status,''), searches,
+		genre, genre_sub, genre_sub_english,
+		genre_memo, genre_memo_english,
+		COALESCE(genre_memo_china_cn,''), COALESCE(genre_memo_china_tw,''), COALESCE(genre_memo_korea,''), COALESCE(genre_memo_france,''), COALESCE(genre_memo_vietnam,''), COALESCE(genre_memo_thai,''),
+		group_id, COALESCE(tenant_code,''), tel, COALESCE(user_url,''),
+		COALESCE(floor,''), floors, area, area_sub, number,
+		COALESCE(open_year,''), COALESCE(open_month,''), COALESCE(open_day,''), close_flg, COALESCE(pub_start,''), COALESCE(pub_end,''), open_time, description,
+		COALESCE(qr,''), COALESCE(food_class,''), COALESCE(seats,''), COALESCE(smoking,''), COALESCE(reservation,''),
+		COALESCE(lunch_menu,''), COALESCE(dinner_menu,''), COALESCE(take_out,''), COALESCE(childrens_menu,''), COALESCE(baby_seat,''), COALESCE(alcohol,''), COALESCE(options,''),
+		photo1, photo1_local_path,
+		photo2, photo2_local_path,
+		shop_logo, shop_logo_local_path,
+		COALESCE(photo1_thumb,''), COALESCE(photo1_thumb_150x150,''), COALESCE(photo1_thumb_640x640,''), COALESCE(photo1_thumb_w320,''),
+		photo1_thumb_w640, photo1_thumb_w640_local_path,
+		COALESCE(photo2_thumb,''), COALESCE(photo2_thumb_150x150,''), COALESCE(photo2_thumb_640x640,''), COALESCE(photo2_thumb_w320,''),
 		photo2_thumb_w640, photo2_thumb_w640_local_path,
-		shop_logo_thumb_640x640, shop_logo_thumb_640x640_local_path, 
-		shop_logo_thumb_w640, shop_logo_thumb_w640_local_path
+		COALESCE(shop_logo_thumb,''), COALESCE(shop_logo_thumb_150x150,''),
+		shop_logo_thumb_640x640, shop_logo_thumb_640x640_local_path,
+		COALESCE(shop_logo_thumb_w320,''),
+		shop_logo_thumb_w640, shop_logo_thumb_w640_local_path,
+		update_date
 		FROM shops`
 
 	rows, err := s.DB.Conn.Query(query)
@@ -98,73 +113,146 @@ func (s *Server) FetchShopList() ([]models.ShopItem, error) {
 	for rows.Next() {
 		var item models.ShopItem
 		var (
-			shopId, shopName, shopNameKana, shopNameEnglish, searches,
-			genre, genreSub, genreSubEnglish, genreMemo, genreMemoEnglish,
-			groupId, tel, floors, area, areaSub, number, closeFlg,
-			openTime, description, photo1, photo2, shopLogo, updateDate,
-			photo1LocalPath, photo2LocalPath, shopLogoLocalPath,
+			shopId, shopName, shopNameKana, shopNameEnglish,
+			shopNameChinaCN, shopNameChinaTW, shopNameKorea, shopNameFrance, shopNameVietnam, shopNameThai,
+			abbr, webStatus, searches,
+			genre, genreSub, genreSubEnglish,
+			genreMemo, genreMemoEnglish,
+			genreMemoChinaCN, genreMemoChinaTW, genreMemoKorea, genreMemoFrance, genreMemoVietnam, genreMemoThai,
+			groupId, tenantCode, tel, userUrl,
+			floor, floors, area, areaSub, number,
+			openYear, openMonth, openDay, closeFlg, pubStart, pubEnd, openTime, description,
+			qr, foodClass, seats, smoking, reservation,
+			lunchMenu, dinnerMenu, takeOut, childrensMenu, babySeat, alcohol, options,
+			photo1, photo1LocalPath,
+			photo2, photo2LocalPath,
+			shopLogo, shopLogoLocalPath,
+			photo1Thumb, photo1Thumb150x150, photo1Thumb640x640, photo1ThumbW320,
 			photo1ThumbW640, photo1ThumbW640LocalPath,
+			photo2Thumb, photo2Thumb150x150, photo2Thumb640x640, photo2ThumbW320,
 			photo2ThumbW640, photo2ThumbW640LocalPath,
+			shopLogoThumb, shopLogoThumb150x150,
 			shopLogoThumb640x640, shopLogoThumb640x640LocalPath,
-			shopLogoThumbW640, shopLogoThumbW640LocalPath *string
+			shopLogoThumbW320,
+			shopLogoThumbW640, shopLogoThumbW640LocalPath,
+			updateDate *string
 		)
 
 		if err := rows.Scan(
-			&shopId, &shopName, &shopNameKana, &shopNameEnglish, &searches,
-			&genre, &genreSub, &genreSubEnglish, &genreMemo, &genreMemoEnglish,
-			&groupId, &tel, &floors, &area, &areaSub, &number, &closeFlg,
-			&openTime, &description, &photo1, &photo2, &shopLogo, &updateDate,
-			&photo1LocalPath, &photo2LocalPath, &shopLogoLocalPath,
+			&shopId, &shopName, &shopNameKana, &shopNameEnglish,
+			&shopNameChinaCN, &shopNameChinaTW, &shopNameKorea, &shopNameFrance, &shopNameVietnam, &shopNameThai,
+			&abbr, &webStatus, &searches,
+			&genre, &genreSub, &genreSubEnglish,
+			&genreMemo, &genreMemoEnglish,
+			&genreMemoChinaCN, &genreMemoChinaTW, &genreMemoKorea, &genreMemoFrance, &genreMemoVietnam, &genreMemoThai,
+			&groupId, &tenantCode, &tel, &userUrl,
+			&floor, &floors, &area, &areaSub, &number,
+			&openYear, &openMonth, &openDay, &closeFlg, &pubStart, &pubEnd, &openTime, &description,
+			&qr, &foodClass, &seats, &smoking, &reservation,
+			&lunchMenu, &dinnerMenu, &takeOut, &childrensMenu, &babySeat, &alcohol, &options,
+			&photo1, &photo1LocalPath,
+			&photo2, &photo2LocalPath,
+			&shopLogo, &shopLogoLocalPath,
+			&photo1Thumb, &photo1Thumb150x150, &photo1Thumb640x640, &photo1ThumbW320,
 			&photo1ThumbW640, &photo1ThumbW640LocalPath,
+			&photo2Thumb, &photo2Thumb150x150, &photo2Thumb640x640, &photo2ThumbW320,
 			&photo2ThumbW640, &photo2ThumbW640LocalPath,
+			&shopLogoThumb, &shopLogoThumb150x150,
 			&shopLogoThumb640x640, &shopLogoThumb640x640LocalPath,
+			&shopLogoThumbW320,
 			&shopLogoThumbW640, &shopLogoThumbW640LocalPath,
+			&updateDate,
 		); err != nil {
 			fmt.Printf("Scan error: %v\n", err)
 			continue
 		}
 
-		s := func(ptr *string) string {
+		sv := func(ptr *string) string {
 			if ptr == nil {
 				return ""
 			}
 			return *ptr
 		}
 
-		item.ShopID = s(shopId)
-		item.ShopName = s(shopName)
-		item.ShopNameKana = s(shopNameKana)
-		item.ShopNameEnglish = s(shopNameEnglish)
-		item.Searches = s(searches)
-		item.Genre = s(genre)
-		item.GenreSub = s(genreSub)
-		item.GenreSubEnglish = s(genreSubEnglish)
-		item.GenreMemo = s(genreMemo)
-		item.GenreMemoEnglish = s(genreMemoEnglish)
-		item.GroupID = s(groupId)
-		item.Tel = s(tel)
-		item.Floors = s(floors)
-		item.Area = s(area)
-		item.AreaSub = s(areaSub)
-		item.Number = s(number)
-		item.CloseFlg = s(closeFlg)
-		item.OpenTime = s(openTime)
-		item.Description = s(description)
-		item.Photo1 = s(photo1)
-		item.Photo2 = s(photo2)
-		item.ShopLogo = s(shopLogo)
-		item.UpdateDate = s(updateDate)
-		item.Photo1LocalPath = s(photo1LocalPath)
-		item.Photo2LocalPath = s(photo2LocalPath)
-		item.ShopLogoLocalPath = s(shopLogoLocalPath)
-		item.Photo1ThumbW640 = s(photo1ThumbW640)
-		item.Photo1ThumbW640LocalPath = s(photo1ThumbW640LocalPath)
-		item.Photo2ThumbW640 = s(photo2ThumbW640)
-		item.Photo2ThumbW640LocalPath = s(photo2ThumbW640LocalPath)
-		item.ShopLogoThumb640x640 = s(shopLogoThumb640x640)
-		item.ShopLogoThumb640x640LocalPath = s(shopLogoThumb640x640LocalPath)
-		item.ShopLogoThumbW640 = s(shopLogoThumbW640)
-		item.ShopLogoThumbW640LocalPath = s(shopLogoThumbW640LocalPath)
+		item.ShopID = sv(shopId)
+		item.ShopName = sv(shopName)
+		item.ShopNameKana = sv(shopNameKana)
+		item.ShopNameEnglish = sv(shopNameEnglish)
+		item.ShopNameChinaCN = sv(shopNameChinaCN)
+		item.ShopNameChinaTW = sv(shopNameChinaTW)
+		item.ShopNameKorea = sv(shopNameKorea)
+		item.ShopNameFrance = sv(shopNameFrance)
+		item.ShopNameVietnam = sv(shopNameVietnam)
+		item.ShopNameThai = sv(shopNameThai)
+		item.Abbr = sv(abbr)
+		item.WebStatus = sv(webStatus)
+		item.Searches = sv(searches)
+		item.Genre = sv(genre)
+		item.GenreSub = sv(genreSub)
+		item.GenreSubEnglish = sv(genreSubEnglish)
+		item.GenreMemo = sv(genreMemo)
+		item.GenreMemoEnglish = sv(genreMemoEnglish)
+		item.GenreMemoChinaCN = sv(genreMemoChinaCN)
+		item.GenreMemoChinaTW = sv(genreMemoChinaTW)
+		item.GenreMemoKorea = sv(genreMemoKorea)
+		item.GenreMemoFrance = sv(genreMemoFrance)
+		item.GenreMemoVietnam = sv(genreMemoVietnam)
+		item.GenreMemoThai = sv(genreMemoThai)
+		item.GroupID = sv(groupId)
+		item.TenantCode = sv(tenantCode)
+		item.Tel = sv(tel)
+		item.UserUrl = sv(userUrl)
+		item.Floor = sv(floor)
+		item.Floors = sv(floors)
+		item.Area = sv(area)
+		item.AreaSub = sv(areaSub)
+		item.Number = sv(number)
+		item.OpenYear = sv(openYear)
+		item.OpenMonth = sv(openMonth)
+		item.OpenDay = sv(openDay)
+		item.CloseFlg = sv(closeFlg)
+		item.PubStart = sv(pubStart)
+		item.PubEnd = sv(pubEnd)
+		item.OpenTime = sv(openTime)
+		item.Description = sv(description)
+		item.Qr = sv(qr)
+		item.FoodClass = sv(foodClass)
+		item.Seats = sv(seats)
+		item.Smoking = sv(smoking)
+		item.Reservation = sv(reservation)
+		item.LunchMenu = sv(lunchMenu)
+		item.DinnerMenu = sv(dinnerMenu)
+		item.TakeOut = sv(takeOut)
+		item.ChildrensMenu = sv(childrensMenu)
+		item.BabySeat = sv(babySeat)
+		item.Alcohol = sv(alcohol)
+		item.Options = sv(options)
+		item.Photo1 = sv(photo1)
+		item.Photo1LocalPath = sv(photo1LocalPath)
+		item.Photo2 = sv(photo2)
+		item.Photo2LocalPath = sv(photo2LocalPath)
+		item.ShopLogo = sv(shopLogo)
+		item.ShopLogoLocalPath = sv(shopLogoLocalPath)
+		item.Photo1Thumb = sv(photo1Thumb)
+		item.Photo1Thumb150x150 = sv(photo1Thumb150x150)
+		item.Photo1Thumb640x640 = sv(photo1Thumb640x640)
+		item.Photo1ThumbW320 = sv(photo1ThumbW320)
+		item.Photo1ThumbW640 = sv(photo1ThumbW640)
+		item.Photo1ThumbW640LocalPath = sv(photo1ThumbW640LocalPath)
+		item.Photo2Thumb = sv(photo2Thumb)
+		item.Photo2Thumb150x150 = sv(photo2Thumb150x150)
+		item.Photo2Thumb640x640 = sv(photo2Thumb640x640)
+		item.Photo2ThumbW320 = sv(photo2ThumbW320)
+		item.Photo2ThumbW640 = sv(photo2ThumbW640)
+		item.Photo2ThumbW640LocalPath = sv(photo2ThumbW640LocalPath)
+		item.ShopLogoThumb = sv(shopLogoThumb)
+		item.ShopLogoThumb150x150 = sv(shopLogoThumb150x150)
+		item.ShopLogoThumb640x640 = sv(shopLogoThumb640x640)
+		item.ShopLogoThumb640x640LocalPath = sv(shopLogoThumb640x640LocalPath)
+		item.ShopLogoThumbW320 = sv(shopLogoThumbW320)
+		item.ShopLogoThumbW640 = sv(shopLogoThumbW640)
+		item.ShopLogoThumbW640LocalPath = sv(shopLogoThumbW640LocalPath)
+		item.UpdateDate = sv(updateDate)
 
 		result = append(result, item)
 	}
@@ -382,9 +470,13 @@ func (s *Server) FetchSpecials() ([]models.SpecialItem, error) {
 		return nil, fmt.Errorf("database not connected")
 	}
 
-	query := `SELECT 
-		special_id, special_title, title, special_sub_body, category_name,
-		shop_id, shop_name, update_date, special_image_local_path
+	query := `SELECT
+		special_id, COALESCE(special_title_id,''), special_title,
+		title, COALESCE(sub_title,''), COALESCE(category_id,''), category_name, special_sub_body,
+		shop_id, shop_name, COALESCE(genre_memo,''), COALESCE(shop_logo,''), COALESCE(shop_logo_local_path,''),
+		COALESCE(shop_floor_name,''), COALESCE(shop_floors_name,''), COALESCE(venue,''),
+		COALESCE(pub_start,''), COALESCE(pub_end,''), update_date,
+		COALESCE(special_image_local_path,''), COALESCE(special_image2_local_path,'')
 		FROM specials`
 
 	rows, err := s.DB.Conn.Query(query)
@@ -398,34 +490,137 @@ func (s *Server) FetchSpecials() ([]models.SpecialItem, error) {
 	for rows.Next() {
 		var item models.SpecialItem
 		var (
-			specialId, specialTitle, title, specialSubBody, categoryName,
-			shopId, shopName, updateDate, specialImageLocalPath *string
+			specialId, specialTitleId, specialTitle,
+			title, subTitle, categoryId, categoryName, specialSubBody,
+			shopId, shopName, genreMemo, shopLogo, shopLogoLocalPath,
+			shopFloorName, shopFloorsName, venue,
+			pubStart, pubEnd, updateDate,
+			specialImageLocalPath, specialImage2LocalPath *string
 		)
 
 		if err := rows.Scan(
-			&specialId, &specialTitle, &title, &specialSubBody, &categoryName,
-			&shopId, &shopName, &updateDate, &specialImageLocalPath,
+			&specialId, &specialTitleId, &specialTitle,
+			&title, &subTitle, &categoryId, &categoryName, &specialSubBody,
+			&shopId, &shopName, &genreMemo, &shopLogo, &shopLogoLocalPath,
+			&shopFloorName, &shopFloorsName, &venue,
+			&pubStart, &pubEnd, &updateDate,
+			&specialImageLocalPath, &specialImage2LocalPath,
 		); err != nil {
 			fmt.Printf("Scan error: %v\n", err)
 			continue
 		}
 
-		s := func(ptr *string) string {
+		sv := func(ptr *string) string {
 			if ptr == nil {
 				return ""
 			}
 			return *ptr
 		}
 
-		item.SpecialID = s(specialId)
-		item.SpecialTitle = s(specialTitle)
-		item.Title = s(title)
-		item.SpecialSubBody = s(specialSubBody)
-		item.CategoryName = s(categoryName)
-		item.ShopID = s(shopId)
-		item.ShopName = s(shopName)
-		item.UpdateDate = s(updateDate)
-		item.SpecialImageLocalPath = s(specialImageLocalPath)
+		item.SpecialID = sv(specialId)
+		item.SpecialTitleID = sv(specialTitleId)
+		item.SpecialTitle = sv(specialTitle)
+		item.Title = sv(title)
+		item.SubTitle = sv(subTitle)
+		item.CategoryID = sv(categoryId)
+		item.CategoryName = sv(categoryName)
+		item.SpecialSubBody = sv(specialSubBody)
+		item.ShopID = sv(shopId)
+		item.ShopName = sv(shopName)
+		item.GenreMemo = sv(genreMemo)
+		item.ShopLogo = sv(shopLogo)
+		item.ShopLogoLocalPath = sv(shopLogoLocalPath)
+		item.ShopFloorName = sv(shopFloorName)
+		item.ShopFloorsName = sv(shopFloorsName)
+		item.Venue = sv(venue)
+		item.PubStart = sv(pubStart)
+		item.PubEnd = sv(pubEnd)
+		item.UpdateDate = sv(updateDate)
+		item.SpecialImageLocalPath = sv(specialImageLocalPath)
+
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+// FetchSales retrieves sales from the database
+func (s *Server) FetchSales() ([]models.SaleItem, error) {
+	if s.DB.Conn == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	query := `SELECT
+		sale_id, COALESCE(sale_title_id,''), COALESCE(sale_title,''),
+		COALESCE(sale_body,''), COALESCE(shop_id,''), COALESCE(shop_name,''),
+		COALESCE(genre,''), COALESCE(genre_memo,''),
+		COALESCE(shop_logo,''), COALESCE(shop_logo_local_path,''),
+		COALESCE(shop_floor_name,''), COALESCE(shop_floors_name,''),
+		COALESCE(area,''), COALESCE(area_sub,''),
+		COALESCE(sale_title_image,''), COALESCE(sale_title_image_local_path,''),
+		COALESCE(pub_start,''), COALESCE(pub_end,''), update_date
+		FROM sales`
+
+	rows, err := s.DB.Conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %v", err)
+	}
+	defer rows.Close()
+
+	var result []models.SaleItem
+
+	for rows.Next() {
+		var item models.SaleItem
+		var (
+			saleId, saleTitleId, saleTitle,
+			saleBody, shopId, shopName,
+			genre, genreMemo,
+			shopLogo, shopLogoLocalPath,
+			shopFloorName, shopFloorsName,
+			area, areaSub,
+			saleTitleImage, saleTitleImageLocalPath,
+			pubStart, pubEnd, updateDate *string
+		)
+
+		if err := rows.Scan(
+			&saleId, &saleTitleId, &saleTitle,
+			&saleBody, &shopId, &shopName,
+			&genre, &genreMemo,
+			&shopLogo, &shopLogoLocalPath,
+			&shopFloorName, &shopFloorsName,
+			&area, &areaSub,
+			&saleTitleImage, &saleTitleImageLocalPath,
+			&pubStart, &pubEnd, &updateDate,
+		); err != nil {
+			fmt.Printf("Scan error: %v\n", err)
+			continue
+		}
+
+		sv := func(ptr *string) string {
+			if ptr == nil {
+				return ""
+			}
+			return *ptr
+		}
+
+		item.SaleID = sv(saleId)
+		item.SaleTitleID = sv(saleTitleId)
+		item.SaleTitle = sv(saleTitle)
+		item.SaleBody = sv(saleBody)
+		item.ShopID = sv(shopId)
+		item.ShopName = sv(shopName)
+		item.Genre = sv(genre)
+		item.GenreMemo = sv(genreMemo)
+		item.ShopLogo = sv(shopLogo)
+		item.ShopLogoLocalPath = sv(shopLogoLocalPath)
+		item.ShopFloorName = sv(shopFloorName)
+		item.ShopFloorsName = sv(shopFloorsName)
+		item.Area = sv(area)
+		item.AreaSub = sv(areaSub)
+		item.SaleTitleImage = sv(saleTitleImage)
+		item.SaleTitleImageLocalPath = sv(saleTitleImageLocalPath)
+		item.PubStart = sv(pubStart)
+		item.PubEnd = sv(pubEnd)
+		item.UpdateDate = sv(updateDate)
 
 		result = append(result, item)
 	}
@@ -493,6 +688,15 @@ func (s *Server) handleShopNewsList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSpecialList(w http.ResponseWriter, r *http.Request) {
 	result, err := s.FetchSpecials()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.respondJSON(w, result)
+}
+
+func (s *Server) handleSaleList(w http.ResponseWriter, r *http.Request) {
+	result, err := s.FetchSales()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

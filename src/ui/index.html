@@ -110,8 +110,8 @@
                         <li>店舗: <strong id="count-shops">-</strong></li>
                         <li>ショップニュース: <strong id="count-shop-news">-</strong></li>
                         <li>イベントニュース: <strong id="count-event-news">-</strong></li>
-                        <li>特集/セール: <strong id="count-specials">-</strong></li>
-                        <!-- <li>セール: <strong id="count-sales">-</strong></li> -->
+                        <li>特集: <strong id="count-specials">-</strong></li>
+                        <li>セール: <strong id="count-sales">-</strong></li>
                     </ul>
                 </div>
             </div>
@@ -151,6 +151,10 @@
                 <a href="/api/genres" target="_blank" class="endpoint-link">
                     <strong>ジャンル一覧</strong><br>
                     <small>/api/genres</small>
+                </a>
+                <a href="/api/floors" target="_blank" class="endpoint-link">
+                    <strong>フロア一覧</strong><br>
+                    <small>/api/floors</small>
                 </a>
             </div>
             <style>
@@ -250,10 +254,19 @@
                     <input type="checkbox" id="sync-target-event-news"> イベントニュース
                 </label>
                 <label>
-                    <input type="checkbox" id="sync-target-specials"> 特集/セール
+                    <input type="checkbox" id="sync-target-specials"> 特集
+                </label>
+                <label>
+                    <input type="checkbox" id="sync-target-sales"> セール
+                </label>
+                <label>
+                    <input type="checkbox" id="sync-target-shop-app"> オプション情報
                 </label>
                 <label>
                     <input type="checkbox" id="sync-target-genres"> ジャンルデータ
+                </label>
+                <label>
+                    <input type="checkbox" id="sync-target-floors"> フロアデータ
                 </label>
             </div>
             <small style="display: block; margin-top: 5px; color: #666;">※チェックを外すとそのデータの同期をスキップします。</small>

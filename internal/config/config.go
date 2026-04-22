@@ -7,7 +7,7 @@ import (
 )
 
 // Version is the application version
-var Version = "3.1.0"
+var Version = "4.0.0"
 
 type Config struct {
 	APISettings    APISettings    `json:"apiSettings"`
@@ -40,7 +40,10 @@ type SyncTargets struct {
 	ShopNews  bool `json:"shopNews"`
 	EventNews bool `json:"eventNews"`
 	Specials  bool `json:"specials"`
+	Sales     bool `json:"sales"`
+	ShopApp   bool `json:"shopApp"`
 	Genres    bool `json:"genres"`
+	Floors    bool `json:"floors"`
 }
 
 type ServerSettings struct {
@@ -86,7 +89,10 @@ func LoadConfig() (*Config, error) {
 					ShopNews:  false,
 					EventNews: false,
 					Specials:  false,
+					Sales:     false,
+					ShopApp:   false,
 					Genres:    false,
+					Floors:    false,
 				},
 			},
 			ServerSettings: ServerSettings{
@@ -115,7 +121,10 @@ func LoadConfig() (*Config, error) {
 			ShopNews:  false,
 			EventNews: false,
 			Specials:  false,
+			Sales:     false,
+			ShopApp:   false,
 			Genres:    false,
+			Floors:    false,
 		}
 	}
 

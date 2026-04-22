@@ -81,36 +81,13 @@ func main() {
 		uiMutex.Unlock()
 	})
 
+	// 分離パターン: SSEは「何が更新されたか」だけを通知し、
+	// クライアントは必要なREST エンドポイントを自分で取得する。
 	syncMgr.SetDataUpdateCallback(func(dataType string) {
-		var data interface{}
-		var err error
-
-		switch dataType {
-		case "shops":
-			data, err = srv.FetchShopList()
-		case "shop_news":
-			data, err = srv.FetchShopNews()
-		case "event_news":
-			data, err = srv.FetchEventNews()
-		case "specials":
-			data, err = srv.FetchSpecials()
-		case "genres":
-			data, err = srv.FetchGenres()
-		default:
-			logging.Warn("SSE", fmt.Sprintf("Unknown data type updated: %s", dataType))
-			return
-		}
-
-		if err != nil {
-			logging.Error("SSE", fmt.Sprintf("Failed to fetch updated data for %s: %v", dataType, err))
-			return
-		}
-
 		logging.Info("SSE", fmt.Sprintf("Broadcasting %s update to SSE clients", dataType))
 		srv.BroadcastEvent(dataType, map[string]interface{}{
-			"type":      dataType,
+			"action":    "updated",
 			"timestamp": time.Now().Format(time.RFC3339),
-			"data":      data,
 		})
 	})
 

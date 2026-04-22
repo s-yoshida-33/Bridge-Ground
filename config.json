@@ -14,7 +14,10 @@
       "shopNews": false,
       "eventNews": false,
       "specials": false,
-      "genres": false
+      "sales": false,
+      "shopApp": false,
+      "genres": false,
+      "floors": false
     }
   },
   "serverSettings": {

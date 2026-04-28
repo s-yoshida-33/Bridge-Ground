@@ -412,6 +412,11 @@ func (m *Manager) getBaseFileDir() string {
 }
 
 func (m *Manager) resolveURL(relativePath string) string {
+	// Already an absolute URL (e.g. https://image-cdn.aeonmall.jp/...) — use as-is
+	if strings.HasPrefix(relativePath, "http://") || strings.HasPrefix(relativePath, "https://") {
+		return relativePath
+	}
+
 	base := strings.TrimRight(m.Config.APISettings.BaseURL, "/")
 	cleanRel := strings.TrimLeft(relativePath, "/")
 
@@ -420,7 +425,6 @@ func (m *Manager) resolveURL(relativePath string) string {
 	// Example: Base=".../api", Rel="files/..." -> ".../files/..."
 	if strings.HasPrefix(cleanRel, "files/") && strings.HasSuffix(base, "/api") {
 		base = strings.TrimSuffix(base, "/api")
-		// Trim again in case there was a slash before "api"
 		base = strings.TrimRight(base, "/")
 	}
 

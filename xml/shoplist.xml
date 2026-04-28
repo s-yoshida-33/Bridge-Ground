@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
     <data>
     <updateDateAll>
-    2026-04-13 15:27:31
+    2026-04-27 14:20:55
     </updateDateAll>
     <item type="shop">
         <shopId>005a4a1c-17ae-40a2-a0f0-1163843f5137</shopId>
@@ -4421,8 +4421,10 @@ ONにもOFFにも等身大で楽しむオトナの日常着をテーマに、ス
         <pubEnd></pubEnd>
         <openDay><![CDATA[09]]></openDay>
         <openTime><![CDATA[10:00～21:00]]></openTime>
-        <description><![CDATA[大人のためのファストファッションストア。
-ちょっとお洒落な日常着を最良価格で提供いたします。]]></description>
+        <description><![CDATA[大人のためのファストファッションストア
+大人の男女に日常生活で取り入れて欲しい"シンプル＆エレガント"なスタイルを、最良の価格でより多くの皆さまにお届けいたします。
+あなたの日常着をもっと楽チンで、もっと美しく、もっと快適に、もっと豊かに。
+ファッションに自信がないお客さまでも、気軽に取り入れやすいスタイルをご提案いたします。]]></description>
         <descriptionEnglish><![CDATA[]]></descriptionEnglish>
         <descriptionChinaCN><![CDATA[]]></descriptionChinaCN>
         <descriptionChinaTW><![CDATA[]]></descriptionChinaTW>
@@ -4460,7 +4462,7 @@ ONにもOFFにも等身大で楽しむオトナの日常着をテーマに、ス
         <babySeat>0</babySeat>
         <alcohol>0</alcohol>
         <options>1,2,3,101,106,100,104,103,107,108,109</options>
-        <updateDate>2026-02-16 17:57:00</updateDate>
+        <updateDate>2026-04-27 10:39:06</updateDate>
         </item><item type="shop">
         <shopId>47393c15-361a-4222-acc3-078856ae7514</shopId>
         <shopName><![CDATA[フレンチ ブリュ]]></shopName>
@@ -7895,7 +7897,7 @@ niko and...は人や、くらしに[スタイル]を加えることで自分ら�
         <pubStart>2025-03-13 00:00:00</pubStart>
         <pubEnd></pubEnd>
         <openDay><![CDATA[13]]></openDay>
-        <openTime><![CDATA[10:00～21:00(ラストオーダー20：30)]]></openTime>
+        <openTime><![CDATA[10:00～21:00(ラストオーダー20：45)]]></openTime>
         <description><![CDATA[お客さまの日常にHappinessをお届けすることをミッションに、
 お客さま一人一人の好みにあった
 ティーメニューをご用意してお迎えいたします]]></description>
@@ -7936,7 +7938,7 @@ niko and...は人や、くらしに[スタイル]を加えることで自分ら�
         <babySeat>0</babySeat>
         <alcohol>0</alcohol>
         <options>12,101,106,100,102,105,104,103,107,108,109,116,113</options>
-        <updateDate>2026-02-16 17:59:38</updateDate>
+        <updateDate>2026-04-22 13:54:01</updateDate>
         </item><item type="shop">
         <shopId>8bf86db7-c855-479a-abae-d93b9463c619</shopId>
         <shopName><![CDATA[ラーメン 魁力屋]]></shopName>
@@ -8393,13 +8395,9 @@ niko and...は人や、くらしに[スタイル]を加えることで自分ら�
         <openDay><![CDATA[]]></openDay>
         <openTime><![CDATA[10:00～21:00]]></openTime>
         <description><![CDATA[ジーンズセレクトショップ
-
 “あなたらしさ” “じぶんらしさ”を見つけて ふと笑顔になる
-
 お客さまにとっての欲しいが見つかる場所でありたい。
-
 服を通して世の中を笑顔にしたい、
-
 ライトオンならではの品揃えとカジュアルさを提案します。]]></description>
         <descriptionEnglish><![CDATA[]]></descriptionEnglish>
         <descriptionChinaCN><![CDATA[]]></descriptionChinaCN>
@@ -8414,12 +8412,12 @@ niko and...は人や、くらしに[スタイル]を加えることで自分ら�
         <photo1Thumb640x640><![CDATA[/files/640x640_9eddc3c5-0150-4839-89a3-752a436e4670.jpg]]></photo1Thumb640x640>
         <photo1ThumbW320><![CDATA[/files/w320_9eddc3c5-0150-4839-89a3-752a436e4670.jpg]]></photo1ThumbW320>
         <photo1ThumbW640><![CDATA[/files/w640_9eddc3c5-0150-4839-89a3-752a436e4670.jpg]]></photo1ThumbW640>
-        <photo2><![CDATA[/files/e83f3afe-fcd9-442e-8282-373f76f1f21e.jpg]]></photo2>
-        <photo2Thumb><![CDATA[/files/320x320_e83f3afe-fcd9-442e-8282-373f76f1f21e.jpg]]></photo2Thumb>
-        <photo2Thumb150x150><![CDATA[/files/150x150_e83f3afe-fcd9-442e-8282-373f76f1f21e.jpg]]></photo2Thumb150x150>
-        <photo2Thumb640x640><![CDATA[/files/w320_e83f3afe-fcd9-442e-8282-373f76f1f21e.jpg]]></photo2Thumb640x640>
-        <photo2ThumbW320><![CDATA[/files/w320_e83f3afe-fcd9-442e-8282-373f76f1f21e.jpg]]></photo2ThumbW320>
-        <photo2ThumbW640><![CDATA[/files/w640_e83f3afe-fcd9-442e-8282-373f76f1f21e.jpg]]></photo2ThumbW640>
+        <photo2><![CDATA[/files/fa67cdd5-0399-4e61-a12f-938226193d73.jpg]]></photo2>
+        <photo2Thumb><![CDATA[/files/320x320_fa67cdd5-0399-4e61-a12f-938226193d73.jpg]]></photo2Thumb>
+        <photo2Thumb150x150><![CDATA[/files/150x150_fa67cdd5-0399-4e61-a12f-938226193d73.jpg]]></photo2Thumb150x150>
+        <photo2Thumb640x640><![CDATA[/files/w320_fa67cdd5-0399-4e61-a12f-938226193d73.jpg]]></photo2Thumb640x640>
+        <photo2ThumbW320><![CDATA[/files/w320_fa67cdd5-0399-4e61-a12f-938226193d73.jpg]]></photo2ThumbW320>
+        <photo2ThumbW640><![CDATA[/files/w640_fa67cdd5-0399-4e61-a12f-938226193d73.jpg]]></photo2ThumbW640>
         <shopLogo><![CDATA[/files/b7346db7-48ee-419a-8770-891fc080b42b.png]]></shopLogo>
         <shopLogoThumb><![CDATA[/files/320x320_b7346db7-48ee-419a-8770-891fc080b42b.png]]></shopLogoThumb>
         <shopLogoThumb150x150><![CDATA[/files/150x150_b7346db7-48ee-419a-8770-891fc080b42b.png]]></shopLogoThumb150x150>
@@ -8438,7 +8436,7 @@ niko and...は人や、くらしに[スタイル]を加えることで自分ら�
         <babySeat>0</babySeat>
         <alcohol>0</alcohol>
         <options>1,2,3,110,112,111,101,106,100,102,104,103,107,108,109</options>
-        <updateDate>2026-03-19 14:32:55</updateDate>
+        <updateDate>2026-04-23 09:59:39</updateDate>
         </item><item type="shop">
         <shopId>9a6edadf-a873-427b-872e-daeb3249f28f</shopId>
         <shopName><![CDATA[ほていや]]></shopName>
@@ -13026,7 +13024,7 @@ INGNIはファッションを日々楽しめる、トレンドMIXアイテムを
         <babySeat>0</babySeat>
         <alcohol>0</alcohol>
         <options>101,102</options>
-        <updateDate>2026-04-13 15:27:31</updateDate>
+        <updateDate>2026-04-27 14:20:55</updateDate>
         </item><item type="shop">
         <shopId>f54cf22d-ce91-415b-bf3c-5e471d634c2c</shopId>
         <shopName><![CDATA[スターバックスコーヒー]]></shopName>

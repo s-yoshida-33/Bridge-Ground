@@ -3,6 +3,7 @@ package sync
 import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
+	"bridge-ground/internal/logging"
 	"bridge-ground/internal/models"
 	"bytes"
 	"encoding/json"
@@ -339,20 +340,17 @@ func (m *Manager) downloadWorker(jobs <-chan DownloadJob, results chan<- Downloa
 			Success:   err == nil,
 			Error:     err,
 		}
-		if err != nil {
-			// Log error
-			fmt.Printf("[Worker] Failed to download %s: %v\n", job.RemoteURL, err)
-		}
 	}
 }
 
-func (m *Manager) downloadFile(url, destPath string) error {
-	if url == "" || destPath == "" {
-		fmt.Printf("[Download] Skipped (empty URL or dest): URL=%q, Dest=%q\n", url, destPath)
+func (m *Manager) downloadFile(rawUrl, destPath string) error {
+	if rawUrl == "" || destPath == "" {
+		logging.Warn("DOWNLOAD", fmt.Sprintf("Skipped (empty URL or dest): URL=%q, Dest=%q", rawUrl, destPath))
 		return nil
 	}
 
 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		logging.Error("DOWNLOAD", fmt.Sprintf("MkdirAll failed for %q: %v", destPath, err))
 		return err
 	}
 
@@ -369,17 +367,17 @@ func (m *Manager) downloadFile(url, destPath string) error {
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return err
+			return fmt.Errorf("http request failed: %w", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("status: %s", resp.Status)
+			return fmt.Errorf("HTTP %s", resp.Status)
 		}
 
 		out, err := os.Create(destPath)
 		if err != nil {
-			return err
+			return fmt.Errorf("create file failed %q: %w", destPath, err)
 		}
 		defer out.Close()
 
@@ -388,23 +386,24 @@ func (m *Manager) downloadFile(url, destPath string) error {
 	}
 
 	// First attempt
-	err := doDownload(url)
+	err := doDownload(rawUrl)
 	if err == nil {
-		fmt.Printf("[Download] Success: %s\n", url)
+		logging.Info("DOWNLOAD", fmt.Sprintf("OK: %s -> %s", rawUrl, destPath))
 		return nil
 	}
 
 	// If failed and URL contains "/api/", try removing it (common path issue)
-	if strings.Contains(url, "/api/") {
-		altUrl := strings.Replace(url, "/api/", "/", 1)
-		fmt.Printf("[Download] Retrying with alternative URL: %s (Original error: %v)\n", altUrl, err)
+	if strings.Contains(rawUrl, "/api/") {
+		altUrl := strings.Replace(rawUrl, "/api/", "/", 1)
+		logging.Warn("DOWNLOAD", fmt.Sprintf("Retrying without /api/: %s (err: %v)", altUrl, err))
 		if errRetry := doDownload(altUrl); errRetry == nil {
-			fmt.Printf("[Download] Success on retry: %s\n", altUrl)
+			logging.Info("DOWNLOAD", fmt.Sprintf("OK on retry: %s -> %s", altUrl, destPath))
 			return nil
 		}
 	}
 
-	return fmt.Errorf("failed to download file: %s, error: %w", url, err)
+	logging.Error("DOWNLOAD", fmt.Sprintf("FAILED: URL=%s Dest=%s Error=%v", rawUrl, destPath, err))
+	return fmt.Errorf("failed to download %s: %w", rawUrl, err)
 }
 
 func (m *Manager) getBaseFileDir() string {
@@ -473,21 +472,17 @@ func (m *Manager) processDownloads(jobs []DownloadJob) int {
 	
 	// Count successful downloads
 	successCount := 0
+	failCount := 0
 	for result := range resultChan {
 		if result.Success {
 			successCount++
-			// Verify file exists after download
-			if _, err := os.Stat(result.LocalPath); err != nil {
-				fmt.Printf("[Verify] WARNING: File not found after successful download: %q\n", result.LocalPath)
-			} else {
-				fmt.Printf("[Verify] OK: File exists after download: %q\n", result.LocalPath)
-			}
 		} else if result.Error != nil {
-			fmt.Printf("[Download] FAILED: %s (error: %v)\n", result.LocalPath, result.Error)
+			failCount++
+			// already logged inside downloadFile
 		}
 	}
-	
-	fmt.Printf("=== Download processing completed: %d successful ===\n", successCount)
+
+	logging.Info("DOWNLOAD", fmt.Sprintf("Batch done: %d OK, %d failed", successCount, failCount))
 	return successCount
 }
 

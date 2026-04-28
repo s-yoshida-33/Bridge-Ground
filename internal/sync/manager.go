@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -432,7 +433,16 @@ func (m *Manager) resolveURL(relativePath string) string {
 }
 
 func (m *Manager) resolveLocalPath(baseDir, relativePath string) string {
-	cleanRel := strings.TrimPrefix(relativePath, "/files") // Remove /files prefix if present as common pattern
+	// Absolute URL: extract the URL path and strip the query string to get a valid filename
+	if strings.HasPrefix(relativePath, "http://") || strings.HasPrefix(relativePath, "https://") {
+		if u, err := url.Parse(relativePath); err == nil {
+			cleanPath := filepath.FromSlash(strings.TrimPrefix(u.Path, "/"))
+			return filepath.Join(baseDir, cleanPath)
+		}
+		// Fallback: use filename only
+		return filepath.Join(baseDir, filepath.Base(relativePath))
+	}
+	cleanRel := strings.TrimPrefix(relativePath, "/files")
 	cleanRel = strings.TrimPrefix(cleanRel, "/")
 	return filepath.Join(baseDir, cleanRel)
 }

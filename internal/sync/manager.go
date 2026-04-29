@@ -393,21 +393,11 @@ func (m *Manager) downloadFile(rawUrl, destPath string) error {
 		return err
 	}
 
-	// First attempt
+	// Attempt download
 	err := doDownload(rawUrl)
 	if err == nil {
 		logging.Info("DOWNLOAD", fmt.Sprintf("OK: %s -> %s", rawUrl, destPath))
 		return nil
-	}
-
-	// If failed and URL contains "/api/", try removing it (common path issue)
-	if strings.Contains(rawUrl, "/api/") {
-		altUrl := strings.Replace(rawUrl, "/api/", "/", 1)
-		logging.Warn("DOWNLOAD", fmt.Sprintf("Retrying without /api/: %s (err: %v)", altUrl, err))
-		if errRetry := doDownload(altUrl); errRetry == nil {
-			logging.Info("DOWNLOAD", fmt.Sprintf("OK on retry: %s -> %s", altUrl, destPath))
-			return nil
-		}
 	}
 
 	logging.Error("DOWNLOAD", fmt.Sprintf("FAILED: URL=%s Dest=%s Error=%v", rawUrl, destPath, err))

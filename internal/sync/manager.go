@@ -666,7 +666,7 @@ func (m *Manager) syncShops() (int, error) {
 				if !exists || oldRaw == "" {
 					return ""
 				}
-				old := m.resolveLocalPath(baseFileDir, oldRaw)
+				old := m.resolveImageLocalPath(baseFileDir, "shops", item.ShopID, oldRaw)
 				if old == newLocalPath {
 					return ""
 				}

@@ -444,6 +444,25 @@ func (m *Manager) resolveLocalPath(baseDir, relativePath string) string {
 	return filepath.Join(baseDir, cleanRel)
 }
 
+// resolveShopImageLocalPath stores shop images under {baseDir}/{shopID}/{filename}
+// so all images for a shop are grouped and can be cleaned up atomically.
+func (m *Manager) resolveShopImageLocalPath(baseDir, shopID, relativePath string) string {
+	if relativePath == "" || shopID == "" {
+		return m.resolveLocalPath(baseDir, relativePath)
+	}
+	var filename string
+	if strings.HasPrefix(relativePath, "http://") || strings.HasPrefix(relativePath, "https://") {
+		if u, err := url.Parse(relativePath); err == nil {
+			filename = filepath.Base(u.Path)
+		} else {
+			filename = filepath.Base(relativePath)
+		}
+	} else {
+		filename = filepath.Base(relativePath)
+	}
+	return filepath.Join(baseDir, shopID, filename)
+}
+
 func (m *Manager) processDownloads(jobs []DownloadJob) int {
 	fmt.Printf("=== Processing %d download jobs ===\n", len(jobs))
 	for i, job := range jobs {
@@ -654,9 +673,11 @@ func (m *Manager) syncShops() (int, error) {
 
 			// Handle images: download if path changed or file doesn't exist,
 			// and clean up the old local file when the UUID-based path changes.
+			// All images are stored under {baseFileDir}/{shopID}/ for easy per-shop cleanup.
+			shopID := item.ShopID
 			if item.Photo1 != "" {
 				item.Photo1RemoteURL = m.resolveURL(item.Photo1)
-				item.Photo1LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1)
+				item.Photo1LocalPath = m.resolveShopImageLocalPath(baseFileDir, shopID, item.Photo1)
 				fmt.Printf("  [Photo1] Remote=%q, Local=%q\n", item.Photo1RemoteURL, item.Photo1LocalPath)
 				if m.shouldDownloadImage(item.Photo1LocalPath, item.UpdateDate, existingItem.Photo1) {
 					fmt.Printf("  [Photo1] Adding to download queue\n")
@@ -669,7 +690,7 @@ func (m *Manager) syncShops() (int, error) {
 			}
 			if item.Photo2 != "" {
 				item.Photo2RemoteURL = m.resolveURL(item.Photo2)
-				item.Photo2LocalPath = m.resolveLocalPath(baseFileDir, item.Photo2)
+				item.Photo2LocalPath = m.resolveShopImageLocalPath(baseFileDir, shopID, item.Photo2)
 				if m.shouldDownloadImage(item.Photo2LocalPath, item.UpdateDate, existingItem.Photo2) {
 					downloadJobs = append(downloadJobs, DownloadJob{
 						RemoteURL:    item.Photo2RemoteURL,
@@ -680,7 +701,7 @@ func (m *Manager) syncShops() (int, error) {
 			}
 			if item.ShopLogo != "" {
 				item.ShopLogoRemoteURL = m.resolveURL(item.ShopLogo)
-				item.ShopLogoLocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogo)
+				item.ShopLogoLocalPath = m.resolveShopImageLocalPath(baseFileDir, shopID, item.ShopLogo)
 				if m.shouldDownloadImage(item.ShopLogoLocalPath, item.UpdateDate, existingItem.ShopLogo) {
 					downloadJobs = append(downloadJobs, DownloadJob{
 						RemoteURL:    item.ShopLogoRemoteURL,
@@ -691,7 +712,7 @@ func (m *Manager) syncShops() (int, error) {
 			}
 			if item.Photo1ThumbW640 != "" {
 				item.Photo1ThumbW640RemoteURL = m.resolveURL(item.Photo1ThumbW640)
-				item.Photo1ThumbW640LocalPath = m.resolveLocalPath(baseFileDir, item.Photo1ThumbW640)
+				item.Photo1ThumbW640LocalPath = m.resolveShopImageLocalPath(baseFileDir, shopID, item.Photo1ThumbW640)
 				fmt.Printf("  [Photo1ThumbW640] Remote=%q, Local=%q\n", item.Photo1ThumbW640RemoteURL, item.Photo1ThumbW640LocalPath)
 				if m.shouldDownloadImage(item.Photo1ThumbW640LocalPath, item.UpdateDate, existingItem.Photo1ThumbW640) {
 					fmt.Printf("  [Photo1ThumbW640] Adding to download queue\n")
@@ -708,7 +729,7 @@ func (m *Manager) syncShops() (int, error) {
 			}
 			if item.Photo2ThumbW640 != "" {
 				item.Photo2ThumbW640RemoteURL = m.resolveURL(item.Photo2ThumbW640)
-				item.Photo2ThumbW640LocalPath = m.resolveLocalPath(baseFileDir, item.Photo2ThumbW640)
+				item.Photo2ThumbW640LocalPath = m.resolveShopImageLocalPath(baseFileDir, shopID, item.Photo2ThumbW640)
 				fmt.Printf("  [Photo2ThumbW640] Remote=%q, Local=%q\n", item.Photo2ThumbW640RemoteURL, item.Photo2ThumbW640LocalPath)
 				if m.shouldDownloadImage(item.Photo2ThumbW640LocalPath, item.UpdateDate, existingItem.Photo2ThumbW640) {
 					fmt.Printf("  [Photo2ThumbW640] Adding to download queue\n")
@@ -725,7 +746,7 @@ func (m *Manager) syncShops() (int, error) {
 			}
 			if item.ShopLogoThumb640x640 != "" {
 				item.ShopLogoThumb640x640RemoteURL = m.resolveURL(item.ShopLogoThumb640x640)
-				item.ShopLogoThumb640x640LocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogoThumb640x640)
+				item.ShopLogoThumb640x640LocalPath = m.resolveShopImageLocalPath(baseFileDir, shopID, item.ShopLogoThumb640x640)
 				fmt.Printf("  [ShopLogoThumb640x640] Remote=%q, Local=%q\n", item.ShopLogoThumb640x640RemoteURL, item.ShopLogoThumb640x640LocalPath)
 				if m.shouldDownloadImage(item.ShopLogoThumb640x640LocalPath, item.UpdateDate, existingItem.ShopLogoThumb640x640) {
 					fmt.Printf("  [ShopLogoThumb640x640] Adding to download queue\n")
@@ -742,7 +763,7 @@ func (m *Manager) syncShops() (int, error) {
 			}
 			if item.ShopLogoThumbW640 != "" {
 				item.ShopLogoThumbW640RemoteURL = m.resolveURL(item.ShopLogoThumbW640)
-				item.ShopLogoThumbW640LocalPath = m.resolveLocalPath(baseFileDir, item.ShopLogoThumbW640)
+				item.ShopLogoThumbW640LocalPath = m.resolveShopImageLocalPath(baseFileDir, shopID, item.ShopLogoThumbW640)
 				fmt.Printf("  [ShopLogoThumbW640] Remote=%q, Local=%q\n", item.ShopLogoThumbW640RemoteURL, item.ShopLogoThumbW640LocalPath)
 				if m.shouldDownloadImage(item.ShopLogoThumbW640LocalPath, item.UpdateDate, existingItem.ShopLogoThumbW640) {
 					fmt.Printf("  [ShopLogoThumbW640] Adding to download queue\n")
@@ -798,22 +819,10 @@ func (m *Manager) syncShops() (int, error) {
 			return 0, err
 		}
 		defer delStmt.Close()
-		for id, deletedShop := range existingShops {
+		for id := range existingShops {
 			if _, err := delStmt.Exec(id); err == nil {
 				deletedCount++
-				for _, rawPath := range []string{
-					deletedShop.Photo1,
-					deletedShop.Photo2,
-					deletedShop.ShopLogo,
-					deletedShop.Photo1ThumbW640,
-					deletedShop.Photo2ThumbW640,
-					deletedShop.ShopLogoThumb640x640,
-					deletedShop.ShopLogoThumbW640,
-				} {
-					if rawPath != "" {
-						orphanedFiles = append(orphanedFiles, m.resolveLocalPath(baseFileDir, rawPath))
-					}
-				}
+				orphanedFiles = append(orphanedFiles, filepath.Join(baseFileDir, id))
 			}
 		}
 		fmt.Printf("Deleted %d shops\n", deletedCount)
@@ -823,12 +832,12 @@ func (m *Manager) syncShops() (int, error) {
 		return 0, err
 	}
 
-	// Remove image files for deleted shops after successful DB commit
-	for _, path := range orphanedFiles {
-		if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
-			logging.Warn("CLEANUP", fmt.Sprintf("Failed to remove image for deleted shop: %s: %v", path, removeErr))
-		} else if removeErr == nil {
-			logging.Info("CLEANUP", fmt.Sprintf("Removed image for deleted shop: %s", path))
+	// Remove the per-shop image directory for each deleted shop after successful DB commit
+	for _, shopDir := range orphanedFiles {
+		if removeErr := os.RemoveAll(shopDir); removeErr != nil {
+			logging.Warn("CLEANUP", fmt.Sprintf("Failed to remove image dir for deleted shop: %s: %v", shopDir, removeErr))
+		} else {
+			logging.Info("CLEANUP", fmt.Sprintf("Removed image dir for deleted shop: %s", shopDir))
 		}
 	}
 

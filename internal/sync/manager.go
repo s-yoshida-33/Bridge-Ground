@@ -362,15 +362,14 @@ func (m *Manager) downloadFile(rawUrl, destPath string) error {
 		return err
 	}
 
-	// Helper to perform download
+	// Helper to perform download.
+	// File downloads are unauthenticated: the /files/ endpoint is publicly
+	// accessible. Sending Basic Auth credentials to it causes 401 because
+	// the file storage server does not recognise the API credentials.
 	doDownload := func(targetUrl string) error {
 		req, err := http.NewRequest("GET", targetUrl, nil)
 		if err != nil {
 			return err
-		}
-
-		if m.Config.APISettings.Username != "" {
-			req.SetBasicAuth(m.Config.APISettings.Username, m.Config.APISettings.Password)
 		}
 
 		resp, err := http.DefaultClient.Do(req)

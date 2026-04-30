@@ -3,16 +3,21 @@ package server
 import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
+	"bridge-ground/internal/logging"
 	"bridge-ground/internal/models"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 type Server struct {
-	Config *config.Config
-	DB     *db.Manager
-	Broker *EventBroker
+	Config         *config.Config
+	DB             *db.Manager
+	Broker         *EventBroker
+	SaveConfigFunc func(cfg config.Config) error
+	StartSyncFunc  func() (bool, string)
+	AppVersion     string
 }
 
 func NewServer(cfg *config.Config, db *db.Manager) *Server {
@@ -26,7 +31,14 @@ func NewServer(cfg *config.Config, db *db.Manager) *Server {
 func (s *Server) Start() {
 	mux := http.NewServeMux()
 
-	// API Routes
+	// Management API
+	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/sync/start", s.handleSyncStart)
+	mux.HandleFunc("/api/counts", s.handleCounts)
+	mux.HandleFunc("/api/logs", s.handleLogs)
+	mux.HandleFunc("/api/version", s.handleVersion)
+
+	// Data API Routes
 	mux.HandleFunc("/api/shops", s.handleShopList)
 	mux.HandleFunc("/api/shop-news", s.handleShopNewsList)
 	mux.HandleFunc("/api/event-news", s.handleEventNewsList)
@@ -47,7 +59,7 @@ func (s *Server) Start() {
 	// Favicon
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/x-icon")
-		w.Header().Set("Cache-Control", "public, max-age=86400") // キャッシュを有効にする
+		w.Header().Set("Cache-Control", "public, max-age=86400")
 		http.ServeFile(w, r, "src/assets/icon.ico")
 	})
 	// SVG Icon
@@ -57,7 +69,7 @@ func (s *Server) Start() {
 	})
 
 	port := s.Config.ServerSettings.Port
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	addr := fmt.Sprintf("0.0.0.0:%d", port)
 
 	fmt.Printf("HTTP Server running at http://localhost:%d\n", port)
 	if err := http.ListenAndServe(addr, mux); err != nil {
@@ -739,25 +751,150 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	fs.ServeHTTP(w, r)
 }
 
+// --- Management API handlers ---
+
+// configResponse is Config with password replaced by a sentinel for browser clients.
+type configResponse struct {
+	config.Config
+	APISettings apiSettingsResponse `json:"apiSettings"`
+}
+type apiSettingsResponse struct {
+	BaseURL     string `json:"baseUrl"`
+	APIKey      string `json:"apiKey"`
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	PasswordSet bool   `json:"passwordSet"`
+}
+
+func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	switch r.Method {
+	case http.MethodGet:
+		resp := configResponse{Config: *s.Config}
+		resp.APISettings = apiSettingsResponse{
+			BaseURL:     s.Config.APISettings.BaseURL,
+			APIKey:      s.Config.APISettings.APIKey,
+			Username:    s.Config.APISettings.Username,
+			Password:    "",
+			PasswordSet: s.Config.APISettings.Password != "",
+		}
+		json.NewEncoder(w).Encode(resp)
+
+	case http.MethodPost:
+		var newCfg config.Config
+		if err := json.NewDecoder(r.Body).Decode(&newCfg); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// Empty password means "keep existing"
+		if newCfg.APISettings.Password == "" {
+			newCfg.APISettings.Password = s.Config.APISettings.Password
+		}
+		if s.SaveConfigFunc != nil {
+			if err := s.SaveConfigFunc(newCfg); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleSyncStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if s.StartSyncFunc == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "message": "sync not available"})
+		return
+	}
+	ok, msg := s.StartSyncFunc()
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": ok, "message": msg})
+}
+
+func (s *Server) handleCounts(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	counts, err := s.DB.GetDataCounts()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(counts)
+}
+
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	n := 500
+	if v := r.URL.Query().Get("lines"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			n = parsed
+		}
+	}
+	entries := logging.GetRecentEntries(n)
+	if entries == nil {
+		entries = []logging.LogEntry{}
+	}
+	json.NewEncoder(w).Encode(entries)
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(map[string]string{"version": s.AppVersion})
+}
+
 func (s *Server) handleBridgeJS(w http.ResponseWriter, r *http.Request) {
 	js := `
-		console.log("Bridge JS Loaded");
-		window.bridgeApi = {
-			getConfig: async () => await window.go_getConfig(),
-			getAppVersion: async () => await window.go_getAppVersion(),
-			saveConfig: async (cfg) => await window.go_saveConfig(cfg),
-			startManualSync: async () => await window.go_startManualSync(),
-			getDataCounts: async () => await window.go_getDataCounts(),
-			onSyncProgress: function(callback) {
-				window._syncProgressCallback = callback;
-			}
-		};
-		window.dispatchSyncProgress = function(data) {
-			console.log("Sync Progress:", data);
-			if (window._syncProgressCallback) {
-				window._syncProgressCallback(data);
-			}
-		};
+		(function() {
+			const _isLorca = typeof window.go_getConfig === 'function';
+			const _get = (url) => fetch(url).then(r => r.json());
+			const _post = (url, body) => fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			}).then(r => r.json());
+
+			window.bridgeApi = {
+				getConfig: () => _isLorca
+					? window.go_getConfig()
+					: _get('/api/config').then(cfg => {
+						// Normalise: restore passwordSet flag, clear sentinel
+						cfg.apiSettings = cfg.apiSettings || {};
+						return cfg;
+					}),
+				getAppVersion: () => _isLorca
+					? window.go_getAppVersion()
+					: _get('/api/version').then(d => d.version),
+				saveConfig: (cfg) => _isLorca
+					? window.go_saveConfig(cfg)
+					: _post('/api/config', cfg),
+				startManualSync: () => _isLorca
+					? window.go_startManualSync()
+					: _post('/api/sync/start', {}),
+				getDataCounts: () => _isLorca
+					? window.go_getDataCounts()
+					: _get('/api/counts'),
+				getLogs: (lines) => _get('/api/logs?lines=' + (lines || 500)),
+				onSyncProgress: function(callback) {
+					window._syncProgressCallback = callback;
+					if (!_isLorca && !window._syncProgressSSE) {
+						window._syncProgressSSE = new EventSource('/api/events');
+						window._syncProgressSSE.addEventListener('sync_progress', function(e) {
+							var data = JSON.parse(e.data);
+							if (window._syncProgressCallback) window._syncProgressCallback(data);
+						});
+					}
+				}
+			};
+
+			window.dispatchSyncProgress = function(data) {
+				if (window._syncProgressCallback) window._syncProgressCallback(data);
+			};
+		})();
 	`
 	w.Header().Set("Content-Type", "application/javascript")
 	w.Write([]byte(js))

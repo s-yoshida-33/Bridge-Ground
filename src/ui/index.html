@@ -2,281 +2,420 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BridgeGround</title>
-    <!-- ICOファイルを優先的に、サイズ指定付きで読み込む -->
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
-    <link rel="stylesheet" href="style.css">
     <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f9f9f9; color: #333; }
-        #settings-view { display: none; padding: 20px; border: 1px solid #ccc; background: white; margin-top: 20px; border-radius: 8px; }
-        .input-group label { display: block; margin-top: 10px; font-weight: bold; }
-        .input-group input[type="text"], .input-group input[type="number"] { width: 100%; padding: 8px; box-sizing: border-box; }
-        #messages { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
-        .success { background-color: #e6ffe6; color: green; border: 1px solid green; }
-        .error { background-color: #ffe6e6; color: red; border: 1px solid red; }
-        
-        /* Dashboard Styles */
-        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        h2, h3 { color: #2c3e50; }
-        
-        /* Progress Bar Styles */
-        .progress-wrapper {
-            margin-top: 15px;
-            display: none; /* Hidden by default */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 14px;
+            background: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
         }
 
-        .progress-container {
+        /* ── Header ── */
+        #header {
+            background: #1a2233;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            height: 52px;
+            user-select: none;
+        }
+        #header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        #header-version {
+            font-size: 12px;
+            color: #8899bb;
+        }
+
+        /* ── Tab Nav ── */
+        #tab-nav {
+            background: #fff;
+            border-bottom: 1px solid #dde2ea;
+            display: flex;
+            padding: 0 20px;
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: #667;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 14px 18px 11px;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .tab-btn:hover { color: #1a2233; }
+        .tab-btn.active { color: #1a6ef5; border-bottom-color: #1a6ef5; }
+
+        /* ── Content ── */
+        #content { padding: 24px 20px; max-width: 960px; margin: 0 auto; }
+
+        .view { display: none; }
+        .view.active { display: block; }
+
+        /* ── Card ── */
+        .card {
+            background: #fff;
+            border: 1px solid #dde2ea;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        .card h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1a2233;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eef0f4;
+        }
+
+        /* ── Buttons ── */
+        button {
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 8px 16px;
+            transition: background 0.15s, opacity 0.15s;
+        }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #1a6ef5; color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: #0f5de0; }
+        .btn-secondary { background: #eef0f4; color: #445; }
+        .btn-secondary:hover:not(:disabled) { background: #dde2ea; }
+        .btn-success { background: #20a852; color: #fff; }
+        .btn-success:hover:not(:disabled) { background: #188a44; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+        /* ── Form ── */
+        .field { margin-bottom: 14px; }
+        .field label { display: block; font-size: 12px; font-weight: 600; color: #556; margin-bottom: 5px; }
+        .field input[type="text"],
+        .field input[type="number"],
+        .field input[type="password"] {
             width: 100%;
-            background-color: #e0e0e0;
-            border-radius: 10px;
+            padding: 8px 10px;
+            border: 1px solid #cdd2da;
+            border-radius: 5px;
+            font-size: 13px;
+            transition: border-color 0.15s;
+        }
+        .field input:focus { outline: none; border-color: #1a6ef5; }
+        .field input:read-only { background: #f5f7fa; color: #778; }
+        .field small { display: block; margin-top: 4px; color: #889; font-size: 11px; }
+        .field-row { display: flex; gap: 8px; align-items: center; }
+        .field-row input { flex: 1; }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #445;
+            margin: 18px 0 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #eef0f4;
+        }
+
+        /* Checkbox group */
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .checkbox-grid label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+
+        /* ── Message banner ── */
+        #messages {
+            display: none;
+            padding: 10px 14px;
+            border-radius: 5px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+        .success { background: #eafaf1; color: #1a7a3f; border: 1px solid #a8d8bc; }
+        .error   { background: #fef0f0; color: #c0392b; border: 1px solid #f5c0bb; }
+
+        /* ── Dashboard: data counts ── */
+        .counts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 10px;
+        }
+        .count-item {
+            background: #f5f7fa;
+            border: 1px solid #dde2ea;
+            border-radius: 6px;
+            padding: 12px 14px;
+            text-align: center;
+        }
+        .count-item .count-label { font-size: 11px; color: #778; margin-bottom: 4px; }
+        .count-item .count-value { font-size: 20px; font-weight: 700; color: #1a2233; }
+
+        /* ── Progress bar ── */
+        .progress-wrapper { margin-top: 14px; display: none; }
+        .progress-track {
+            background: #dde2ea;
+            border-radius: 6px;
             overflow: hidden;
-            margin-bottom: 5px;
+            height: 18px;
+            margin-bottom: 6px;
         }
         .progress-bar {
-            width: 0%;
-            height: 20px;
-            background-color: #4CAF50;
-            background-image: linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent);
+            height: 100%;
+            background: #1a6ef5;
+            background-image: linear-gradient(45deg, rgba(255,255,255,.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.15) 50%, rgba(255,255,255,.15) 75%, transparent 75%, transparent);
             background-size: 1rem 1rem;
             text-align: center;
-            line-height: 20px;
-            color: white;
+            line-height: 18px;
+            color: #fff;
             font-size: 11px;
-            transition: width 0.3s ease-in-out;
-            animation: progress-bar-stripes 1s linear infinite;
+            font-weight: 600;
+            transition: width 0.3s ease;
+            animation: stripes 1s linear infinite;
+            width: 0%;
         }
-        
-        .progress-bar.sub {
-            background-color: #2196F3; /* Blue for sub tasks */
-            height: 16px;
-            line-height: 16px;
-            font-size: 10px;
-        }
+        @keyframes stripes { from { background-position: 1rem 0; } to { background-position: 0 0; } }
+        .progress-status { font-size: 12px; color: #667; }
 
-        @keyframes progress-bar-stripes {
-            0% { background-position: 1rem 0; }
-            100% { background-position: 0 0; }
+        /* ── Endpoints ── */
+        .endpoint-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 8px;
         }
-        .sync-status-text {
-            font-size: 0.85em;
-            color: #666;
-            margin-bottom: 10px;
-            padding-left: 5px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+        .endpoint-link {
+            display: block;
+            padding: 10px 12px;
+            background: #f5f7fa;
+            border: 1px solid #dde2ea;
+            border-radius: 6px;
+            text-decoration: none;
+            color: #334;
+            transition: all 0.15s;
         }
-        
-        #header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-        button { cursor: pointer; padding: 8px 16px; border: none; border-radius: 4px; background-color: #007bff; color: white; transition: background 0.2s; }
-        button:hover { background-color: #0056b3; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        #save-settings-button { background-color: #28a745; }
-        #save-settings-button:hover { background-color: #218838; }
+        .endpoint-link:hover { background: #ebf3ff; border-color: #1a6ef5; color: #1a6ef5; }
+        .endpoint-link strong { display: block; font-size: 13px; margin-bottom: 2px; }
+        .endpoint-link small { font-size: 11px; color: #889; font-family: monospace; }
+
+        /* ── Local URL row ── */
+        .url-row { display: flex; gap: 8px; align-items: center; }
+        .url-row input { flex: 1; }
+        #copy-message { font-size: 12px; color: #20a852; margin-top: 4px; display: none; }
+
+        /* ── Log view ── */
+        #log-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .log-filter-btn {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #eef0f4;
+            color: #556;
+        }
+        .log-filter-btn.active { background: #1a6ef5; color: #fff; }
+        .log-filter-btn.warn  { color: #b85c00; }
+        .log-filter-btn.warn.active  { background: #f5a623; color: #fff; }
+        .log-filter-btn.error { color: #c0392b; }
+        .log-filter-btn.error.active { background: #e74c3c; color: #fff; }
+        #log-count { font-size: 12px; color: #889; margin-left: auto; }
+
+        #log-container {
+            font-family: "Consolas", "Cascadia Code", monospace;
+            font-size: 12px;
+            background: #1a1e2b;
+            color: #c8d0e0;
+            border-radius: 6px;
+            padding: 12px;
+            height: 520px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+        .log-entry { display: flex; gap: 8px; padding: 1px 0; }
+        .log-entry:hover { background: rgba(255,255,255,0.04); }
+        .log-ts  { color: #556a8a; flex-shrink: 0; }
+        .log-tag { color: #7cb8e8; flex-shrink: 0; min-width: 120px; }
+        .log-msg { word-break: break-all; }
+        .log-level-info  .log-level-badge { color: #5dade2; }
+        .log-level-warn  .log-level-badge,
+        .log-level-warn  .log-msg          { color: #f0a830; }
+        .log-level-error .log-level-badge,
+        .log-level-error .log-msg          { color: #e74c3c; }
+        .log-level-fatal .log-level-badge,
+        .log-level-fatal .log-msg          { color: #ff6b6b; font-weight: 700; }
+        .log-level-badge { flex-shrink: 0; width: 42px; text-align: center; }
+        .log-empty { color: #556a8a; text-align: center; padding: 40px 0; }
     </style>
 </head>
 <body>
     <div id="header">
         <h1>BridgeGround</h1>
-        <button id="main-button" style="display:none;">メイン</button>
-        <button id="settings-button">設定</button>
+        <span id="header-version">v<span id="app-version">...</span></span>
     </div>
-    
-    <div id="main-view">
-        <div class="card">
-            <h3>データ同期ステータス</h3>
-            <div style="display: flex; gap: 20px; align-items: flex-start;">
-                <div style="flex: 1;">
-                    <button id="sync-button" style="padding: 12px 24px; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">
-                        <span></span> 今すぐ同期を実行
-                    </button>
-                    
-                    <div id="sync-progress-wrapper" class="progress-wrapper">
-                        <!-- Main Progress -->
-                        <div class="sync-status-text" id="main-status-text">全体の進捗...</div>
-                        <div class="progress-container">
-                            <div id="main-progress-bar" class="progress-bar">0%</div>
+
+    <nav id="tab-nav">
+        <button class="tab-btn active" data-tab="main">ダッシュボード</button>
+        <button class="tab-btn" data-tab="logs">ログ</button>
+        <button class="tab-btn" data-tab="settings">設定</button>
+    </nav>
+
+    <div id="content">
+        <!-- ── ダッシュボード ── -->
+        <div id="view-main" class="view active">
+            <div class="card">
+                <h3>データ同期</h3>
+                <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:220px;">
+                        <button id="sync-button" class="btn-primary" style="padding:10px 20px; font-size:14px;">今すぐ同期を実行</button>
+                        <div id="sync-progress-wrapper" class="progress-wrapper">
+                            <div class="progress-track">
+                                <div id="main-progress-bar" class="progress-bar">0%</div>
+                            </div>
+                            <div class="progress-status" id="main-status-text"></div>
                         </div>
-                        
-                        <!-- Sub Progress -->
-                        <!-- Removed as per request -->
+                    </div>
+                    <div style="flex:0 0 auto; min-width:200px;">
+                        <div class="counts-grid">
+                            <div class="count-item"><div class="count-label">店舗</div><div class="count-value" id="count-shops">-</div></div>
+                            <div class="count-item"><div class="count-label">ショップNEWS</div><div class="count-value" id="count-shop-news">-</div></div>
+                            <div class="count-item"><div class="count-label">イベント</div><div class="count-value" id="count-event-news">-</div></div>
+                            <div class="count-item"><div class="count-label">特集</div><div class="count-value" id="count-specials">-</div></div>
+                            <div class="count-item"><div class="count-label">セール</div><div class="count-value" id="count-sales">-</div></div>
+                        </div>
                     </div>
                 </div>
-                
-                <div style="flex: 0 0 250px; background: #f1f8ff; padding: 15px; border-radius: 8px;">
-                    <h4 style="margin-top: 0;">現在のデータ件数</h4>
-                    <ul style="padding-left: 20px; margin-bottom: 0;">
-                        <li>店舗: <strong id="count-shops">-</strong></li>
-                        <li>ショップニュース: <strong id="count-shop-news">-</strong></li>
-                        <li>イベントニュース: <strong id="count-event-news">-</strong></li>
-                        <li>特集: <strong id="count-specials">-</strong></li>
-                        <li>セール: <strong id="count-sales">-</strong></li>
-                    </ul>
+            </div>
+
+            <div class="card">
+                <h3>サーバー接続情報</h3>
+                <div class="field">
+                    <label>ローカル API ベース URL</label>
+                    <div class="url-row">
+                        <input type="text" id="local-api-url" readonly>
+                        <button id="copy-api-url-button" class="btn-secondary btn-sm">コピー</button>
+                    </div>
+                    <p id="copy-message">コピー完了</p>
+                </div>
+                <div class="section-title">利用可能なエンドポイント</div>
+                <div class="endpoint-grid">
+                    <a href="/api/shops"      target="_blank" class="endpoint-link"><strong>店舗一覧</strong><small>/api/shops</small></a>
+                    <a href="/api/shop-news"  target="_blank" class="endpoint-link"><strong>ショップニュース</strong><small>/api/shop-news</small></a>
+                    <a href="/api/event-news" target="_blank" class="endpoint-link"><strong>イベントニュース</strong><small>/api/event-news</small></a>
+                    <a href="/api/specials"   target="_blank" class="endpoint-link"><strong>特集一覧</strong><small>/api/specials</small></a>
+                    <a href="/api/sales"      target="_blank" class="endpoint-link"><strong>セール一覧</strong><small>/api/sales</small></a>
+                    <a href="/api/genres"     target="_blank" class="endpoint-link"><strong>ジャンル一覧</strong><small>/api/genres</small></a>
+                    <a href="/api/floors"     target="_blank" class="endpoint-link"><strong>フロア一覧</strong><small>/api/floors</small></a>
                 </div>
             </div>
         </div>
 
-        <div class="card">
-            <h3>サーバー接続情報</h3>
-            <p style="margin-bottom: 8px;">ローカルAPIエンドポイント (Base URL):</p>
-            <div style="display: flex; gap: 10px;">
-                <input type="text" id="local-api-url" readonly style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; color: #555;">
-                <button id="copy-api-url-button" style="padding: 8px 12px; font-size: 0.9em; background-color: #6c757d;">コピー</button>
+        <!-- ── ログ ── -->
+        <div id="view-logs" class="view">
+            <div class="card">
+                <h3>アプリケーションログ（本日分）</h3>
+                <div id="log-toolbar">
+                    <button class="log-filter-btn active" data-level="ALL">ALL</button>
+                    <button class="log-filter-btn" data-level="INFO">INFO</button>
+                    <button class="log-filter-btn warn" data-level="WARN">WARN</button>
+                    <button class="log-filter-btn error" data-level="ERROR">ERROR / FATAL</button>
+                    <button id="log-refresh-btn" class="btn-secondary btn-sm">更新</button>
+                    <span id="log-count"></span>
+                </div>
+                <div id="log-container"><div class="log-empty">読み込み中...</div></div>
             </div>
-            <p id="copy-message" style="margin-top: 5px; color: green; font-size: 0.9em; display: none;">コピー完了</p>
-            
-            <h4 style="margin-top: 20px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;">利用可能なAPIエンドポイント</h4>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
-                <a href="/api/shops" target="_blank" class="endpoint-link">
-                    <strong>店舗一覧</strong><br>
-                    <small>/api/shops</small>
-                </a>
-                <a href="/api/shop-news" target="_blank" class="endpoint-link">
-                    <strong>ショップニュース</strong><br>
-                    <small>/api/shop-news</small>
-                </a>
-                <a href="/api/event-news" target="_blank" class="endpoint-link">
-                    <strong>イベントニュース</strong><br>
-                    <small>/api/event-news</small>
-                </a>
-                <a href="/api/specials" target="_blank" class="endpoint-link">
-                    <strong>特集一覧</strong><br>
-                    <small>/api/specials</small>
-                </a>
-                <a href="/api/sales" target="_blank" class="endpoint-link">
-                    <strong>セール一覧</strong><br>
-                    <small>/api/sales</small>
-                </a>
-                <a href="/api/genres" target="_blank" class="endpoint-link">
-                    <strong>ジャンル一覧</strong><br>
-                    <small>/api/genres</small>
-                </a>
-                <a href="/api/floors" target="_blank" class="endpoint-link">
-                    <strong>フロア一覧</strong><br>
-                    <small>/api/floors</small>
-                </a>
+        </div>
+
+        <!-- ── 設定 ── -->
+        <div id="view-settings" class="view">
+            <div id="messages"></div>
+
+            <div class="card">
+                <h3>API 設定</h3>
+                <div class="field">
+                    <label>API エンドポイント (Base URL)</label>
+                    <input type="text" id="api-url" placeholder="https://example.com/api">
+                </div>
+                <div class="field">
+                    <label>ユーザー名</label>
+                    <input type="text" id="api-username">
+                </div>
+                <div class="field">
+                    <label>パスワード</label>
+                    <div class="field-row">
+                        <input type="password" id="api-password" placeholder="変更する場合のみ入力" disabled>
+                        <button id="toggle-password-button" class="btn-secondary btn-sm">編集</button>
+                    </div>
+                    <small>パスワードは暗号化されて保存されます。</small>
+                </div>
             </div>
-            <style>
-                .endpoint-link {
-                    display: block;
-                    padding: 10px;
-                    background: #fff;
-                    border: 1px solid #ddd;
-                    border-radius: 6px;
-                    text-decoration: none;
-                    color: #333;
-                    transition: all 0.2s;
-                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-                }
-                .endpoint-link:hover {
-                    background: #f0f7ff;
-                    border-color: #007bff;
-                    transform: translateY(-2px);
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                    color: #0056b3;
-                }
-                .endpoint-link strong {
-                    font-size: 1.05em;
-                }
-                .endpoint-link small {
-                    color: #666;
-                    font-family: monospace;
-                }
-            </style>
-        </div>
-    </div>
 
-    <div id="settings-view">
-        <h2>設定</h2>
-        <div id="messages"></div>
+            <div class="card">
+                <h3>サーバー・同期設定</h3>
+                <label class="toggle-label"><input type="checkbox" id="run-on-startup"> Windows 起動時に自動起動する</label>
+                <label class="toggle-label"><input type="checkbox" id="start-hidden"> 起動時にウィンドウを表示しない（タスクトレイ常駐）</label>
 
-        <h3>API 設定</h3>
-        <div class="input-group">
-            <label for="api-url">API エンドポイント (Base URL):</label>
-            <input type="text" id="api-url" placeholder="https://example.com/api" required>
-        </div>
-        <div class="input-group">
-            <label for="api-username">ユーザー名:</label>
-            <input type="text" id="api-username">
-        </div>
-        <div class="input-group">
-            <label for="api-password">パスワード:</label>
-            <div style="display: flex; gap: 5px;">
-                <input type="password" id="api-password" placeholder="変更する場合のみ入力" style="flex: 1;" disabled>
-                <button id="toggle-password-button" type="button" style="padding: 0 10px; background-color: #6c757d;">編集</button>
+                <div class="field" style="max-width:200px; margin-top:4px;">
+                    <label>HTTP サーバーポート</label>
+                    <input type="number" id="server-port-input" min="1024" max="65535">
+                    <small>1024〜65535</small>
+                </div>
+
+                <label class="toggle-label" style="margin-top:8px;"><input type="checkbox" id="auto-sync-enabled"> 自動同期を有効にする</label>
+                <div class="field" style="max-width:200px;">
+                    <label>同期間隔（分）</label>
+                    <input type="number" id="sync-interval" min="1">
+                </div>
+                <label class="toggle-label"><input type="checkbox" id="sync-on-startup"> アプリ起動時に自動同期を実行</label>
+
+                <div class="section-title">同期対象エンドポイント</div>
+                <div class="checkbox-grid">
+                    <label><input type="checkbox" id="sync-target-shops"> 店舗データ</label>
+                    <label><input type="checkbox" id="sync-target-shop-news"> ショップニュース</label>
+                    <label><input type="checkbox" id="sync-target-event-news"> イベントニュース</label>
+                    <label><input type="checkbox" id="sync-target-specials"> 特集</label>
+                    <label><input type="checkbox" id="sync-target-sales"> セール</label>
+                    <label><input type="checkbox" id="sync-target-shop-app"> オプション情報</label>
+                    <label><input type="checkbox" id="sync-target-genres"> ジャンルデータ</label>
+                    <label><input type="checkbox" id="sync-target-floors"> フロアデータ</label>
+                </div>
+                <small style="margin-top:8px; display:block; color:#889;">チェックを外すとそのデータの同期をスキップします。</small>
             </div>
-            <small>※パスワードは暗号化されて保存されます。</small>
-        </div>
 
-        <h3>サーバーと同期設定</h3>
-        <div class="input-group">
-            <label>
-                <input type="checkbox" id="run-on-startup"> Windows起動時に自動的に起動する
-            </label>
+            <button id="save-settings-button" class="btn-success" style="padding:10px 24px; font-size:14px;">保存</button>
         </div>
-        <div class="input-group">
-            <label>
-                <input type="checkbox" id="start-hidden"> 起動時にウィンドウを表示しない（タスクトレイ常駐）
-            </label>
-        </div>
-        <div class="input-group">
-            <label for="server-port">HTTP サーバーポート:</label>
-            <input type="number" id="server-port-input" min="1024" max="65535" required>
-            <small>（1024〜65535の範囲）</small>
-        </div>
-        
-        <div class="input-group">
-            <label>
-                <input type="checkbox" id="auto-sync-enabled"> 自動同期を有効にする
-            </label>
-        </div>
-        <div class="input-group">
-            <label for="sync-interval">同期間隔 (分):</label>
-            <input type="number" id="sync-interval" min="1" required>
-        </div>
-        <div class="input-group">
-            <label>
-                <input type="checkbox" id="sync-on-startup"> アプリ起動時に自動同期を実行
-            </label>
-        </div>
-
-        <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px;">
-            <h4 style="margin-top: 0; margin-bottom: 10px;">同期対象エンドポイント</h4>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px;">
-                <label>
-                    <input type="checkbox" id="sync-target-shops"> 店舗データ
-                </label>
-                <label>
-                    <input type="checkbox" id="sync-target-shop-news"> ショップニュース
-                </label>
-                <label>
-                    <input type="checkbox" id="sync-target-event-news"> イベントニュース
-                </label>
-                <label>
-                    <input type="checkbox" id="sync-target-specials"> 特集
-                </label>
-                <label>
-                    <input type="checkbox" id="sync-target-sales"> セール
-                </label>
-                <label>
-                    <input type="checkbox" id="sync-target-shop-app"> オプション情報
-                </label>
-                <label>
-                    <input type="checkbox" id="sync-target-genres"> ジャンルデータ
-                </label>
-                <label>
-                    <input type="checkbox" id="sync-target-floors"> フロアデータ
-                </label>
-            </div>
-            <small style="display: block; margin-top: 5px; color: #666;">※チェックを外すとそのデータの同期をスキップします。</small>
-        </div>
-        
-        <button id="save-settings-button" style="margin-top: 20px; padding: 10px 20px;">保存</button>
-    </div>
-
-    <div id="footer" style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em; border-top: 1px solid #eee; padding-top: 10px;">
-        v<span id="app-version">...</span>
     </div>
 
     <script src="/bridge.js"></script>

@@ -63,6 +63,28 @@ func main() {
 
 	// 3. Start HTTP Server (Goroutine)
 	srv = server.NewServer(globalCfg, dbMgr)
+	srv.AppVersion = config.Version
+	srv.SaveConfigFunc = func(newCfg config.Config) error {
+		if err := config.SaveConfig(&newCfg); err != nil {
+			return err
+		}
+		if err := updateStartupRegistry(newCfg.SystemSettings.RunOnStartup); err != nil {
+			logging.Warn("CONFIG", fmt.Sprintf("Failed to update startup registry: %v", err))
+		}
+		*globalCfg = newCfg
+		logging.Info("CONFIG", "Config saved via browser UI")
+		return nil
+	}
+	srv.StartSyncFunc = func() (bool, string) {
+		logging.Info("SYNC", "Manual sync started via browser UI")
+		_, err := syncMgr.StartSync()
+		if err != nil {
+			logging.Error("SYNC", fmt.Sprintf("Manual sync failed: %v", err))
+			return false, err.Error()
+		}
+		logging.Info("SYNC", "Manual sync completed")
+		return true, ""
+	}
 	go func() {
 		srv.Start()
 	}()
@@ -70,15 +92,17 @@ func main() {
 
 	// 4. Setup Progress Callback (Thread-safe)
 	syncMgr.SetProgressCallback(func(p appSync.SyncProgress) {
+		// Push to Lorca window
 		b, _ := json.Marshal(p)
 		jsCode := fmt.Sprintf("if(window.dispatchSyncProgress) window.dispatchSyncProgress(%s)", string(b))
-
 		uiMutex.Lock()
 		if ui != nil {
-			// ui.Eval might fail if window is closed concurrently, ignore error
 			_ = ui.Eval(jsCode)
 		}
 		uiMutex.Unlock()
+
+		// Also broadcast via SSE for browser clients
+		srv.BroadcastEvent("sync_progress", p)
 	})
 
 	// 分離パターン: SSEは「何が更新されたか」だけを通知し、

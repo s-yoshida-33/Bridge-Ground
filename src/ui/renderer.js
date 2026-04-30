@@ -263,6 +263,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     const logRefreshBtn  = document.getElementById('log-refresh-btn');
     const logCountEl     = document.getElementById('log-count');
     const filterButtons  = document.querySelectorAll('.log-filter-btn');
+    const logDateFrom    = document.getElementById('log-date-from');
+    const logDateTo      = document.getElementById('log-date-to');
+
+    // Default date range: today
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const minDate  = (() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 30);
+        return d.toISOString().slice(0, 10);
+    })();
+    logDateFrom.value = todayStr;
+    logDateTo.value   = todayStr;
+    logDateFrom.min   = minDate;
+    logDateTo.min     = minDate;
+    logDateFrom.max   = todayStr;
+    logDateTo.max     = todayStr;
+
+    // Keep from <= to
+    logDateFrom.addEventListener('change', () => {
+        if (logDateFrom.value > logDateTo.value) logDateTo.value = logDateFrom.value;
+        loadLogs();
+    });
+    logDateTo.addEventListener('change', () => {
+        if (logDateTo.value < logDateFrom.value) logDateFrom.value = logDateTo.value;
+        loadLogs();
+    });
 
     filterButtons.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -278,7 +304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function loadLogs() {
         logContainer.innerHTML = '<div class="log-empty">読み込み中...</div>';
         try {
-            allLogEntries = await bridgeApi.getLogs(500);
+            allLogEntries = await bridgeApi.getLogs(logDateFrom.value, logDateTo.value);
             renderLogs();
         } catch (e) {
             logContainer.innerHTML = '<div class="log-empty">ログの読み込みに失敗しました。</div>';

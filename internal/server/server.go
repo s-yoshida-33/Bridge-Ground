@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
+	"time"
 )
 
 type Server struct {
@@ -829,13 +829,20 @@ func (s *Server) handleCounts(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	n := 500
-	if v := r.URL.Query().Get("lines"); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
-			n = parsed
-		}
+	today := time.Now().Format("2006-01-02")
+	from := r.URL.Query().Get("from")
+	to := r.URL.Query().Get("to")
+	if from == "" {
+		from = today
 	}
-	entries := logging.GetRecentEntries(n)
+	if to == "" {
+		to = today
+	}
+	// Never exceed today
+	if to > today {
+		to = today
+	}
+	entries := logging.GetEntriesForRange(from, to)
 	if entries == nil {
 		entries = []logging.LogEntry{}
 	}
@@ -878,7 +885,12 @@ func (s *Server) handleBridgeJS(w http.ResponseWriter, r *http.Request) {
 				getDataCounts: () => _isLorca
 					? window.go_getDataCounts()
 					: _get('/api/counts'),
-				getLogs: (lines) => _get('/api/logs?lines=' + (lines || 500)),
+				getLogs: (from, to) => {
+					const params = [];
+					if (from) params.push('from=' + from);
+					if (to)   params.push('to='   + to);
+					return _get('/api/logs' + (params.length ? '?' + params.join('&') : ''));
+				},
 				onSyncProgress: function(callback) {
 					window._syncProgressCallback = callback;
 					if (!_isLorca && !window._syncProgressSSE) {

@@ -120,29 +120,49 @@ func Fatal(tag, message string) { Write("FATAL", tag, message) }
 
 // GetRecentEntries reads the current day's log file and returns the last n entries.
 func GetRecentEntries(n int) []LogEntry {
-	path, err := getLogFilePath()
+	today := time.Now().Format("2006-01-02")
+	return GetEntriesForRange(today, today)
+}
+
+// GetEntriesForRange reads all log files whose date falls in [from, to] (YYYY-MM-DD)
+// and returns the combined entries in chronological order.
+func GetEntriesForRange(from, to string) []LogEntry {
+	dir, err := getLogDir()
 	if err != nil {
 		return nil
 	}
-	data, err := os.ReadFile(path)
+	dirEntries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
-	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
-	}
-	entries := make([]LogEntry, 0, len(lines))
-	for _, line := range lines {
-		if line == "" {
+
+	var result []LogEntry
+	for _, de := range dirEntries {
+		if de.IsDir() || filepath.Ext(de.Name()) != ".log" {
 			continue
 		}
-		m := logLineRe.FindStringSubmatch(line)
-		if m != nil {
-			entries = append(entries, LogEntry{Timestamp: m[1], Level: m[2], Tag: m[3], Message: m[4]})
-		} else {
-			entries = append(entries, LogEntry{Message: line})
+		name := de.Name()
+		if !strings.HasPrefix(name, "bridge-ground-") {
+			continue
+		}
+		dateStr := strings.TrimSuffix(strings.TrimPrefix(name, "bridge-ground-"), ".log")
+		if dateStr < from || dateStr > to {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+			if line == "" {
+				continue
+			}
+			if m := logLineRe.FindStringSubmatch(line); m != nil {
+				result = append(result, LogEntry{Timestamp: m[1], Level: m[2], Tag: m[3], Message: m[4]})
+			} else {
+				result = append(result, LogEntry{Message: line})
+			}
 		}
 	}
-	return entries
+	return result
 }

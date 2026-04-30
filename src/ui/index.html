@@ -278,6 +278,18 @@
         .log-level-fatal .log-msg          { color: #ff6b6b; font-weight: 700; }
         .log-level-badge { flex-shrink: 0; width: 42px; text-align: center; }
         .log-empty { color: #556a8a; text-align: center; padding: 40px 0; }
+
+        /* ── Date range ── */
+        .date-input {
+            padding: 5px 8px;
+            border: 1px solid #cdd2da;
+            border-radius: 5px;
+            font-size: 13px;
+            color: #334;
+            background: #fff;
+        }
+        .date-input:focus { outline: none; border-color: #1a6ef5; }
+        .date-sep { font-size: 13px; color: #778; }
     </style>
 </head>
 <body>
@@ -347,10 +359,18 @@
             <div class="card">
                 <h3>アプリケーションログ（本日分）</h3>
                 <div id="log-toolbar">
-                    <button class="log-filter-btn active" data-level="ALL">ALL</button>
-                    <button class="log-filter-btn" data-level="INFO">INFO</button>
-                    <button class="log-filter-btn warn" data-level="WARN">WARN</button>
-                    <button class="log-filter-btn error" data-level="ERROR">ERROR / FATAL</button>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span class="date-sep">期間</span>
+                        <input type="date" id="log-date-from" class="date-input">
+                        <span class="date-sep">〜</span>
+                        <input type="date" id="log-date-to" class="date-input">
+                    </div>
+                    <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                        <button class="log-filter-btn active" data-level="ALL">ALL</button>
+                        <button class="log-filter-btn" data-level="INFO">INFO</button>
+                        <button class="log-filter-btn warn" data-level="WARN">WARN</button>
+                        <button class="log-filter-btn error" data-level="ERROR">ERROR / FATAL</button>
+                    </div>
                     <button id="log-refresh-btn" class="btn-secondary btn-sm">更新</button>
                     <span id="log-count"></span>
                 </div>

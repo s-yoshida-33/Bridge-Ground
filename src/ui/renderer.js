@@ -32,7 +32,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     function showTab(tabName) {
         tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
         views.forEach(v => v.classList.toggle('active', v.id === 'view-' + tabName));
-        if (tabName === 'logs') loadLogs();
+        if (tabName === 'logs') {
+            loadLogs();
+            startAutoRefresh();
+        } else {
+            stopAutoRefresh();
+        }
         if (tabName === 'settings') loadSettings(currentConfig);
     }
 
@@ -256,8 +261,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // --- Log View ---
-    let allLogEntries = [];
-    let activeLevel   = 'ALL';
+    let allLogEntries      = [];
+    let activeLevel        = 'ALL';
+    let autoRefreshTimer   = null;
+
+    function startAutoRefresh() {
+        stopAutoRefresh();
+        const today = new Date().toISOString().slice(0, 10);
+        if (logDateTo.value !== today) return; // only auto-refresh when viewing today
+        autoRefreshTimer = setInterval(async () => {
+            try {
+                const fresh = await bridgeApi.getLogs(logDateFrom.value, logDateTo.value);
+                if (fresh.length !== allLogEntries.length) {
+                    const atBottom = logContainer.scrollTop + logContainer.clientHeight
+                        >= logContainer.scrollHeight - 50;
+                    allLogEntries = fresh;
+                    renderLogs(atBottom);
+                }
+            } catch (_) { /* ignore polling errors silently */ }
+        }, 5000);
+        setAutoRefreshIndicator(true);
+    }
+
+    function stopAutoRefresh() {
+        if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+        setAutoRefreshIndicator(false);
+    }
+
+    function setAutoRefreshIndicator(active) {
+        const el = document.getElementById('auto-refresh-indicator');
+        if (el) el.style.display = active ? 'inline' : 'none';
+    }
 
     const logContainer   = document.getElementById('log-container');
     const logRefreshBtn  = document.getElementById('log-refresh-btn');
@@ -289,6 +323,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     logDateTo.addEventListener('change', () => {
         if (logDateTo.value < logDateFrom.value) logDateFrom.value = logDateTo.value;
         loadLogs();
+        startAutoRefresh(); // restarts (or stops if non-today date selected)
     });
 
     filterButtons.forEach(btn => {
@@ -326,13 +361,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         logContainer.innerHTML = '<div class="log-empty">読み込み中...</div>';
         try {
             allLogEntries = await bridgeApi.getLogs(logDateFrom.value, logDateTo.value);
-            renderLogs();
+            renderLogs(true); // always scroll to bottom on manual/initial load
         } catch (e) {
             logContainer.innerHTML = '<div class="log-empty">ログの読み込みに失敗しました。</div>';
         }
     }
 
-    function renderLogs() {
+    // scrollToBottom: true = force scroll, false = preserve current scroll position
+    function renderLogs(scrollToBottom = true) {
         const filtered = activeLevel === 'ALL'
             ? allLogEntries
             : allLogEntries.filter(e => {
@@ -348,17 +384,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const html = filtered.map(e => {
-            const lvl    = (e.level || '').toUpperCase();
-            const cls    = lvl ? `log-level-${lvl.toLowerCase()}` : '';
-            const ts     = e.timestamp ? `<span class="log-ts">${esc(e.timestamp)}</span>` : '';
-            const badge  = lvl ? `<span class="log-level-badge">[${esc(lvl)}]</span>` : '';
-            const tag    = e.tag ? `<span class="log-tag">[${esc(e.tag)}]</span>` : '';
-            const msg    = `<span class="log-msg">${esc(e.message || '')}</span>`;
+            const lvl   = (e.level || '').toUpperCase();
+            const cls   = lvl ? `log-level-${lvl.toLowerCase()}` : '';
+            const ts    = e.timestamp ? `<span class="log-ts">${esc(e.timestamp)}</span>` : '';
+            const badge = lvl ? `<span class="log-level-badge">[${esc(lvl)}]</span>` : '';
+            const tag   = e.tag ? `<span class="log-tag">[${esc(e.tag)}]</span>` : '';
+            const msg   = `<span class="log-msg">${esc(e.message || '')}</span>`;
             return `<div class="log-entry ${cls}">${ts}${badge}${tag}${msg}</div>`;
         }).join('');
 
         logContainer.innerHTML = html;
-        logContainer.scrollTop = logContainer.scrollHeight;
+        if (scrollToBottom) logContainer.scrollTop = logContainer.scrollHeight;
     }
 
     function esc(s) {

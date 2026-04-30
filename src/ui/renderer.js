@@ -261,6 +261,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const logContainer   = document.getElementById('log-container');
     const logRefreshBtn  = document.getElementById('log-refresh-btn');
+    const logDownloadBtn = document.getElementById('log-download-btn');
     const logCountEl     = document.getElementById('log-count');
     const filterButtons  = document.querySelectorAll('.log-filter-btn');
     const logDateFrom    = document.getElementById('log-date-from');
@@ -300,6 +301,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     logRefreshBtn.addEventListener('click', loadLogs);
+
+    logDownloadBtn.addEventListener('click', () => {
+        if (allLogEntries.length === 0) return;
+        const lines = allLogEntries.map(e =>
+            (e.timestamp && e.level && e.tag)
+                ? `[${e.timestamp}] [${e.level}] [${e.tag}] ${e.message}`
+                : (e.message || '')
+        );
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain; charset=utf-8' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        const from = logDateFrom.value;
+        const to   = logDateTo.value;
+        a.download = from === to
+            ? `bridge-ground-${from}.log`
+            : `bridge-ground-${from}_to_${to}.log`;
+        a.click();
+        URL.revokeObjectURL(url);
+    });
 
     async function loadLogs() {
         logContainer.innerHTML = '<div class="log-empty">読み込み中...</div>';

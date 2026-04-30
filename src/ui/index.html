@@ -164,12 +164,15 @@
         .error   { background: #fef0f0; color: #c0392b; border: 1px solid #f5c0bb; }
 
         /* ── Dashboard: data counts ── */
-        .counts-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        .counts-row {
+            display: flex;
             gap: 10px;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid #eef0f4;
         }
         .count-item {
+            flex: 1;
             background: #f5f7fa;
             border: 1px solid #dde2ea;
             border-radius: 6px;
@@ -309,25 +312,19 @@
         <div id="view-main" class="view active">
             <div class="card">
                 <h3>データ同期</h3>
-                <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
-                    <div style="flex:1; min-width:220px;">
-                        <button id="sync-button" class="btn-primary" style="padding:10px 20px; font-size:14px;">今すぐ同期を実行</button>
-                        <div id="sync-progress-wrapper" class="progress-wrapper">
-                            <div class="progress-track">
-                                <div id="main-progress-bar" class="progress-bar">0%</div>
-                            </div>
-                            <div class="progress-status" id="main-status-text"></div>
-                        </div>
+                <button id="sync-button" class="btn-primary" style="padding:10px 20px; font-size:14px;">今すぐ同期を実行</button>
+                <div id="sync-progress-wrapper" class="progress-wrapper">
+                    <div class="progress-track">
+                        <div id="main-progress-bar" class="progress-bar">0%</div>
                     </div>
-                    <div style="flex:0 0 auto; min-width:200px;">
-                        <div class="counts-grid">
-                            <div class="count-item"><div class="count-label">店舗</div><div class="count-value" id="count-shops">-</div></div>
-                            <div class="count-item"><div class="count-label">ショップニュース</div><div class="count-value" id="count-shop-news">-</div></div>
-                            <div class="count-item"><div class="count-label">イベントニュース</div><div class="count-value" id="count-event-news">-</div></div>
-                            <div class="count-item"><div class="count-label">特集</div><div class="count-value" id="count-specials">-</div></div>
-                            <div class="count-item"><div class="count-label">セール</div><div class="count-value" id="count-sales">-</div></div>
-                        </div>
-                    </div>
+                    <div class="progress-status" id="main-status-text"></div>
+                </div>
+                <div class="counts-row">
+                    <div class="count-item"><div class="count-label">店舗</div><div class="count-value" id="count-shops">-</div></div>
+                    <div class="count-item"><div class="count-label">ショップNEWS</div><div class="count-value" id="count-shop-news">-</div></div>
+                    <div class="count-item"><div class="count-label">イベント</div><div class="count-value" id="count-event-news">-</div></div>
+                    <div class="count-item"><div class="count-label">特集</div><div class="count-value" id="count-specials">-</div></div>
+                    <div class="count-item"><div class="count-label">セール</div><div class="count-value" id="count-sales">-</div></div>
                 </div>
             </div>
 
@@ -357,7 +354,7 @@
         <!-- ── ログ ── -->
         <div id="view-logs" class="view">
             <div class="card">
-                <h3>アプリケーションログ（本日分）</h3>
+                <h3>アプリケーションログ</h3>
                 <div id="log-toolbar">
                     <div style="display:flex; align-items:center; gap:6px;">
                         <span class="date-sep">期間</span>
@@ -372,6 +369,7 @@
                         <button class="log-filter-btn error" data-level="ERROR">ERROR / FATAL</button>
                     </div>
                     <button id="log-refresh-btn" class="btn-secondary btn-sm">更新</button>
+                    <button id="log-download-btn" class="btn-secondary btn-sm">ダウンロード</button>
                     <span id="log-count"></span>
                 </div>
                 <div id="log-container"><div class="log-empty">読み込み中...</div></div>

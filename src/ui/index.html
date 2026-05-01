@@ -282,6 +282,35 @@
         .log-level-badge { flex-shrink: 0; width: 42px; text-align: center; }
         .log-empty { color: #556a8a; text-align: center; padding: 40px 0; }
 
+        /* ── External Apps ── */
+        .app-card {
+            background: #fff;
+            border: 1px solid #dde2ea;
+            border-radius: 8px;
+            padding: 18px 20px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .app-status-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .app-status-dot.online  { background: #20a852; box-shadow: 0 0 0 3px rgba(32,168,82,.15); }
+        .app-status-dot.offline { background: #bbb; }
+        .app-card-body { flex: 1; min-width: 0; }
+        .app-card-title {
+            font-size: 15px; font-weight: 700; color: #1a2233;
+            display: flex; align-items: baseline; gap: 8px;
+        }
+        .app-card-version { font-size: 12px; font-weight: 400; color: #889; }
+        .app-card-meta { font-size: 12px; color: #667; margin-top: 4px; }
+        .app-card-meta span { margin-right: 14px; }
+        .app-card-lastseen { font-size: 11px; color: #aaa; margin-top: 4px; }
+        .app-empty { color: #889; text-align: center; padding: 48px 0; font-size: 14px; }
+
         /* ── Date range ── */
         .date-input {
             padding: 5px 8px;
@@ -303,6 +332,7 @@
 
     <nav id="tab-nav">
         <button class="tab-btn active" data-tab="main">ダッシュボード</button>
+        <button class="tab-btn" data-tab="apps">外部アプリ</button>
         <button class="tab-btn" data-tab="logs">ログ</button>
         <button class="tab-btn" data-tab="settings">設定</button>
     </nav>
@@ -349,6 +379,11 @@
                     <a href="/api/floors"     target="_blank" class="endpoint-link"><strong>フロア一覧</strong><small>/api/floors</small></a>
                 </div>
             </div>
+        </div>
+
+        <!-- ── 外部アプリ ── -->
+        <div id="view-apps" class="view">
+            <div id="apps-list-container"></div>
         </div>
 
         <!-- ── ログ ── -->

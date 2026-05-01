@@ -38,6 +38,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             stopAutoRefresh();
         }
+        if (tabName === 'apps') {
+            startAppsPolling();
+        } else {
+            stopAppsPolling();
+        }
         if (tabName === 'settings') loadSettings(currentConfig);
     }
 
@@ -402,5 +407,58 @@ document.addEventListener('DOMContentLoaded', async () => {
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
+    }
+
+    // --- External Apps ---
+    let appsPollingTimer = null;
+
+    function startAppsPolling() {
+        stopAppsPolling();
+        loadApps();
+        appsPollingTimer = setInterval(loadApps, 10000);
+    }
+
+    function stopAppsPolling() {
+        if (appsPollingTimer) { clearInterval(appsPollingTimer); appsPollingTimer = null; }
+    }
+
+    async function loadApps() {
+        const container = document.getElementById('apps-list-container');
+        try {
+            const apps = await bridgeApi.getApps();
+            if (!apps || apps.length === 0) {
+                container.innerHTML = '<div class="app-empty">接続中の外部アプリはありません。</div>';
+                return;
+            }
+            const html = apps.map(app => {
+                const dotClass = app.online ? 'online' : 'offline';
+                const version  = app.version
+                    ? `<span class="app-card-version">v${esc(app.version)}</span>` : '';
+                const lastSeen = formatAppTime(app.lastSeen);
+                return `<div class="app-card">
+  <span class="app-status-dot ${dotClass}"></span>
+  <div class="app-card-body">
+    <div class="app-card-title">${esc(app.name || '-')}${version}</div>
+    <div class="app-card-meta">
+      <span>モールID: ${esc(app.mallId || '-')}</span>
+      <span>ホスト: ${esc(app.hostname || '-')}</span>
+    </div>
+    <div class="app-card-lastseen">最終確認: ${esc(lastSeen)}</div>
+  </div>
+  <a href="/app-detail.html?id=${esc(app.id)}" target="_blank" class="btn-secondary btn-sm">詳細</a>
+</div>`;
+            }).join('');
+            container.innerHTML = html;
+        } catch (e) {
+            container.innerHTML = '<div class="app-empty">外部アプリの読み込みに失敗しました。</div>';
+            console.error('loadApps error', e);
+        }
+    }
+
+    function formatAppTime(isoStr) {
+        if (!isoStr) return '-';
+        try {
+            return new Date(isoStr).toLocaleString('ja-JP');
+        } catch (_) { return isoStr; }
     }
 });

@@ -15,6 +15,7 @@ type Server struct {
 	Config         *config.Config
 	DB             *db.Manager
 	Broker         *EventBroker
+	Apps           *AppRegistry
 	SaveConfigFunc func(cfg config.Config) error
 	StartSyncFunc  func() (bool, string)
 	AppVersion     string
@@ -25,6 +26,7 @@ func NewServer(cfg *config.Config, db *db.Manager) *Server {
 		Config: cfg,
 		DB:     db,
 		Broker: NewEventBroker(),
+		Apps:   newAppRegistry(),
 	}
 }
 
@@ -37,6 +39,10 @@ func (s *Server) Start() {
 	mux.HandleFunc("/api/counts", s.handleCounts)
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/version", s.handleVersion)
+
+	// External Apps API
+	mux.HandleFunc("/api/apps", s.handleAppsList)
+	mux.HandleFunc("/api/apps/", s.handleAppsDetail)
 
 	// Data API Routes
 	mux.HandleFunc("/api/shops", s.handleShopList)
@@ -891,6 +897,8 @@ func (s *Server) handleBridgeJS(w http.ResponseWriter, r *http.Request) {
 					if (to)   params.push('to='   + to);
 					return _get('/api/logs' + (params.length ? '?' + params.join('&') : ''));
 				},
+				getApps: () => _get('/api/apps'),
+				getApp:  (id) => _get('/api/apps/' + id),
 				onSyncProgress: function(callback) {
 					window._syncProgressCallback = callback;
 					if (!_isLorca && !window._syncProgressSSE) {

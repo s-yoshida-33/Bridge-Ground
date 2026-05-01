@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アプリ詳細 - BridgeGround</title>
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 14px;
+            background: #f0f2f5;
+            color: #333;
+            min-height: 100vh;
+        }
+        #header {
+            background: #1a2233;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0 20px;
+            height: 52px;
+        }
+        #header a {
+            color: #8899bb;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        #header a:hover { color: #fff; }
+        #header .sep { color: #445; }
+        #header h1 { font-size: 16px; font-weight: 600; }
+
+        #content { padding: 24px 20px; max-width: 900px; margin: 0 auto; }
+
+        .card {
+            background: #fff;
+            border: 1px solid #dde2ea;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        .card h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1a2233;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eef0f4;
+        }
+
+        /* App header */
+        .app-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+        .status-dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .status-dot.online  { background: #20a852; box-shadow: 0 0 0 3px rgba(32,168,82,.15); }
+        .status-dot.offline { background: #bbb; }
+        .app-name { font-size: 22px; font-weight: 700; color: #1a2233; }
+        .status-badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+        .status-badge.online  { background: #eafaf1; color: #1a7a3f; }
+        .status-badge.offline { background: #f5f7fa; color: #889; }
+
+        /* Info grid */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+        }
+        .info-item { }
+        .info-label { font-size: 11px; font-weight: 600; color: #778; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .info-value { font-size: 14px; color: #223; font-weight: 500; }
+        .info-value.mono { font-family: monospace; font-size: 13px; }
+
+        /* Log section */
+        #log-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .date-input {
+            padding: 5px 8px;
+            border: 1px solid #cdd2da;
+            border-radius: 5px;
+            font-size: 13px;
+            color: #334;
+            background: #fff;
+        }
+        .date-input:focus { outline: none; border-color: #1a6ef5; }
+        .date-sep { font-size: 13px; color: #778; }
+        .log-filter-btn {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #eef0f4;
+            color: #556;
+            border: none;
+            cursor: pointer;
+        }
+        .log-filter-btn.active { background: #1a6ef5; color: #fff; }
+        .log-filter-btn.warn { color: #b85c00; }
+        .log-filter-btn.warn.active { background: #f5a623; color: #fff; }
+        .log-filter-btn.error { color: #c0392b; }
+        .log-filter-btn.error.active { background: #e74c3c; color: #fff; }
+
+        button {
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 6px 14px;
+            transition: background 0.15s;
+        }
+        .btn-secondary { background: #eef0f4; color: #445; }
+        .btn-secondary:hover { background: #dde2ea; }
+
+        #log-count { font-size: 12px; color: #889; margin-left: auto; }
+        #auto-refresh-indicator { display: none; font-size: 11px; color: #20a852; font-weight: 600; }
+
+        #log-container {
+            font-family: "Consolas", "Cascadia Code", monospace;
+            font-size: 12px;
+            background: #1a1e2b;
+            color: #c8d0e0;
+            border-radius: 6px;
+            padding: 12px;
+            height: 480px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+        .log-entry { display: flex; gap: 8px; padding: 1px 0; }
+        .log-entry:hover { background: rgba(255,255,255,0.04); }
+        .log-ts   { color: #556a8a; flex-shrink: 0; }
+        .log-tag  { color: #7cb8e8; flex-shrink: 0; min-width: 120px; }
+        .log-msg  { word-break: break-all; }
+        .log-level-badge { flex-shrink: 0; width: 42px; text-align: center; }
+        .log-level-info  .log-level-badge { color: #5dade2; }
+        .log-level-warn  .log-level-badge,
+        .log-level-warn  .log-msg          { color: #f0a830; }
+        .log-level-error .log-level-badge,
+        .log-level-error .log-msg          { color: #e74c3c; }
+        .log-level-fatal .log-level-badge,
+        .log-level-fatal .log-msg          { color: #ff6b6b; font-weight: 700; }
+        .log-empty { color: #556a8a; text-align: center; padding: 40px 0; }
+
+        .placeholder-card {
+            background: #f9fafb;
+            border: 1px dashed #cdd2da;
+            border-radius: 8px;
+            padding: 28px 20px;
+            text-align: center;
+            color: #889;
+            margin-bottom: 16px;
+        }
+        .placeholder-card p { margin-top: 6px; font-size: 12px; }
+
+        #error-view { display: none; }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <a href="/">← BridgeGround</a>
+        <span class="sep">/</span>
+        <h1 id="app-title">アプリ詳細</h1>
+    </div>
+
+    <div id="content">
+        <div id="error-view" class="card" style="color:#c0392b;">
+            アプリ情報を取得できませんでした。URLのIDを確認してください。
+        </div>
+
+        <div id="main-view">
+            <!-- App header -->
+            <div class="card">
+                <div class="app-header">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span class="app-name" id="app-name">-</span>
+                    <span class="status-badge" id="status-badge">-</span>
+                </div>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">バージョン</div>
+                        <div class="info-value mono" id="info-version">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">モール ID</div>
+                        <div class="info-value mono" id="info-mallid">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">ホスト名</div>
+                        <div class="info-value mono" id="info-hostname">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">登録日時</div>
+                        <div class="info-value" id="info-registered">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">最終接続</div>
+                        <div class="info-value" id="info-lastseen">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screenshot placeholder -->
+            <div class="placeholder-card">
+                <strong>スクリーンショット</strong>
+                <p>外部アプリがスクリーンショットを送信するよう実装された際に表示されます。</p>
+            </div>
+
+            <!-- Log view -->
+            <div class="card">
+                <h3>Bridge-Ground ログ</h3>
+                <div id="log-toolbar">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span class="date-sep">期間</span>
+                        <input type="date" id="log-date-from" class="date-input">
+                        <span class="date-sep">〜</span>
+                        <input type="date" id="log-date-to" class="date-input">
+                    </div>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button class="log-filter-btn active" data-level="ALL">ALL</button>
+                        <button class="log-filter-btn" data-level="INFO">INFO</button>
+                        <button class="log-filter-btn warn" data-level="WARN">WARN</button>
+                        <button class="log-filter-btn error" data-level="ERROR">ERROR / FATAL</button>
+                    </div>
+                    <button id="log-refresh-btn" class="btn-secondary">更新</button>
+                    <button id="log-download-btn" class="btn-secondary">ダウンロード</button>
+                    <span id="log-count"></span>
+                    <span id="auto-refresh-indicator">● 自動更新中</span>
+                </div>
+                <div id="log-container"><div class="log-empty">読み込み中...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (async () => {
+        const params = new URLSearchParams(location.search);
+        const appId  = params.get('id');
+        if (!appId) { showError(); return; }
+
+        // --- Load app info ---
+        let appInfo = null;
+        async function loadApp() {
+            try {
+                const r = await fetch('/api/apps/' + appId);
+                if (!r.ok) { showError(); return; }
+                appInfo = await r.json();
+                renderApp(appInfo);
+            } catch { showError(); }
+        }
+
+        function showError() {
+            document.getElementById('main-view').style.display  = 'none';
+            document.getElementById('error-view').style.display = 'block';
+        }
+
+        function renderApp(a) {
+            document.title = a.name + ' - BridgeGround';
+            document.getElementById('app-title').textContent = a.name;
+            document.getElementById('app-name').textContent  = a.name;
+            document.getElementById('info-version').textContent  = a.version  || '-';
+            document.getElementById('info-mallid').textContent   = a.mallId   || '-';
+            document.getElementById('info-hostname').textContent = a.hostname || '-';
+            document.getElementById('info-registered').textContent = fmtDate(a.registeredAt);
+            document.getElementById('info-lastseen').textContent   = fmtDate(a.lastSeen);
+
+            const dot   = document.getElementById('status-dot');
+            const badge = document.getElementById('status-badge');
+            if (a.online) {
+                dot.className   = 'status-dot online';
+                badge.className = 'status-badge online';
+                badge.textContent = 'オンライン';
+            } else {
+                dot.className   = 'status-dot offline';
+                badge.className = 'status-badge offline';
+                badge.textContent = 'オフライン';
+            }
+        }
+
+        function fmtDate(iso) {
+            if (!iso) return '-';
+            try {
+                return new Date(iso).toLocaleString('ja-JP');
+            } catch { return iso; }
+        }
+
+        await loadApp();
+        // Refresh app status every 10s
+        setInterval(loadApp, 10000);
+
+        // --- Log section (shared Bridge-Ground logs) ---
+        let allEntries  = [];
+        let activeLevel = 'ALL';
+        let autoTimer   = null;
+
+        const logContainer  = document.getElementById('log-container');
+        const logCountEl    = document.getElementById('log-count');
+        const logDateFrom   = document.getElementById('log-date-from');
+        const logDateTo     = document.getElementById('log-date-to');
+        const filterButtons = document.querySelectorAll('.log-filter-btn');
+        const refreshBtn    = document.getElementById('log-refresh-btn');
+        const downloadBtn   = document.getElementById('log-download-btn');
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const minDate  = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); })();
+        logDateFrom.value = todayStr; logDateTo.value = todayStr;
+        logDateFrom.min   = minDate;  logDateTo.min   = minDate;
+        logDateFrom.max   = todayStr; logDateTo.max   = todayStr;
+
+        logDateFrom.addEventListener('change', () => {
+            if (logDateFrom.value > logDateTo.value) logDateTo.value = logDateFrom.value;
+            loadLogs(); startAutoRefresh();
+        });
+        logDateTo.addEventListener('change', () => {
+            if (logDateTo.value < logDateFrom.value) logDateFrom.value = logDateTo.value;
+            loadLogs(); startAutoRefresh();
+        });
+        filterButtons.forEach(b => b.addEventListener('click', () => {
+            activeLevel = b.dataset.level;
+            filterButtons.forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            renderLogs(false);
+        }));
+        refreshBtn.addEventListener('click', loadLogs);
+        downloadBtn.addEventListener('click', downloadLogs);
+
+        async function loadLogs() {
+            logContainer.innerHTML = '<div class="log-empty">読み込み中...</div>';
+            try {
+                const params = new URLSearchParams({ from: logDateFrom.value, to: logDateTo.value });
+                const r = await fetch('/api/logs?' + params);
+                allEntries = await r.json();
+                renderLogs(true);
+            } catch {
+                logContainer.innerHTML = '<div class="log-empty">ログの読み込みに失敗しました。</div>';
+            }
+        }
+
+        function renderLogs(scrollToBottom) {
+            const filtered = activeLevel === 'ALL'
+                ? allEntries
+                : allEntries.filter(e => activeLevel === 'ERROR'
+                    ? (e.level === 'ERROR' || e.level === 'FATAL')
+                    : e.level === activeLevel);
+
+            logCountEl.textContent = filtered.length + ' 件';
+            if (filtered.length === 0) {
+                logContainer.innerHTML = '<div class="log-empty">該当するエントリがありません。</div>';
+                return;
+            }
+            logContainer.innerHTML = filtered.map(e => {
+                const lvl   = (e.level || '').toUpperCase();
+                const cls   = lvl ? 'log-level-' + lvl.toLowerCase() : '';
+                const ts    = e.timestamp ? '<span class="log-ts">' + esc(e.timestamp) + '</span>' : '';
+                const badge = lvl ? '<span class="log-level-badge">[' + esc(lvl) + ']</span>' : '';
+                const tag   = e.tag ? '<span class="log-tag">[' + esc(e.tag) + ']</span>' : '';
+                const msg   = '<span class="log-msg">' + esc(e.message || '') + '</span>';
+                return '<div class="log-entry ' + cls + '">' + ts + badge + tag + msg + '</div>';
+            }).join('');
+            if (scrollToBottom) logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function downloadLogs() {
+            if (!allEntries.length) return;
+            const lines = allEntries.map(e =>
+                (e.timestamp && e.level && e.tag)
+                    ? '[' + e.timestamp + '] [' + e.level + '] [' + e.tag + '] ' + e.message
+                    : (e.message || '')
+            );
+            const blob = new Blob([lines.join('\n')], { type: 'text/plain; charset=utf-8' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href = url;
+            const from = logDateFrom.value, to = logDateTo.value;
+            a.download = from === to ? 'bridge-ground-' + from + '.log' : 'bridge-ground-' + from + '_to_' + to + '.log';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function startAutoRefresh() {
+            if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+            const today = new Date().toISOString().slice(0, 10);
+            if (logDateTo.value !== today) {
+                document.getElementById('auto-refresh-indicator').style.display = 'none';
+                return;
+            }
+            autoTimer = setInterval(async () => {
+                try {
+                    const params = new URLSearchParams({ from: logDateFrom.value, to: logDateTo.value });
+                    const r = await fetch('/api/logs?' + params);
+                    const fresh = await r.json();
+                    if (fresh.length !== allEntries.length) {
+                        const atBottom = logContainer.scrollTop + logContainer.clientHeight >= logContainer.scrollHeight - 50;
+                        allEntries = fresh;
+                        renderLogs(atBottom);
+                    }
+                } catch (_) {}
+            }, 5000);
+            document.getElementById('auto-refresh-indicator').style.display = 'inline';
+        }
+
+        function esc(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        await loadLogs();
+        startAutoRefresh();
+    })();
+    </script>
+</body>
+</html>

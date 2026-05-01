@@ -23,11 +23,7 @@
             padding: 0 20px;
             height: 52px;
         }
-        #header a {
-            color: #8899bb;
-            text-decoration: none;
-            font-size: 13px;
-        }
+        #header a { color: #8899bb; text-decoration: none; font-size: 13px; }
         #header a:hover { color: #fff; }
         #header .sep { color: #445; }
         #header h1 { font-size: 16px; font-weight: 600; }
@@ -42,92 +38,131 @@
             margin-bottom: 16px;
         }
         .card h3 {
-            font-size: 14px;
-            font-weight: 600;
-            color: #1a2233;
-            margin-bottom: 16px;
-            padding-bottom: 10px;
+            font-size: 14px; font-weight: 600; color: #1a2233;
+            margin-bottom: 16px; padding-bottom: 10px;
             border-bottom: 1px solid #eef0f4;
         }
 
         /* App header */
-        .app-header {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            margin-bottom: 20px;
-        }
-        .status-dot {
-            width: 12px; height: 12px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
+        .app-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+        .status-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
         .status-dot.online  { background: #20a852; box-shadow: 0 0 0 3px rgba(32,168,82,.15); }
         .status-dot.offline { background: #bbb; }
         .app-name { font-size: 22px; font-weight: 700; color: #1a2233; }
-        .status-badge {
-            font-size: 11px;
-            font-weight: 700;
-            padding: 2px 8px;
-            border-radius: 10px;
-        }
+        .status-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
         .status-badge.online  { background: #eafaf1; color: #1a7a3f; }
         .status-badge.offline { background: #f5f7fa; color: #889; }
 
         /* Info grid */
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 12px;
-        }
-        .info-item { }
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
         .info-label { font-size: 11px; font-weight: 600; color: #778; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
         .info-value { font-size: 14px; color: #223; font-weight: 500; }
         .info-value.mono { font-family: monospace; font-size: 13px; }
 
-        /* Log section */
-        #log-toolbar {
+        /* Screenshot card */
+        .screenshot-card {
+            background: #fff;
+            border: 1px solid #dde2ea;
+            border-radius: 8px;
+            padding: 24px 20px;
+            margin-bottom: 16px;
             display: flex;
+            flex-direction: column;
             align-items: center;
             gap: 10px;
-            margin-bottom: 12px;
-            flex-wrap: wrap;
+        }
+        .screenshot-card h3 {
+            align-self: flex-start;
+            font-size: 14px; font-weight: 600; color: #1a2233;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eef0f4;
+            width: 100%;
+            margin-bottom: 6px;
+        }
+        #capture-btn {
+            background: #1a6ef5; color: #fff;
+            border: none; border-radius: 5px;
+            font-size: 14px; font-weight: 600;
+            padding: 10px 28px;
+            cursor: pointer;
+            transition: background 0.15s, opacity 0.15s;
+        }
+        #capture-btn:hover:not(:disabled) { background: #0f5de0; }
+        #capture-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #capture-status { font-size: 12px; color: #889; min-height: 18px; }
+
+        /* Screenshot popup (modal) */
+        #screenshot-modal {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.65);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        #screenshot-modal.open { display: flex; }
+        .modal-box {
+            background: #1a1e2b;
+            border-radius: 10px;
+            max-width: 92vw;
+            max-height: 92vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+        }
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid #2a2e3d;
+        }
+        .modal-header span { color: #c8d0e0; font-size: 13px; font-weight: 600; }
+        .modal-header-actions { display: flex; gap: 8px; align-items: center; }
+        #modal-download-btn {
+            background: #1a6ef5; color: #fff;
+            border: none; border-radius: 5px;
+            font-size: 12px; font-weight: 600;
+            padding: 6px 14px;
+            cursor: pointer;
+        }
+        #modal-download-btn:hover { background: #0f5de0; }
+        #modal-close-btn {
+            background: #2a2e3d; color: #c8d0e0;
+            border: none; border-radius: 5px;
+            font-size: 16px; font-weight: 700;
+            width: 30px; height: 30px;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        #modal-close-btn:hover { background: #3a3e4d; }
+        .modal-body { overflow: auto; padding: 8px; }
+        #screenshot-preview { max-width: 100%; max-height: calc(92vh - 80px); display: block; border-radius: 4px; }
+
+        /* Log section */
+        #log-toolbar {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 12px; flex-wrap: wrap;
         }
         .date-input {
-            padding: 5px 8px;
-            border: 1px solid #cdd2da;
-            border-radius: 5px;
-            font-size: 13px;
-            color: #334;
-            background: #fff;
+            padding: 5px 8px; border: 1px solid #cdd2da;
+            border-radius: 5px; font-size: 13px; color: #334; background: #fff;
         }
         .date-input:focus { outline: none; border-color: #1a6ef5; }
         .date-sep { font-size: 13px; color: #778; }
         .log-filter-btn {
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-            background: #eef0f4;
-            color: #556;
-            border: none;
-            cursor: pointer;
+            padding: 4px 10px; border-radius: 4px;
+            font-size: 12px; font-weight: 600;
+            background: #eef0f4; color: #556; border: none; cursor: pointer;
         }
         .log-filter-btn.active { background: #1a6ef5; color: #fff; }
-        .log-filter-btn.warn { color: #b85c00; }
-        .log-filter-btn.warn.active { background: #f5a623; color: #fff; }
+        .log-filter-btn.warn  { color: #b85c00; }
+        .log-filter-btn.warn.active  { background: #f5a623; color: #fff; }
         .log-filter-btn.error { color: #c0392b; }
         .log-filter-btn.error.active { background: #e74c3c; color: #fff; }
 
-        button {
-            cursor: pointer;
-            border: none;
-            border-radius: 5px;
-            font-size: 13px;
-            font-weight: 500;
-            padding: 6px 14px;
-            transition: background 0.15s;
-        }
+        button { cursor: pointer; border: none; border-radius: 5px; font-size: 13px; font-weight: 500; padding: 6px 14px; transition: background 0.15s; }
         .btn-secondary { background: #eef0f4; color: #445; }
         .btn-secondary:hover { background: #dde2ea; }
 
@@ -136,40 +171,21 @@
 
         #log-container {
             font-family: "Consolas", "Cascadia Code", monospace;
-            font-size: 12px;
-            background: #1a1e2b;
-            color: #c8d0e0;
-            border-radius: 6px;
-            padding: 12px;
-            height: 480px;
-            overflow-y: auto;
-            line-height: 1.6;
+            font-size: 12px; background: #1a1e2b; color: #c8d0e0;
+            border-radius: 6px; padding: 12px;
+            height: 480px; overflow-y: auto; line-height: 1.6;
         }
         .log-entry { display: flex; gap: 8px; padding: 1px 0; }
         .log-entry:hover { background: rgba(255,255,255,0.04); }
-        .log-ts   { color: #556a8a; flex-shrink: 0; }
-        .log-tag  { color: #7cb8e8; flex-shrink: 0; min-width: 120px; }
-        .log-msg  { word-break: break-all; }
+        .log-ts  { color: #556a8a; flex-shrink: 0; }
+        .log-tag { color: #7cb8e8; flex-shrink: 0; min-width: 120px; }
+        .log-msg { word-break: break-all; }
         .log-level-badge { flex-shrink: 0; width: 42px; text-align: center; }
         .log-level-info  .log-level-badge { color: #5dade2; }
-        .log-level-warn  .log-level-badge,
-        .log-level-warn  .log-msg          { color: #f0a830; }
-        .log-level-error .log-level-badge,
-        .log-level-error .log-msg          { color: #e74c3c; }
-        .log-level-fatal .log-level-badge,
-        .log-level-fatal .log-msg          { color: #ff6b6b; font-weight: 700; }
+        .log-level-warn  .log-level-badge, .log-level-warn  .log-msg { color: #f0a830; }
+        .log-level-error .log-level-badge, .log-level-error .log-msg { color: #e74c3c; }
+        .log-level-fatal .log-level-badge, .log-level-fatal .log-msg { color: #ff6b6b; font-weight: 700; }
         .log-empty { color: #556a8a; text-align: center; padding: 40px 0; }
-
-        .placeholder-card {
-            background: #f9fafb;
-            border: 1px dashed #cdd2da;
-            border-radius: 8px;
-            padding: 28px 20px;
-            text-align: center;
-            color: #889;
-            margin-bottom: 16px;
-        }
-        .placeholder-card p { margin-top: 6px; font-size: 12px; }
 
         #error-view { display: none; }
     </style>
@@ -218,15 +234,32 @@
                 </div>
             </div>
 
-            <!-- Screenshot placeholder -->
-            <div class="placeholder-card">
-                <strong>スクリーンショット</strong>
-                <p>外部アプリがスクリーンショットを送信するよう実装された際に表示されます。</p>
+            <!-- Screenshot -->
+            <div class="screenshot-card">
+                <h3>スクリーンショット</h3>
+                <button id="capture-btn">スクリーンショットを取得</button>
+                <span id="capture-status"></span>
+            </div>
+
+            <!-- Screenshot modal -->
+            <div id="screenshot-modal">
+                <div class="modal-box">
+                    <div class="modal-header">
+                        <span id="modal-timestamp"></span>
+                        <div class="modal-header-actions">
+                            <button id="modal-download-btn">ダウンロード</button>
+                            <button id="modal-close-btn">×</button>
+                        </div>
+                    </div>
+                    <div class="modal-body">
+                        <img id="screenshot-preview" src="" alt="スクリーンショット">
+                    </div>
+                </div>
             </div>
 
             <!-- Log view -->
             <div class="card">
-                <h3>Bridge-Ground ログ</h3>
+                <h3 id="log-card-title">アプリログ</h3>
                 <div id="log-toolbar">
                     <div style="display:flex; align-items:center; gap:6px;">
                         <span class="date-sep">期間</span>
@@ -256,8 +289,10 @@
         const appId  = params.get('id');
         if (!appId) { showError(); return; }
 
-        // --- Load app info ---
+        // --- App info ---
         let appInfo = null;
+        let appName = 'アプリ';
+
         async function loadApp() {
             try {
                 const r = await fetch('/api/apps/' + appId);
@@ -273,14 +308,16 @@
         }
 
         function renderApp(a) {
-            document.title = a.name + ' - BridgeGround';
-            document.getElementById('app-title').textContent = a.name;
-            document.getElementById('app-name').textContent  = a.name;
-            document.getElementById('info-version').textContent  = a.version  || '-';
-            document.getElementById('info-mallid').textContent   = a.mallId   || '-';
-            document.getElementById('info-hostname').textContent = a.hostname || '-';
+            appName = a.name || 'アプリ';
+            document.title = appName + ' - BridgeGround';
+            document.getElementById('app-title').textContent    = appName;
+            document.getElementById('app-name').textContent     = appName;
+            document.getElementById('info-version').textContent = a.version  || '-';
+            document.getElementById('info-mallid').textContent  = a.mallId   || '-';
+            document.getElementById('info-hostname').textContent= a.hostname || '-';
             document.getElementById('info-registered').textContent = fmtDate(a.registeredAt);
             document.getElementById('info-lastseen').textContent   = fmtDate(a.lastSeen);
+            document.getElementById('log-card-title').textContent  = appName + ' ログ';
 
             const dot   = document.getElementById('status-dot');
             const badge = document.getElementById('status-badge');
@@ -297,16 +334,83 @@
 
         function fmtDate(iso) {
             if (!iso) return '-';
-            try {
-                return new Date(iso).toLocaleString('ja-JP');
-            } catch { return iso; }
+            try { return new Date(iso).toLocaleString('ja-JP'); } catch { return iso; }
         }
 
         await loadApp();
-        // Refresh app status every 10s
         setInterval(loadApp, 10000);
 
-        // --- Log section (shared Bridge-Ground logs) ---
+        // --- Screenshot ---
+        const captureBtn    = document.getElementById('capture-btn');
+        const captureStatus = document.getElementById('capture-status');
+        const modal         = document.getElementById('screenshot-modal');
+        const preview       = document.getElementById('screenshot-preview');
+        const modalTs       = document.getElementById('modal-timestamp');
+        const modalDL       = document.getElementById('modal-download-btn');
+        const modalClose    = document.getElementById('modal-close-btn');
+
+        let screenshotUrl = null;
+
+        function openModal(imgUrl, at) {
+            if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
+            screenshotUrl = imgUrl;
+            preview.src = imgUrl;
+            modalTs.textContent = at ? '取得: ' + fmtDate(at) : '';
+            modal.classList.add('open');
+        }
+
+        function closeModal() {
+            modal.classList.remove('open');
+        }
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+        modalClose.addEventListener('click', closeModal);
+
+        modalDL.addEventListener('click', () => {
+            if (!screenshotUrl) return;
+            const a = document.createElement('a');
+            a.href = screenshotUrl;
+            const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+            a.download = (appName || 'screenshot') + '-' + ts + '.jpg';
+            a.click();
+        });
+
+        captureBtn.addEventListener('click', async () => {
+            captureBtn.disabled = true;
+            captureStatus.textContent = '取得中... (最大15秒)';
+
+            try {
+                const reqRes = await fetch('/api/apps/' + appId + '/screenshot/request', { method: 'POST' });
+                if (!reqRes.ok) throw new Error('request failed');
+
+                // Poll status for up to 15 seconds
+                let ready = false;
+                let at = null;
+                for (let i = 0; i < 15; i++) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    const s = await fetch('/api/apps/' + appId + '/screenshot/status');
+                    const data = await s.json();
+                    if (data.ready) { ready = true; at = data.at; break; }
+                }
+
+                if (!ready) throw new Error('timeout');
+
+                const imgRes = await fetch('/api/apps/' + appId + '/screenshot?t=' + Date.now());
+                if (!imgRes.ok) throw new Error('fetch screenshot failed');
+                const blob = await imgRes.blob();
+                const url  = URL.createObjectURL(blob);
+                captureStatus.textContent = '';
+                openModal(url, at);
+            } catch (e) {
+                captureStatus.textContent = '取得に失敗しました。アプリがオンラインか確認してください。';
+            } finally {
+                captureBtn.disabled = false;
+            }
+        });
+
+        // --- Log section ---
         let allEntries  = [];
         let activeLevel = 'ALL';
         let autoTimer   = null;
@@ -345,8 +449,8 @@
         async function loadLogs() {
             logContainer.innerHTML = '<div class="log-empty">読み込み中...</div>';
             try {
-                const params = new URLSearchParams({ from: logDateFrom.value, to: logDateTo.value });
-                const r = await fetch('/api/logs?' + params);
+                const p = new URLSearchParams({ from: logDateFrom.value, to: logDateTo.value });
+                const r = await fetch('/api/apps/' + appId + '/logs?' + p);
                 allEntries = await r.json();
                 renderLogs(true);
             } catch {
@@ -390,7 +494,8 @@
             const a    = document.createElement('a');
             a.href = url;
             const from = logDateFrom.value, to = logDateTo.value;
-            a.download = from === to ? 'bridge-ground-' + from + '.log' : 'bridge-ground-' + from + '_to_' + to + '.log';
+            const name = (appName || 'app').toLowerCase().replace(/\s+/g, '-');
+            a.download = from === to ? name + '-' + from + '.log' : name + '-' + from + '_to_' + to + '.log';
             a.click();
             URL.revokeObjectURL(url);
         }
@@ -398,14 +503,12 @@
         function startAutoRefresh() {
             if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
             const today = new Date().toISOString().slice(0, 10);
-            if (logDateTo.value !== today) {
-                document.getElementById('auto-refresh-indicator').style.display = 'none';
-                return;
-            }
+            const indEl = document.getElementById('auto-refresh-indicator');
+            if (logDateTo.value !== today) { indEl.style.display = 'none'; return; }
             autoTimer = setInterval(async () => {
                 try {
-                    const params = new URLSearchParams({ from: logDateFrom.value, to: logDateTo.value });
-                    const r = await fetch('/api/logs?' + params);
+                    const p = new URLSearchParams({ from: logDateFrom.value, to: logDateTo.value });
+                    const r = await fetch('/api/apps/' + appId + '/logs?' + p);
                     const fresh = await r.json();
                     if (fresh.length !== allEntries.length) {
                         const atBottom = logContainer.scrollTop + logContainer.clientHeight >= logContainer.scrollHeight - 50;
@@ -414,7 +517,7 @@
                     }
                 } catch (_) {}
             }, 5000);
-            document.getElementById('auto-refresh-indicator').style.display = 'inline';
+            indEl.style.display = 'inline';
         }
 
         function esc(s) {

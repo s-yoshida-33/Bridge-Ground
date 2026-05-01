@@ -78,9 +78,22 @@ func (s *Server) Start() {
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 
 	fmt.Printf("HTTP Server running at http://localhost:%d\n", port)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, s.withCORS(mux)); err != nil {
 		fmt.Printf("Server error: %v\n", err)
 	}
+}
+
+func (s *Server) withCORS(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 // BroadcastEvent sends an SSE event to all connected clients

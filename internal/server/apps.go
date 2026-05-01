@@ -13,14 +13,15 @@ import (
 
 // AppInfo holds registration data for a connected external app.
 type AppInfo struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Version      string    `json:"version"`
-	MallID       string    `json:"mallId"`
-	Hostname     string    `json:"hostname"`
-	RegisteredAt time.Time `json:"registeredAt"`
-	LastSeen     time.Time `json:"lastSeen"`
-	Online       bool      `json:"online"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Version      string     `json:"version"`
+	MallID       string     `json:"mallId"`
+	Hostname     string     `json:"hostname"`
+	RegisteredAt time.Time  `json:"registeredAt"`
+	LastSeen     time.Time  `json:"lastSeen"`
+	StartedAt    *time.Time `json:"startedAt,omitempty"`
+	Online       bool       `json:"online"`
 }
 
 // screenshotEntry holds the latest screenshot for one app.
@@ -92,14 +93,26 @@ func randomID() string {
 
 // Register adds or updates an app. Re-registration by the same name+hostname
 // updates the existing record instead of creating a duplicate.
-func (r *AppRegistry) Register(name, version, mallID, hostname string) AppInfo {
+// startedAt is the RFC3339 timestamp from the app itself (its process start time).
+func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt string) AppInfo {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	var parsedStartedAt *time.Time
+	if t, err := time.Parse(time.RFC3339, startedAt); err == nil {
+		parsedStartedAt = &t
+	} else if t, err := time.Parse(time.RFC3339Nano, startedAt); err == nil {
+		parsedStartedAt = &t
+	}
+
 	for _, a := range r.apps {
 		if a.Name == name && a.Hostname == hostname {
 			a.Version = version
 			a.MallID = mallID
 			a.LastSeen = time.Now()
+			if parsedStartedAt != nil {
+				a.StartedAt = parsedStartedAt
+			}
 			return *a
 		}
 	}
@@ -111,6 +124,7 @@ func (r *AppRegistry) Register(name, version, mallID, hostname string) AppInfo {
 		Hostname:     hostname,
 		RegisteredAt: time.Now(),
 		LastSeen:     time.Now(),
+		StartedAt:    parsedStartedAt,
 	}
 	r.apps[a.ID] = a
 	r.appLogs[a.ID] = &appLogBucket{byDate: make(map[string][]logging.LogEntry)}
@@ -226,16 +240,17 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 	// POST /api/apps/register
 	if sub == "register" && r.Method == http.MethodPost {
 		var req struct {
-			Name     string `json:"name"`
-			Version  string `json:"version"`
-			MallID   string `json:"mallId"`
-			Hostname string `json:"hostname"`
+			Name      string `json:"name"`
+			Version   string `json:"version"`
+			MallID    string `json:"mallId"`
+			Hostname  string `json:"hostname"`
+			StartedAt string `json:"startedAt"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		app := s.Apps.Register(req.Name, req.Version, req.MallID, req.Hostname)
+		app := s.Apps.Register(req.Name, req.Version, req.MallID, req.Hostname, req.StartedAt)
 		json.NewEncoder(w).Encode(app)
 		return
 	}

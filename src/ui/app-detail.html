@@ -224,8 +224,12 @@
                         <div class="info-value mono" id="info-hostname">-</div>
                     </div>
                     <div class="info-item">
-                        <div class="info-label">登録日時</div>
-                        <div class="info-value" id="info-registered">-</div>
+                        <div class="info-label">稼働時間</div>
+                        <div class="info-value" id="info-uptime">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">起動日時</div>
+                        <div class="info-value" id="info-started">-</div>
                     </div>
                     <div class="info-item">
                         <div class="info-label">最終接続</div>
@@ -307,6 +311,18 @@
             document.getElementById('error-view').style.display = 'block';
         }
 
+        function formatUptime(startedAt) {
+            if (!startedAt) return '-';
+            const ms = Date.now() - new Date(startedAt).getTime();
+            if (ms < 0) return '-';
+            const h = Math.floor(ms / 3600000);
+            const m = Math.floor((ms % 3600000) / 60000);
+            const s = Math.floor((ms % 60000) / 1000);
+            if (h > 0) return h + '時間 ' + m + '分';
+            if (m > 0) return m + '分 ' + s + '秒';
+            return s + '秒';
+        }
+
         function renderApp(a) {
             appName = a.name || 'アプリ';
             document.title = appName + ' - BridgeGround';
@@ -315,9 +331,9 @@
             document.getElementById('info-version').textContent = a.version  || '-';
             document.getElementById('info-mallid').textContent  = a.mallId   || '-';
             document.getElementById('info-hostname').textContent= a.hostname || '-';
-            document.getElementById('info-registered').textContent = fmtDate(a.registeredAt);
-            document.getElementById('info-lastseen').textContent   = fmtDate(a.lastSeen);
-            document.getElementById('log-card-title').textContent  = appName + ' ログ';
+            document.getElementById('info-started').textContent = a.startedAt ? fmtDate(a.startedAt) : '-';
+            document.getElementById('info-lastseen').textContent= fmtDate(a.lastSeen);
+            document.getElementById('log-card-title').textContent = appName + ' ログ';
 
             const dot   = document.getElementById('status-dot');
             const badge = document.getElementById('status-badge');
@@ -339,6 +355,13 @@
 
         await loadApp();
         setInterval(loadApp, 10000);
+
+        // Update uptime display every second
+        setInterval(() => {
+            if (appInfo && appInfo.startedAt) {
+                document.getElementById('info-uptime').textContent = formatUptime(appInfo.startedAt);
+            }
+        }, 1000);
 
         // --- Screenshot ---
         const captureBtn    = document.getElementById('capture-btn');

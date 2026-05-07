@@ -124,6 +124,46 @@ func GetRecentEntries(n int) []LogEntry {
 	return GetEntriesForRange(today, today)
 }
 
+// ReadAppLogsFromDir reads log files from an external app's log directory.
+// Files must follow the naming pattern: {prefix}-YYYY-MM-DD.log
+// and use the same line format as Bridge-Ground's own logs.
+func ReadAppLogsFromDir(dir, prefix, from, to string) []LogEntry {
+	dirEntries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	expectedPrefix := prefix + "-"
+	var result []LogEntry
+	for _, de := range dirEntries {
+		if de.IsDir() || filepath.Ext(de.Name()) != ".log" {
+			continue
+		}
+		name := de.Name()
+		if !strings.HasPrefix(name, expectedPrefix) {
+			continue
+		}
+		dateStr := strings.TrimSuffix(strings.TrimPrefix(name, expectedPrefix), ".log")
+		if dateStr < from || dateStr > to {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+			if line == "" {
+				continue
+			}
+			if m := logLineRe.FindStringSubmatch(line); m != nil {
+				result = append(result, LogEntry{Timestamp: m[1], Level: m[2], Tag: m[3], Message: m[4]})
+			} else {
+				result = append(result, LogEntry{Message: line})
+			}
+		}
+	}
+	return result
+}
+
 // GetEntriesForRange reads all log files whose date falls in [from, to] (YYYY-MM-DD)
 // and returns the combined entries in chronological order.
 func GetEntriesForRange(from, to string) []LogEntry {

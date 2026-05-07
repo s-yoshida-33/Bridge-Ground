@@ -22,6 +22,8 @@ type AppInfo struct {
 	LastSeen     time.Time  `json:"lastSeen"`
 	StartedAt    *time.Time `json:"startedAt,omitempty"`
 	Online       bool       `json:"online"`
+	LogDir       string     `json:"logDir,omitempty"`
+	LogPrefix    string     `json:"logPrefix,omitempty"`
 }
 
 // screenshotEntry holds the latest screenshot for one app.
@@ -30,58 +32,17 @@ type screenshotEntry struct {
 	at   time.Time
 }
 
-// appLogBucket holds in-memory log entries per date for one app.
-// Each date slice is capped at maxLogsPerDay entries (oldest trimmed first).
-const maxLogsPerDay = 5000
-
-type appLogBucket struct {
-	mu     sync.Mutex
-	byDate map[string][]logging.LogEntry // "YYYY-MM-DD" -> entries
-}
-
-func (b *appLogBucket) add(entry logging.LogEntry) {
-	date := ""
-	if len(entry.Timestamp) >= 10 {
-		date = entry.Timestamp[:10]
-	}
-	if date == "" {
-		date = time.Now().Format("2006-01-02")
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	slice := b.byDate[date]
-	slice = append(slice, entry)
-	if len(slice) > maxLogsPerDay {
-		slice = slice[len(slice)-maxLogsPerDay:]
-	}
-	b.byDate[date] = slice
-}
-
-func (b *appLogBucket) getRange(from, to string) []logging.LogEntry {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	var result []logging.LogEntry
-	for date, entries := range b.byDate {
-		if date >= from && date <= to {
-			result = append(result, entries...)
-		}
-	}
-	return result
-}
-
 // AppRegistry tracks registered external apps in memory.
 type AppRegistry struct {
 	mu          sync.Mutex
 	apps        map[string]*AppInfo
 	screenshots map[string]*screenshotEntry
-	appLogs     map[string]*appLogBucket
 }
 
 func newAppRegistry() *AppRegistry {
 	return &AppRegistry{
 		apps:        make(map[string]*AppInfo),
 		screenshots: make(map[string]*screenshotEntry),
-		appLogs:     make(map[string]*appLogBucket),
 	}
 }
 
@@ -94,7 +55,7 @@ func randomID() string {
 // Register adds or updates an app. Re-registration by the same name+hostname
 // updates the existing record instead of creating a duplicate.
 // startedAt is the RFC3339 timestamp from the app itself (its process start time).
-func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt string) AppInfo {
+func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt, logDir, logPrefix string) AppInfo {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -113,6 +74,12 @@ func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt string
 			if parsedStartedAt != nil {
 				a.StartedAt = parsedStartedAt
 			}
+			if logDir != "" {
+				a.LogDir = logDir
+			}
+			if logPrefix != "" {
+				a.LogPrefix = logPrefix
+			}
 			return *a
 		}
 	}
@@ -125,9 +92,10 @@ func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt string
 		RegisteredAt: time.Now(),
 		LastSeen:     time.Now(),
 		StartedAt:    parsedStartedAt,
+		LogDir:       logDir,
+		LogPrefix:    logPrefix,
 	}
 	r.apps[a.ID] = a
-	r.appLogs[a.ID] = &appLogBucket{byDate: make(map[string][]logging.LogEntry)}
 	return *a
 }
 
@@ -193,27 +161,21 @@ func (r *AppRegistry) GetScreenshot(id string) ([]byte, time.Time, bool) {
 	return e.data, e.at, true
 }
 
-// AddLog appends a log entry for an app.
-func (r *AppRegistry) AddLog(id string, entry logging.LogEntry) bool {
-	r.mu.Lock()
-	bucket, ok := r.appLogs[id]
-	r.mu.Unlock()
-	if !ok {
-		return false
-	}
-	bucket.add(entry)
-	return true
-}
-
-// GetAppLogs returns log entries for an app within the given date range.
+// GetAppLogs reads log entries for an app from its local log files.
 func (r *AppRegistry) GetAppLogs(id, from, to string) []logging.LogEntry {
 	r.mu.Lock()
-	bucket, ok := r.appLogs[id]
+	app, ok := r.apps[id]
+	var logDir, logPrefix string
+	if ok {
+		logDir = app.LogDir
+		logPrefix = app.LogPrefix
+	}
 	r.mu.Unlock()
-	if !ok {
+
+	if !ok || logDir == "" || logPrefix == "" {
 		return []logging.LogEntry{}
 	}
-	entries := bucket.getRange(from, to)
+	entries := logging.ReadAppLogsFromDir(logDir, logPrefix, from, to)
 	if entries == nil {
 		return []logging.LogEntry{}
 	}
@@ -245,12 +207,14 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 			MallID    string `json:"mallId"`
 			Hostname  string `json:"hostname"`
 			StartedAt string `json:"startedAt"`
+			LogDir    string `json:"logDir"`
+			LogPrefix string `json:"logPrefix"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		app := s.Apps.Register(req.Name, req.Version, req.MallID, req.Hostname, req.StartedAt)
+		app := s.Apps.Register(req.Name, req.Version, req.MallID, req.Hostname, req.StartedAt, req.LogDir, req.LogPrefix)
 		json.NewEncoder(w).Encode(app)
 		return
 	}
@@ -319,25 +283,6 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 			resp["at"] = at.Format(time.RFC3339)
 		}
 		json.NewEncoder(w).Encode(resp)
-		return
-	}
-
-	// POST /api/apps/{id}/logs — Gido uploads a single log entry
-	if strings.HasSuffix(sub, "/logs") && r.Method == http.MethodPost {
-		id := strings.TrimSuffix(sub, "/logs")
-		var entry logging.LogEntry
-		if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if entry.Timestamp == "" {
-			entry.Timestamp = time.Now().Format("2006-01-02 15:04:05.000")
-		}
-		if !s.Apps.AddLog(id, entry) {
-			http.Error(w, "app not found", http.StatusNotFound)
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 		return
 	}
 

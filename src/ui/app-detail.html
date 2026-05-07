@@ -447,8 +447,14 @@
         const refreshBtn    = document.getElementById('log-refresh-btn');
         const downloadBtn   = document.getElementById('log-download-btn');
 
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const minDate  = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); })();
+        // Use local date (JST on Japanese machines) so it matches Gido's log timestamps.
+        function localDateStr(d = new Date()) {
+            return d.getFullYear() + '-' +
+                String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                String(d.getDate()).padStart(2, '0');
+        }
+        const todayStr = localDateStr();
+        const minDate  = localDateStr(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
         logDateFrom.value = todayStr; logDateTo.value = todayStr;
         logDateFrom.min   = minDate;  logDateTo.min   = minDate;
         logDateFrom.max   = todayStr; logDateTo.max   = todayStr;
@@ -526,7 +532,7 @@
 
         function startAutoRefresh() {
             if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
-            const today = new Date().toISOString().slice(0, 10);
+            const today = localDateStr();
             const indEl = document.getElementById('auto-refresh-indicator');
             if (logDateTo.value !== today) { indEl.style.display = 'none'; return; }
             autoTimer = setInterval(async () => {

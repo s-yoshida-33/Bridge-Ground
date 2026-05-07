@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const togglePasswordButton = document.getElementById('toggle-password-button');
     const saveButton       = document.getElementById('save-settings-button');
     const msgDiv           = document.getElementById('messages');
+    const saveModal        = document.getElementById('save-modal');
+    const saveModalClose   = document.getElementById('save-modal-close');
 
     let currentConfig = {};
     let isPasswordEditable = false;
@@ -204,6 +206,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         setTimeout(() => { msgDiv.style.display = 'none'; }, 5000);
     }
 
+    // --- Save Dialog ---
+    function showSaveModal() {
+        saveModal.style.display = 'flex';
+    }
+    saveModalClose.addEventListener('click', () => {
+        saveModal.style.display = 'none';
+    });
+    saveModal.addEventListener('click', (e) => {
+        if (e.target === saveModal) saveModal.style.display = 'none';
+    });
+
     // --- Save Settings ---
     saveButton.addEventListener('click', async () => {
         const portVal     = parseInt(document.getElementById('server-port-input').value);
@@ -257,10 +270,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentConfig = await bridgeApi.getConfig();
             loadSettings(currentConfig);
             updateLocalApiUrlDisplay(portVal);
-            showMessage('success', '設定が保存されました。アプリの再起動が必要な場合があります。');
-            setTimeout(() => showTab('main'), 1200);
+            showSaveModal();
         } catch (err) {
-            showMessage('error', '設定の保存に失敗しました。');
+            showMessage('error', '設定の保存に失敗しました: ' + (err.message || err));
             console.error(err);
         }
     });

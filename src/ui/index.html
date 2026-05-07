@@ -472,6 +472,16 @@
         </div>
     </div>
 
+    <!-- Save success dialog -->
+    <div id="save-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:10px; padding:32px 40px; text-align:center; max-width:380px; box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+            <div style="font-size:36px; color:#20a852; margin-bottom:12px;">&#10003;</div>
+            <div style="font-size:16px; font-weight:700; margin-bottom:8px; color:#1a2233;">設定が保存されました</div>
+            <div style="font-size:13px; color:#667; margin-bottom:24px; line-height:1.6;">変更内容は即座に反映されます。<br>ポート番号を変更した場合はアプリの再起動が必要です。</div>
+            <button id="save-modal-close" class="btn-success" style="padding:9px 32px; font-size:14px;">OK</button>
+        </div>
+    </div>
+
     <script src="/bridge.js"></script>
     <script src="renderer.js"></script>
 </body>

@@ -789,21 +789,13 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	switch r.Method {
 	case http.MethodGet:
-		// Re-read from disk on every GET so that:
-		// (a) externally replaced config files are reflected without restart, and
-		// (b) the response always matches the persisted state.
-		cfg := s.Config
-		if fresh, err := config.LoadConfig(); err == nil {
-			*s.Config = *fresh // keep in-memory state in sync with the file
-			cfg = s.Config
-		}
-		resp := configResponse{Config: *cfg}
+		resp := configResponse{Config: *s.Config}
 		resp.APISettings = apiSettingsResponse{
-			BaseURL:     cfg.APISettings.BaseURL,
-			APIKey:      cfg.APISettings.APIKey,
-			Username:    cfg.APISettings.Username,
+			BaseURL:     s.Config.APISettings.BaseURL,
+			APIKey:      s.Config.APISettings.APIKey,
+			Username:    s.Config.APISettings.Username,
 			Password:    "",
-			PasswordSet: cfg.APISettings.Password != "",
+			PasswordSet: s.Config.APISettings.Password != "",
 		}
 		json.NewEncoder(w).Encode(resp)
 
@@ -893,7 +885,7 @@ func (s *Server) handleBridgeJS(w http.ResponseWriter, r *http.Request) {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(body)
-			}).then(r => r.json());
+			}).then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(new Error(t || r.statusText))));
 
 			window.bridgeApi = {
 				getConfig: () => _isLorca

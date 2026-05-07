@@ -789,13 +789,21 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	switch r.Method {
 	case http.MethodGet:
-		resp := configResponse{Config: *s.Config}
+		// Re-read from disk on every GET so that:
+		// (a) externally replaced config files are reflected without restart, and
+		// (b) the response always matches the persisted state.
+		cfg := s.Config
+		if fresh, err := config.LoadConfig(); err == nil {
+			*s.Config = *fresh // keep in-memory state in sync with the file
+			cfg = s.Config
+		}
+		resp := configResponse{Config: *cfg}
 		resp.APISettings = apiSettingsResponse{
-			BaseURL:     s.Config.APISettings.BaseURL,
-			APIKey:      s.Config.APISettings.APIKey,
-			Username:    s.Config.APISettings.Username,
+			BaseURL:     cfg.APISettings.BaseURL,
+			APIKey:      cfg.APISettings.APIKey,
+			Username:    cfg.APISettings.Username,
 			Password:    "",
-			PasswordSet: s.Config.APISettings.Password != "",
+			PasswordSet: cfg.APISettings.Password != "",
 		}
 		json.NewEncoder(w).Encode(resp)
 
@@ -814,6 +822,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+		} else {
+			// Fallback: update in-memory directly if no save func is set
+			*s.Config = newCfg
 		}
 		json.NewEncoder(w).Encode(map[string]bool{"success": true})
 

@@ -272,7 +272,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function startAutoRefresh() {
         stopAutoRefresh();
-        const today = new Date().toISOString().slice(0, 10);
+        const today = localDateStr();
         if (logDateTo.value !== today) return; // only auto-refresh when viewing today
         autoRefreshTimer = setInterval(async () => {
             try {
@@ -306,13 +306,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const logDateFrom    = document.getElementById('log-date-from');
     const logDateTo      = document.getElementById('log-date-to');
 
-    // Default date range: today
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const minDate  = (() => {
-        const d = new Date();
-        d.setDate(d.getDate() - 30);
-        return d.toISOString().slice(0, 10);
-    })();
+    // Default date range: today (local date so it matches JST log timestamps)
+    function localDateStr(d = new Date()) {
+        return d.getFullYear() + '-' +
+            String(d.getMonth() + 1).padStart(2, '0') + '-' +
+            String(d.getDate()).padStart(2, '0');
+    }
+    const todayStr = localDateStr();
+    const minDate  = localDateStr(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
     logDateFrom.value = todayStr;
     logDateTo.value   = todayStr;
     logDateFrom.min   = minDate;

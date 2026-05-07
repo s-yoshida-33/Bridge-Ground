@@ -50,24 +50,36 @@ type ServerSettings struct {
 	Port int `json:"port"`
 }
 
-// LoadConfig reads the config from the standard location
-// For this example, we look in the current directory or src/config
-func LoadConfig() (*Config, error) {
-	// Trying to find the existing config file
-	paths := []string{
-		"config.json",
-		"src/config/api_config_default.json",
-	}
-
-	// Add executable directory to search paths
+// configFilePath returns the canonical path for config.json.
+// Using the executable's directory ensures LoadConfig and SaveConfig
+// always operate on the same file regardless of the working directory.
+func configFilePath() string {
 	if exePath, err := os.Executable(); err == nil {
-		exeDir := filepath.Dir(exePath)
-		// Check config.json in the same directory as the executable
-		paths = append([]string{filepath.Join(exeDir, "config.json")}, paths...)
+		return filepath.Join(filepath.Dir(exePath), "config.json")
+	}
+	return "config.json"
+}
+
+// LoadConfig reads the config from the standard location
+func LoadConfig() (*Config, error) {
+	// Priority: {exeDir}/config.json → config.json (cwd) → default template
+	primary := configFilePath()
+	paths := []string{primary, "config.json", "src/config/api_config_default.json"}
+
+	// Deduplicate in case exeDir == cwd
+	seen := map[string]bool{}
+	var unique []string
+	for _, p := range paths {
+		if abs, err := filepath.Abs(p); err == nil {
+			if !seen[abs] {
+				seen[abs] = true
+				unique = append(unique, p)
+			}
+		}
 	}
 
 	var configPath string
-	for _, p := range paths {
+	for _, p := range unique {
 		if _, err := os.Stat(p); err == nil {
 			configPath = p
 			break
@@ -136,7 +148,5 @@ func SaveConfig(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-
-	// Always save to config.json in current directory for persistence
-	return os.WriteFile("config.json", data, 0644)
+	return os.WriteFile(configFilePath(), data, 0644)
 }

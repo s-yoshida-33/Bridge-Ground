@@ -42,6 +42,7 @@ func (s *Server) Start() {
 
 	// External Apps API
 	mux.HandleFunc("/api/apps", s.handleAppsList)
+	mux.HandleFunc("/api/apps/ws", s.handleAppWS) // WebSocket — must be before the subtree pattern
 	mux.HandleFunc("/api/apps/", s.handleAppsDetail)
 
 	// Data API Routes

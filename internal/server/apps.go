@@ -5,10 +5,13 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // AppInfo holds registration data for a connected external app.
@@ -28,8 +31,15 @@ type AppInfo struct {
 
 // screenshotEntry holds the latest screenshot for one app.
 type screenshotEntry struct {
-	data []byte
-	at   time.Time
+	data        []byte
+	at          time.Time
+	contentType string
+}
+
+// wsEntry wraps a WebSocket connection with a write mutex.
+type wsEntry struct {
+	conn *websocket.Conn
+	mu   sync.Mutex
 }
 
 // AppRegistry tracks registered external apps in memory.
@@ -37,13 +47,21 @@ type AppRegistry struct {
 	mu          sync.Mutex
 	apps        map[string]*AppInfo
 	screenshots map[string]*screenshotEntry
+	wsConns     map[string]*wsEntry
 }
 
 func newAppRegistry() *AppRegistry {
 	return &AppRegistry{
 		apps:        make(map[string]*AppInfo),
 		screenshots: make(map[string]*screenshotEntry),
+		wsConns:     make(map[string]*wsEntry),
 	}
+}
+
+var wsUpgrader = websocket.Upgrader{
+	ReadBufferSize:  4096,
+	WriteBufferSize: 4096,
+	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
 func randomID() string {
@@ -140,25 +158,55 @@ func (r *AppRegistry) Get(id string) (AppInfo, bool) {
 }
 
 // StoreScreenshot saves screenshot bytes for an app.
-func (r *AppRegistry) StoreScreenshot(id string, data []byte) bool {
+func (r *AppRegistry) StoreScreenshot(id string, data []byte, contentType string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, ok := r.apps[id]; !ok {
 		return false
 	}
-	r.screenshots[id] = &screenshotEntry{data: data, at: time.Now()}
+	r.screenshots[id] = &screenshotEntry{data: data, at: time.Now(), contentType: contentType}
 	return true
 }
 
 // GetScreenshot returns the latest screenshot for an app.
-func (r *AppRegistry) GetScreenshot(id string) ([]byte, time.Time, bool) {
+func (r *AppRegistry) GetScreenshot(id string) ([]byte, time.Time, string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	e, ok := r.screenshots[id]
 	if !ok {
-		return nil, time.Time{}, false
+		return nil, time.Time{}, "", false
 	}
-	return e.data, e.at, true
+	return e.data, e.at, e.contentType, true
+}
+
+// SetWSConn registers a WebSocket connection for an app.
+func (r *AppRegistry) SetWSConn(id string, entry *wsEntry) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.wsConns[id] = entry
+}
+
+// RemoveWSConn deregisters the WebSocket connection for an app.
+func (r *AppRegistry) RemoveWSConn(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.wsConns, id)
+}
+
+// SendScreenshotRequest sends a screenshot_request message to an app via WebSocket.
+func (r *AppRegistry) SendScreenshotRequest(id string) error {
+	r.mu.Lock()
+	entry := r.wsConns[id]
+	r.mu.Unlock()
+
+	if entry == nil {
+		return fmt.Errorf("app not connected via WebSocket")
+	}
+
+	msg, _ := json.Marshal(map[string]string{"type": "screenshot_request"})
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	return entry.conn.WriteMessage(websocket.TextMessage, msg)
 }
 
 // GetAppLogs reads log entries for an app from its local log files.
@@ -230,27 +278,34 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// POST /api/apps/{id}/screenshot/request
+	// POST /api/apps/{id}/screenshot/request — send capture command via WebSocket
 	if strings.HasSuffix(sub, "/screenshot/request") && r.Method == http.MethodPost {
 		id := strings.TrimSuffix(sub, "/screenshot/request")
 		if _, ok := s.Apps.Get(id); !ok {
 			http.Error(w, "app not found", http.StatusNotFound)
 			return
 		}
-		s.Broker.Broadcast("screenshot_request", map[string]string{"appId": id})
+		if err := s.Apps.SendScreenshotRequest(id); err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 		return
 	}
 
-	// POST /api/apps/{id}/screenshot — Gido uploads screenshot bytes
+	// POST /api/apps/{id}/screenshot — app uploads screenshot bytes
 	if strings.HasSuffix(sub, "/screenshot") && r.Method == http.MethodPost {
 		id := strings.TrimSuffix(sub, "/screenshot")
-		var buf []byte
-		if r.ContentLength > 0 {
-			buf = make([]byte, r.ContentLength)
-			r.Body.Read(buf)
+		ct := r.Header.Get("Content-Type")
+		if ct == "" {
+			ct = "image/jpeg"
 		}
-		if !s.Apps.StoreScreenshot(id, buf) {
+		data, err := io.ReadAll(io.LimitReader(r.Body, 20*1024*1024))
+		if err != nil || len(data) == 0 {
+			http.Error(w, "failed to read body", http.StatusBadRequest)
+			return
+		}
+		if !s.Apps.StoreScreenshot(id, data, ct) {
 			http.Error(w, "app not found", http.StatusNotFound)
 			return
 		}
@@ -259,15 +314,15 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET /api/apps/{id}/screenshot — returns the stored screenshot image
+	// GET /api/apps/{id}/screenshot — return stored screenshot
 	if strings.HasSuffix(sub, "/screenshot") && r.Method == http.MethodGet {
 		id := strings.TrimSuffix(sub, "/screenshot")
-		data, _, ok := s.Apps.GetScreenshot(id)
+		data, _, ct, ok := s.Apps.GetScreenshot(id)
 		if !ok || len(data) == 0 {
 			http.Error(w, "no screenshot available", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Content-Type", ct)
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusOK)
 		w.Write(data)
@@ -277,7 +332,7 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 	// GET /api/apps/{id}/screenshot/status
 	if strings.HasSuffix(sub, "/screenshot/status") && r.Method == http.MethodGet {
 		id := strings.TrimSuffix(sub, "/screenshot/status")
-		_, at, ok := s.Apps.GetScreenshot(id)
+		_, at, _, ok := s.Apps.GetScreenshot(id)
 		resp := map[string]interface{}{"ready": ok}
 		if ok {
 			resp["at"] = at.Format(time.RFC3339)
@@ -315,4 +370,40 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Error(w, "not found", http.StatusNotFound)
+}
+
+// handleAppWS upgrades to WebSocket and maintains the connection for an app.
+// Gido connects here after registration to receive screenshot_request commands.
+func (s *Server) handleAppWS(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+	if _, ok := s.Apps.Get(id); !ok {
+		http.Error(w, "app not found", http.StatusNotFound)
+		return
+	}
+
+	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		logging.Warn("WS", fmt.Sprintf("WebSocket upgrade failed for app %s: %v", id, err))
+		return
+	}
+	defer conn.Close()
+
+	entry := &wsEntry{conn: conn}
+	s.Apps.SetWSConn(id, entry)
+	defer s.Apps.RemoveWSConn(id)
+
+	logging.Info("WS", fmt.Sprintf("App %s connected via WebSocket", id))
+
+	// Read loop: keeps the connection alive; ignores inbound messages.
+	for {
+		if _, _, err := conn.ReadMessage(); err != nil {
+			break
+		}
+	}
+
+	logging.Info("WS", fmt.Sprintf("App %s disconnected from WebSocket", id))
 }

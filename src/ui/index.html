@@ -44,7 +44,11 @@
             border-bottom: 1px solid #dde2ea;
             display: flex;
             padding: 0 20px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
         }
+        #tab-nav::-webkit-scrollbar { display: none; }
         .tab-btn {
             background: none;
             border: none;
@@ -55,6 +59,8 @@
             font-weight: 500;
             padding: 14px 18px 11px;
             transition: color 0.15s, border-color 0.15s;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
         .tab-btn:hover { color: #1a2233; }
         .tab-btn.active { color: #1a6ef5; border-bottom-color: #1a6ef5; }
@@ -170,14 +176,19 @@
             margin-top: 20px;
             padding-top: 16px;
             border-top: 1px solid #eef0f4;
+            flex-wrap: wrap;
         }
         .count-item {
             flex: 1;
+            min-width: calc(50% - 5px);
             background: #f5f7fa;
             border: 1px solid #dde2ea;
             border-radius: 6px;
             padding: 12px 14px;
             text-align: center;
+        }
+        @media (min-width: 480px) {
+            .count-item { min-width: 0; }
         }
         .count-item .count-label { font-size: 11px; color: #778; margin-bottom: 4px; }
         .count-item .count-value { font-size: 20px; font-weight: 700; color: #1a2233; }
@@ -266,13 +277,15 @@
             padding: 12px;
             height: 520px;
             overflow-y: auto;
+            overflow-x: auto;
             line-height: 1.6;
+            -webkit-overflow-scrolling: touch;
         }
-        .log-entry { display: flex; gap: 8px; padding: 1px 0; }
+        .log-entry { display: flex; gap: 8px; padding: 1px 0; white-space: nowrap; min-width: max-content; }
         .log-entry:hover { background: rgba(255,255,255,0.04); }
         .log-ts  { color: #556a8a; flex-shrink: 0; }
         .log-tag { color: #7cb8e8; flex-shrink: 0; min-width: 120px; }
-        .log-msg { word-break: break-all; }
+        .log-msg { word-break: normal; }
         .log-level-info  .log-level-badge { color: #20a852; }
         .log-level-warn  .log-level-badge,
         .log-level-warn  .log-msg          { color: #f0a830; }

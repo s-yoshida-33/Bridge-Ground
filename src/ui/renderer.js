@@ -452,10 +452,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   <span class="app-status-dot ${dotClass}"></span>
   <div class="app-card-body">
     <div class="app-card-title">${esc(app.name || '-')}${version}</div>
-    <div class="app-card-meta">
-      <span>モールID: ${esc(app.mallId || '-')}</span>
-      <span>ホスト: ${esc(app.hostname || '-')}</span>
-    </div>
+    <div class="app-card-meta">モールID: ${esc(app.mallId || '-')}</div>
+    <div class="app-card-meta">ホスト: ${esc(app.hostname || '-')}</div>
     <div class="app-card-lastseen">最終確認: ${esc(lastSeen)}</div>
   </div>
   <a href="/app-detail.html?id=${esc(app.id)}" target="_blank" class="btn-secondary btn-sm">詳細</a>
@@ -471,7 +469,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     function formatAppTime(isoStr) {
         if (!isoStr) return '-';
         try {
-            return new Date(isoStr).toLocaleString('ja-JP');
+            const d = new Date(isoStr);
+            const Y = d.getFullYear();
+            const M = String(d.getMonth() + 1).padStart(2, '0');
+            const D = String(d.getDate()).padStart(2, '0');
+            const h = String(d.getHours()).padStart(2, '0');
+            const m = String(d.getMinutes()).padStart(2, '0');
+            const s = String(d.getSeconds()).padStart(2, '0');
+            return `${Y}/${M}/${D} ${h}:${m}:${s}`;
         } catch (_) { return isoStr; }
     }
 });

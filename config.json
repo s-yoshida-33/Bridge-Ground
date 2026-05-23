@@ -26,5 +26,11 @@
   "systemSettings": {
     "runOnStartup": true,
     "startHidden": true
+  },
+  "portalSettings": {
+    "workerBaseUrl": "",
+    "registrationToken": "",
+    "statusReportIntervalSecs": 60,
+    "devices": []
   }
 }

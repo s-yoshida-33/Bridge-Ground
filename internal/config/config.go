@@ -14,6 +14,7 @@ type Config struct {
 	SyncSettings   SyncSettings   `json:"syncSettings"`
 	ServerSettings ServerSettings `json:"serverSettings"`
 	SystemSettings SystemSettings `json:"systemSettings"`
+	PortalSettings PortalSettings `json:"portalSettings"`
 }
 
 type SystemSettings struct {
@@ -48,6 +49,23 @@ type SyncTargets struct {
 
 type ServerSettings struct {
 	Port int `json:"port"`
+}
+
+// PortalSettings holds Portal CMS integration configuration.
+type PortalSettings struct {
+	WorkerBaseURL            string         `json:"workerBaseUrl"`
+	RegistrationToken        string         `json:"registrationToken"`
+	StatusReportIntervalSecs int            `json:"statusReportIntervalSecs"`
+	Devices                  []PortalDevice `json:"devices"`
+}
+
+// PortalDevice stores per-device Portal CMS credentials.
+type PortalDevice struct {
+	AppName     string `json:"appName"`
+	Hostname    string `json:"hostname"`
+	PendingID   string `json:"pendingId,omitempty"`
+	DeviceID    string `json:"deviceId,omitempty"`
+	DeviceToken string `json:"deviceToken,omitempty"`
 }
 
 // configFilePath returns the canonical path for config.json.
@@ -113,6 +131,10 @@ func LoadConfig() (*Config, error) {
 			SystemSettings: SystemSettings{
 				RunOnStartup: false,
 			},
+			PortalSettings: PortalSettings{
+				StatusReportIntervalSecs: 60,
+				Devices:                  []PortalDevice{},
+			},
 		}, nil
 	}
 
@@ -138,6 +160,12 @@ func LoadConfig() (*Config, error) {
 			Genres:    false,
 			Floors:    false,
 		}
+	}
+	if cfg.PortalSettings.Devices == nil {
+		cfg.PortalSettings.Devices = []PortalDevice{}
+	}
+	if cfg.PortalSettings.StatusReportIntervalSecs == 0 {
+		cfg.PortalSettings.StatusReportIntervalSecs = 60
 	}
 
 	return &cfg, nil

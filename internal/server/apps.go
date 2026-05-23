@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ type AppInfo struct {
 	Version      string     `json:"version"`
 	MallID       string     `json:"mallId"`
 	Hostname     string     `json:"hostname"`
+	IP           string     `json:"ip,omitempty"`
 	RegisteredAt time.Time  `json:"registeredAt"`
 	LastSeen     time.Time  `json:"lastSeen"`
 	StartedAt    *time.Time `json:"startedAt,omitempty"`
@@ -73,7 +75,7 @@ func randomID() string {
 // Register adds or updates an app. Re-registration by the same name+hostname
 // updates the existing record instead of creating a duplicate.
 // startedAt is the RFC3339 timestamp from the app itself (its process start time).
-func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt, logDir, logPrefix string) AppInfo {
+func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt, logDir, logPrefix, ip string) AppInfo {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -98,6 +100,9 @@ func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt, logDi
 			if logPrefix != "" {
 				a.LogPrefix = logPrefix
 			}
+			if ip != "" {
+				a.IP = ip
+			}
 			return *a
 		}
 	}
@@ -107,6 +112,7 @@ func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt, logDi
 		Version:      version,
 		MallID:       mallID,
 		Hostname:     hostname,
+		IP:           ip,
 		RegisteredAt: time.Now(),
 		LastSeen:     time.Now(),
 		StartedAt:    parsedStartedAt,
@@ -262,7 +268,15 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		app := s.Apps.Register(req.Name, req.Version, req.MallID, req.Hostname, req.StartedAt, req.LogDir, req.LogPrefix)
+		// Extract client IP; treat loopback as empty (portal manager will substitute)
+		clientIP := r.RemoteAddr
+		if host, _, err := net.SplitHostPort(clientIP); err == nil {
+			clientIP = host
+		}
+		if clientIP == "127.0.0.1" || clientIP == "::1" {
+			clientIP = ""
+		}
+		app := s.Apps.Register(req.Name, req.Version, req.MallID, req.Hostname, req.StartedAt, req.LogDir, req.LogPrefix, clientIP)
 		json.NewEncoder(w).Encode(app)
 		return
 	}

@@ -6,6 +6,7 @@ import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
 	"bridge-ground/internal/logging"
+	"bridge-ground/internal/portal"
 	"bridge-ground/internal/server"
 	appSync "bridge-ground/internal/sync"
 	"encoding/json"
@@ -90,7 +91,12 @@ func main() {
 	}()
 	logging.Info("SERVER", fmt.Sprintf("HTTP server starting on port %d", globalCfg.ServerSettings.Port))
 
-	// 4. Setup Progress Callback (Thread-safe)
+	// 4. Start Portal CMS Integration
+	portalMgr := portal.NewManager(globalCfg, srv.Apps, config.SaveConfig)
+	go portalMgr.Start()
+	logging.Info("PORTAL", "Portal CMS manager started")
+
+	// 5. Setup Progress Callback (Thread-safe)
 	syncMgr.SetProgressCallback(func(p appSync.SyncProgress) {
 		// Push to Lorca window
 		b, _ := json.Marshal(p)
@@ -115,7 +121,7 @@ func main() {
 		})
 	})
 
-	// 5. Auto Sync Logic
+	// 6. Auto Sync Logic
 	if globalCfg.SyncSettings.SyncOnStartup {
 		go func() {
 			// Delay slightly to let server start
@@ -136,7 +142,7 @@ func main() {
 		}()
 	}
 
-	// 6. Start System Tray (Blocking)
+	// 7. Start System Tray (Blocking)
 	// This will block main thread until systray.Quit() is called
 	systray.Run(onReady, onExit)
 }

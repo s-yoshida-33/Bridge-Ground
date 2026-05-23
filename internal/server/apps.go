@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bridge-ground/internal/db"
 	"bridge-ground/internal/logging"
 	"crypto/rand"
 	"encoding/json"
@@ -31,32 +32,53 @@ type AppInfo struct {
 	LogPrefix    string     `json:"logPrefix,omitempty"`
 }
 
-// screenshotEntry holds the latest screenshot for one app.
 type screenshotEntry struct {
 	data        []byte
 	at          time.Time
 	contentType string
 }
 
-// wsEntry wraps a WebSocket connection with a write mutex.
 type wsEntry struct {
 	conn *websocket.Conn
 	mu   sync.Mutex
 }
 
-// AppRegistry tracks registered external apps in memory.
+// AppRegistry tracks registered external apps backed by SQLite.
 type AppRegistry struct {
 	mu          sync.Mutex
 	apps        map[string]*AppInfo
 	screenshots map[string]*screenshotEntry
 	wsConns     map[string]*wsEntry
+	db          *db.Manager
 }
 
-func newAppRegistry() *AppRegistry {
-	return &AppRegistry{
+func newAppRegistry(dbMgr *db.Manager) *AppRegistry {
+	r := &AppRegistry{
 		apps:        make(map[string]*AppInfo),
 		screenshots: make(map[string]*screenshotEntry),
 		wsConns:     make(map[string]*wsEntry),
+		db:          dbMgr,
+	}
+	r.loadFromDB()
+	return r
+}
+
+// loadFromDB populates the in-memory registry from the persistent store.
+func (r *AppRegistry) loadFromDB() {
+	if r.db == nil || r.db.Conn == nil {
+		return
+	}
+	records, err := r.db.LoadApps()
+	if err != nil {
+		logging.Warn("APPS", fmt.Sprintf("Failed to load apps from DB: %v", err))
+		return
+	}
+	for _, rec := range records {
+		a := appRecordToInfo(rec)
+		r.apps[a.ID] = &a
+	}
+	if len(records) > 0 {
+		logging.Info("APPS", fmt.Sprintf("Loaded %d app(s) from DB", len(records)))
 	}
 }
 
@@ -72,9 +94,7 @@ func randomID() string {
 	return fmt.Sprintf("%x", b)
 }
 
-// Register adds or updates an app. Re-registration by the same name+hostname
-// updates the existing record instead of creating a duplicate.
-// startedAt is the RFC3339 timestamp from the app itself (its process start time).
+// Register adds or updates an app and persists it to DB.
 func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt, logDir, logPrefix, ip string) AppInfo {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -103,9 +123,12 @@ func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt, logDi
 			if ip != "" {
 				a.IP = ip
 			}
-			return *a
+			cp := *a
+			go r.persistApp(cp)
+			return cp
 		}
 	}
+
 	a := &AppInfo{
 		ID:           randomID(),
 		Name:         name,
@@ -120,18 +143,35 @@ func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt, logDi
 		LogPrefix:    logPrefix,
 	}
 	r.apps[a.ID] = a
-	return *a
+	cp := *a
+	go r.persistApp(cp)
+	return cp
+}
+
+func (r *AppRegistry) persistApp(a AppInfo) {
+	if r.db == nil || r.db.Conn == nil {
+		return
+	}
+	if err := r.db.UpsertApp(appInfoToRecord(a)); err != nil {
+		logging.Warn("APPS", fmt.Sprintf("Failed to persist app %s: %v", a.ID, err))
+	}
 }
 
 // Heartbeat updates the last-seen timestamp for an app.
 func (r *AppRegistry) Heartbeat(id string) bool {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	a, ok := r.apps[id]
+	if ok {
+		a.LastSeen = time.Now()
+	}
+	r.mu.Unlock()
 	if !ok {
 		return false
 	}
-	a.LastSeen = time.Now()
+	if r.db != nil && r.db.Conn != nil {
+		lastSeen := a.LastSeen.UTC().Format(time.RFC3339)
+		go r.db.UpdateAppLastSeen(id, lastSeen)
+	}
 	return true
 }
 
@@ -163,7 +203,6 @@ func (r *AppRegistry) Get(id string) (AppInfo, bool) {
 	return cp, true
 }
 
-// StoreScreenshot saves screenshot bytes for an app.
 func (r *AppRegistry) StoreScreenshot(id string, data []byte, contentType string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -174,7 +213,6 @@ func (r *AppRegistry) StoreScreenshot(id string, data []byte, contentType string
 	return true
 }
 
-// GetScreenshot returns the latest screenshot for an app.
 func (r *AppRegistry) GetScreenshot(id string) ([]byte, time.Time, string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -185,37 +223,31 @@ func (r *AppRegistry) GetScreenshot(id string) ([]byte, time.Time, string, bool)
 	return e.data, e.at, e.contentType, true
 }
 
-// SetWSConn registers a WebSocket connection for an app.
 func (r *AppRegistry) SetWSConn(id string, entry *wsEntry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.wsConns[id] = entry
 }
 
-// RemoveWSConn deregisters the WebSocket connection for an app.
 func (r *AppRegistry) RemoveWSConn(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.wsConns, id)
 }
 
-// SendScreenshotRequest sends a screenshot_request message to an app via WebSocket.
 func (r *AppRegistry) SendScreenshotRequest(id string) error {
 	r.mu.Lock()
 	entry := r.wsConns[id]
 	r.mu.Unlock()
-
 	if entry == nil {
 		return fmt.Errorf("app not connected via WebSocket")
 	}
-
 	msg, _ := json.Marshal(map[string]string{"type": "screenshot_request"})
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 	return entry.conn.WriteMessage(websocket.TextMessage, msg)
 }
 
-// GetAppLogs reads log entries for an app from its local log files.
 func (r *AppRegistry) GetAppLogs(id, from, to string) []logging.LogEntry {
 	r.mu.Lock()
 	app, ok := r.apps[id]
@@ -225,7 +257,6 @@ func (r *AppRegistry) GetAppLogs(id, from, to string) []logging.LogEntry {
 		logPrefix = app.LogPrefix
 	}
 	r.mu.Unlock()
-
 	if !ok || logDir == "" || logPrefix == "" {
 		return []logging.LogEntry{}
 	}
@@ -236,9 +267,54 @@ func (r *AppRegistry) GetAppLogs(id, from, to string) []logging.LogEntry {
 	return entries
 }
 
+// --- Conversion helpers ---
+
+func appInfoToRecord(a AppInfo) db.AppRecord {
+	rec := db.AppRecord{
+		ID:           a.ID,
+		Name:         a.Name,
+		Version:      a.Version,
+		MallID:       a.MallID,
+		Hostname:     a.Hostname,
+		IP:           a.IP,
+		RegisteredAt: a.RegisteredAt.UTC().Format(time.RFC3339),
+		LastSeen:     a.LastSeen.UTC().Format(time.RFC3339),
+		LogDir:       a.LogDir,
+		LogPrefix:    a.LogPrefix,
+	}
+	if a.StartedAt != nil {
+		rec.StartedAt = a.StartedAt.UTC().Format(time.RFC3339)
+	}
+	return rec
+}
+
+func appRecordToInfo(rec db.AppRecord) AppInfo {
+	a := AppInfo{
+		ID:        rec.ID,
+		Name:      rec.Name,
+		Version:   rec.Version,
+		MallID:    rec.MallID,
+		Hostname:  rec.Hostname,
+		IP:        rec.IP,
+		LogDir:    rec.LogDir,
+		LogPrefix: rec.LogPrefix,
+	}
+	if t, err := time.Parse(time.RFC3339, rec.RegisteredAt); err == nil {
+		a.RegisteredAt = t
+	}
+	if t, err := time.Parse(time.RFC3339, rec.LastSeen); err == nil {
+		a.LastSeen = t
+	}
+	if rec.StartedAt != "" {
+		if t, err := time.Parse(time.RFC3339, rec.StartedAt); err == nil {
+			a.StartedAt = &t
+		}
+	}
+	return a
+}
+
 // --- HTTP handlers ---
 
-// handleAppsList handles GET /api/apps
 func (s *Server) handleAppsList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	list := s.Apps.List()
@@ -248,12 +324,10 @@ func (s *Server) handleAppsList(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(list)
 }
 
-// handleAppsDetail handles all /api/apps/{...} sub-paths.
 func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	sub := strings.TrimPrefix(r.URL.Path, "/api/apps/")
 
-	// POST /api/apps/register
 	if sub == "register" && r.Method == http.MethodPost {
 		var req struct {
 			Name      string `json:"name"`
@@ -268,7 +342,6 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		// Extract client IP; treat loopback as empty (portal manager will substitute)
 		clientIP := r.RemoteAddr
 		if host, _, err := net.SplitHostPort(clientIP); err == nil {
 			clientIP = host
@@ -281,7 +354,6 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// POST /api/apps/{id}/heartbeat
 	if strings.HasSuffix(sub, "/heartbeat") && r.Method == http.MethodPost {
 		id := strings.TrimSuffix(sub, "/heartbeat")
 		if !s.Apps.Heartbeat(id) {
@@ -292,7 +364,6 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// POST /api/apps/{id}/screenshot/request — send capture command via WebSocket
 	if strings.HasSuffix(sub, "/screenshot/request") && r.Method == http.MethodPost {
 		id := strings.TrimSuffix(sub, "/screenshot/request")
 		if _, ok := s.Apps.Get(id); !ok {
@@ -307,7 +378,6 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// POST /api/apps/{id}/screenshot — app uploads screenshot bytes
 	if strings.HasSuffix(sub, "/screenshot") && r.Method == http.MethodPost {
 		id := strings.TrimSuffix(sub, "/screenshot")
 		ct := r.Header.Get("Content-Type")
@@ -328,7 +398,6 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET /api/apps/{id}/screenshot — return stored screenshot
 	if strings.HasSuffix(sub, "/screenshot") && r.Method == http.MethodGet {
 		id := strings.TrimSuffix(sub, "/screenshot")
 		data, _, ct, ok := s.Apps.GetScreenshot(id)
@@ -343,7 +412,6 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET /api/apps/{id}/screenshot/status
 	if strings.HasSuffix(sub, "/screenshot/status") && r.Method == http.MethodGet {
 		id := strings.TrimSuffix(sub, "/screenshot/status")
 		_, at, _, ok := s.Apps.GetScreenshot(id)
@@ -355,7 +423,6 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET /api/apps/{id}/logs?from=YYYY-MM-DD&to=YYYY-MM-DD
 	if strings.HasSuffix(sub, "/logs") && r.Method == http.MethodGet {
 		id := strings.TrimSuffix(sub, "/logs")
 		today := time.Now().Format("2006-01-02")
@@ -372,7 +439,6 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET /api/apps/{id}
 	if r.Method == http.MethodGet {
 		app, ok := s.Apps.Get(sub)
 		if !ok {
@@ -386,8 +452,6 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "not found", http.StatusNotFound)
 }
 
-// handleAppWS upgrades to WebSocket and maintains the connection for an app.
-// Gido connects here after registration to receive screenshot_request commands.
 func (s *Server) handleAppWS(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
@@ -411,13 +475,10 @@ func (s *Server) handleAppWS(w http.ResponseWriter, r *http.Request) {
 	defer s.Apps.RemoveWSConn(id)
 
 	logging.Info("WS", fmt.Sprintf("App %s connected via WebSocket", id))
-
-	// Read loop: keeps the connection alive; ignores inbound messages.
 	for {
 		if _, _, err := conn.ReadMessage(); err != nil {
 			break
 		}
 	}
-
 	logging.Info("WS", fmt.Sprintf("App %s disconnected from WebSocket", id))
 }

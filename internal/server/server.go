@@ -27,7 +27,7 @@ func NewServer(cfg *config.Config, db *db.Manager) *Server {
 		Config: cfg,
 		DB:     db,
 		Broker: NewEventBroker(),
-		Apps:   newAppRegistry(),
+		Apps:   newAppRegistry(db),
 	}
 }
 

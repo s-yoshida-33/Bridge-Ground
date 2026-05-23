@@ -140,24 +140,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateDataCounts();
 
     // --- Portal CMS helpers ---
+
+    // normalizePortalDevice handles both Lorca mode (returns raw config with deviceToken)
+    // and HTTP mode (returns masked config with deviceTokenSet).
     function normalizePortalDevice(d) {
         return {
             appName:        d.appName        || '',
             hostname:       d.hostname       || '',
             pendingId:      d.pendingId      || '',
             deviceId:       d.deviceId       || '',
-            deviceTokenSet: d.deviceTokenSet || false,
+            deviceToken:    d.deviceToken    || '',
+            deviceTokenSet: !!(d.deviceTokenSet || d.deviceToken),
         };
     }
 
     function loadPortalSettings(config) {
         const ps = config.portalSettings || {};
-        document.getElementById('portal-worker-url').value = ps.workerBaseUrl || '';
-        document.getElementById('portal-reg-token').value  = ps.registrationToken || '';
-        document.getElementById('portal-interval').value   = ps.statusReportIntervalSecs || 60;
+
+        const workerUrlInput = document.getElementById('portal-worker-url');
+        const regTokenInput  = document.getElementById('portal-reg-token');
+        workerUrlInput.value = ps.workerBaseUrl || '';
+        regTokenInput.value  = ps.registrationToken || '';
+        document.getElementById('portal-interval').value = ps.statusReportIntervalSecs || 60;
 
         const devices = ps.devices || [];
         portalDeviceStates = devices.map(normalizePortalDevice);
+
+        // Lock registration token once any device has started the registration flow.
+        const hasRegistered = portalDeviceStates.some(d => d.pendingId || d.deviceId);
+        regTokenInput.readOnly = hasRegistered;
+        regTokenInput.style.background = hasRegistered ? '#f5f7fa' : '';
+        regTokenInput.style.color      = hasRegistered ? '#778'    : '';
+
         renderPortalDevices();
     }
 
@@ -178,30 +192,46 @@ document.addEventListener('DOMContentLoaded', async () => {
                 badge = '<span class="portal-badge portal-badge-pending">承認待ち</span>';
             }
 
-            const deviceIdHtml = `<div class="field">
-                <label>デバイス ID</label>
-                <input type="text" id="portal-device-id-${i}"
-                    value="${esc(d.deviceId)}"
-                    placeholder="CMS から貼り付け"
-                    ${d.deviceId ? 'readonly' : ''}>
-            </div>`;
+            let fieldsHtml = '';
 
-            let deviceTokenHtml;
-            if (d.deviceTokenSet) {
-                deviceTokenHtml = `<div class="field">
-                    <label>デバイストークン</label>
+            if (d.pendingId && !d.deviceId) {
+                // Pending approval: show pendingId for CMS admin reference.
+                // deviceId/token will be populated automatically by approval polling.
+                fieldsHtml = `<div class="field" style="grid-column:1/-1;">
+                    <label>承認待ち ID（Portal CMS 管理画面でこの ID を承認してください）</label>
                     <div class="field-row">
-                        <input type="password" value="設定済み" disabled>
-                        <button class="btn-danger btn-sm" onclick="clearPortalDeviceCredentials(${i})">削除</button>
+                        <input type="text" value="${esc(d.pendingId)}" readonly>
+                        <button class="btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${esc(d.pendingId)}').catch(()=>{})">コピー</button>
                     </div>
+                    <small>承認されると自動的に反映されます（ステータス送信間隔ごとに確認）。</small>
                 </div>`;
             } else {
-                deviceTokenHtml = `<div class="field">
-                    <label>デバイストークン</label>
-                    <input type="text" id="portal-device-token-${i}"
-                        value=""
-                        placeholder="CMS から貼り付け">
+                // Approved or fully registered: show deviceId (readonly) and token field.
+                const deviceIdHtml = `<div class="field">
+                    <label>デバイス ID</label>
+                    <input type="text" id="portal-device-id-${i}"
+                        value="${esc(d.deviceId)}" readonly>
                 </div>`;
+
+                let deviceTokenHtml;
+                if (d.deviceTokenSet) {
+                    deviceTokenHtml = `<div class="field">
+                        <label>デバイストークン</label>
+                        <div class="field-row">
+                            <input type="password" value="設定済み" disabled>
+                            <button class="btn-danger btn-sm" onclick="clearPortalDeviceCredentials(${i})">削除</button>
+                        </div>
+                    </div>`;
+                } else {
+                    deviceTokenHtml = `<div class="field">
+                        <label>デバイストークン</label>
+                        <input type="text" id="portal-device-token-${i}"
+                            value=""
+                            placeholder="CMS から貼り付け">
+                    </div>`;
+                }
+
+                fieldsHtml = deviceIdHtml + deviceTokenHtml;
             }
 
             return `<div class="portal-device-row">
@@ -210,8 +240,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     ${badge}
                 </div>
                 <div class="portal-device-fields">
-                    ${deviceIdHtml}
-                    ${deviceTokenHtml}
+                    ${fieldsHtml}
                 </div>
             </div>`;
         }).join('');
@@ -360,14 +389,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             newPassword = passwordInput.value;
         }
 
+        // Build portal devices payload.
+        // - pendingId is always preserved from state (never user-editable).
+        // - deviceId is read from the readonly input, or falls back to stored state.
+        // - deviceToken: use newly typed value if present, otherwise fall back to stored
+        //   d.deviceToken (populated in Lorca mode from go_getConfig raw value).
         const portalDevicesOut = portalDeviceStates.map((d, i) => {
             const idEl    = document.getElementById(`portal-device-id-${i}`);
             const tokenEl = document.getElementById(`portal-device-token-${i}`);
+            const newToken = tokenEl ? tokenEl.value : '';
             return {
                 appName:     d.appName,
                 hostname:    d.hostname,
-                deviceId:    idEl    ? idEl.value    : d.deviceId,
-                deviceToken: tokenEl ? tokenEl.value : '',
+                pendingId:   d.pendingId,
+                deviceId:    idEl ? idEl.value : d.deviceId,
+                deviceToken: newToken || d.deviceToken,
             };
         });
 

@@ -45,6 +45,9 @@ func (s *Server) Start() {
 	mux.HandleFunc("/api/apps/ws", s.handleAppWS) // WebSocket — must be before the subtree pattern
 	mux.HandleFunc("/api/apps/", s.handleAppsDetail)
 
+	// Portal CMS API
+	mux.HandleFunc("/api/portal/clear-device", s.handlePortalClearDevice)
+
 	// Data API Routes
 	mux.HandleFunc("/api/shops", s.handleShopList)
 	mux.HandleFunc("/api/shop-news", s.handleShopNewsList)
@@ -311,7 +314,6 @@ func (s *Server) FetchGenericList(query string) ([]map[string]interface{}, error
 	var result []map[string]interface{}
 
 	for rows.Next() {
-		// Create a slice of interface{} to hold values
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
 		for i := range values {
@@ -326,8 +328,6 @@ func (s *Server) FetchGenericList(query string) ([]map[string]interface{}, error
 		for i, col := range columns {
 			var v interface{}
 			val := values[i]
-
-			// Handle SQLite types (often []byte or nil)
 			b, ok := val.([]byte)
 			if ok {
 				v = string(b)
@@ -348,11 +348,10 @@ func (s *Server) createListEndpoint(tableName string, query string) http.Handler
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		encoder := json.NewEncoder(w)
-		encoder.SetEscapeHTML(false) // 追加: HTMLエスケープを無効化（文字化け対策の一つ）
-		encoder.SetIndent("", "")    // 変更: インデントを無しにして1行にする（SSEと形式を合わせる）
+		encoder.SetEscapeHTML(false)
+		encoder.SetIndent("", "")
 		encoder.Encode(result)
 	}
 }
@@ -363,145 +362,90 @@ func (s *Server) handleShopList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	encoder := json.NewEncoder(w)
-	encoder.SetEscapeHTML(false) // 追加: HTMLエスケープを無効化
-	encoder.SetIndent("", "  ")    // 変更: プリティプリントを有効化
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
 	encoder.Encode(result)
 }
 
-// FetchEventNews retrieves event news from the database
 func (s *Server) FetchEventNews() ([]models.EventNewsItem, error) {
 	if s.DB.Conn == nil {
 		return nil, fmt.Errorf("database not connected")
 	}
-
 	query := `SELECT 
 		event_id, title, body, categories, date_start, date_end, display_end, venues,
 		photo1, photo1_remote_url, photo1_local_path, update_date
 		FROM event_news`
-
 	rows, err := s.DB.Conn.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("query error: %v", err)
 	}
 	defer rows.Close()
-
 	var result []models.EventNewsItem
-
 	for rows.Next() {
 		var item models.EventNewsItem
-		var (
-			eventId, title, body, categories, dateStart, dateEnd, displayEnd, venues,
-			photo1, photo1RemoteUrl, photo1LocalPath, updateDate *string
-		)
-
-		if err := rows.Scan(
-			&eventId, &title, &body, &categories, &dateStart, &dateEnd, &displayEnd, &venues,
-			&photo1, &photo1RemoteUrl, &photo1LocalPath, &updateDate,
-		); err != nil {
+		var (eventId, title, body, categories, dateStart, dateEnd, displayEnd, venues, photo1, photo1RemoteUrl, photo1LocalPath, updateDate *string)
+		if err := rows.Scan(&eventId, &title, &body, &categories, &dateStart, &dateEnd, &displayEnd, &venues, &photo1, &photo1RemoteUrl, &photo1LocalPath, &updateDate); err != nil {
 			fmt.Printf("Scan error: %v\n", err)
 			continue
 		}
-
 		s := func(ptr *string) string {
-			if ptr == nil {
-				return ""
-			}
+			if ptr == nil { return "" }
 			return *ptr
 		}
-
-		item.EventID = s(eventId)
-		item.Title = s(title)
-		item.Body = s(body)
-		item.Categories = s(categories)
-		item.DateStart = s(dateStart)
-		item.DateEnd = s(dateEnd)
-		item.DisplayEnd = s(displayEnd)
-		item.Venues = s(venues)
-		item.Photo1 = s(photo1)
-		item.Photo1RemoteURL = s(photo1RemoteUrl)
-		item.Photo1LocalPath = s(photo1LocalPath)
+		item.EventID = s(eventId); item.Title = s(title); item.Body = s(body)
+		item.Categories = s(categories); item.DateStart = s(dateStart); item.DateEnd = s(dateEnd)
+		item.DisplayEnd = s(displayEnd); item.Venues = s(venues); item.Photo1 = s(photo1)
+		item.Photo1RemoteURL = s(photo1RemoteUrl); item.Photo1LocalPath = s(photo1LocalPath)
 		item.UpdateDate = s(updateDate)
-
 		result = append(result, item)
 	}
 	return result, nil
 }
 
-// FetchShopNews retrieves shop news from the database
 func (s *Server) FetchShopNews() ([]models.ShopNewsItem, error) {
 	if s.DB.Conn == nil {
 		return nil, fmt.Errorf("database not connected")
 	}
-
 	query := `SELECT 
 		shop_news_id, shop_id, shop_name, shop_logo, shop_floors_name, title, body, categories,
 		date_start, date_end, photo1, photo1_remote_url, photo1_local_path,
 		shop_logo_remote_url, shop_logo_local_path, update_date
 		FROM shop_news`
-
 	rows, err := s.DB.Conn.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("query error: %v", err)
 	}
 	defer rows.Close()
-
 	var result []models.ShopNewsItem
-
 	for rows.Next() {
 		var item models.ShopNewsItem
-		var (
-			shopNewsId, shopId, shopName, shopLogo, shopFloorsName, title, body, categories,
-			dateStart, dateEnd, photo1, photo1RemoteUrl, photo1LocalPath,
-			shopLogoRemoteUrl, shopLogoLocalPath, updateDate *string
-		)
-
-		if err := rows.Scan(
-			&shopNewsId, &shopId, &shopName, &shopLogo, &shopFloorsName, &title, &body, &categories,
-			&dateStart, &dateEnd, &photo1, &photo1RemoteUrl, &photo1LocalPath,
-			&shopLogoRemoteUrl, &shopLogoLocalPath, &updateDate,
-		); err != nil {
+		var (shopNewsId, shopId, shopName, shopLogo, shopFloorsName, title, body, categories, dateStart, dateEnd, photo1, photo1RemoteUrl, photo1LocalPath, shopLogoRemoteUrl, shopLogoLocalPath, updateDate *string)
+		if err := rows.Scan(&shopNewsId, &shopId, &shopName, &shopLogo, &shopFloorsName, &title, &body, &categories, &dateStart, &dateEnd, &photo1, &photo1RemoteUrl, &photo1LocalPath, &shopLogoRemoteUrl, &shopLogoLocalPath, &updateDate); err != nil {
 			fmt.Printf("Scan error: %v\n", err)
 			continue
 		}
-
 		s := func(ptr *string) string {
-			if ptr == nil {
-				return ""
-			}
+			if ptr == nil { return "" }
 			return *ptr
 		}
-
-		item.ShopNewsID = s(shopNewsId)
-		item.ShopID = s(shopId)
-		item.ShopName = s(shopName)
-		item.ShopLogo = s(shopLogo)
-		item.ShopFloorsName = s(shopFloorsName)
-		item.Title = s(title)
-		item.Body = s(body)
-		item.Categories = s(categories)
-		item.DateStart = s(dateStart)
-		item.DateEnd = s(dateEnd)
-		item.Photo1 = s(photo1)
-		item.Photo1RemoteURL = s(photo1RemoteUrl)
-		item.Photo1LocalPath = s(photo1LocalPath)
-		item.ShopLogoRemoteURL = s(shopLogoRemoteUrl)
-		item.ShopLogoLocalPath = s(shopLogoLocalPath)
+		item.ShopNewsID = s(shopNewsId); item.ShopID = s(shopId); item.ShopName = s(shopName)
+		item.ShopLogo = s(shopLogo); item.ShopFloorsName = s(shopFloorsName)
+		item.Title = s(title); item.Body = s(body); item.Categories = s(categories)
+		item.DateStart = s(dateStart); item.DateEnd = s(dateEnd); item.Photo1 = s(photo1)
+		item.Photo1RemoteURL = s(photo1RemoteUrl); item.Photo1LocalPath = s(photo1LocalPath)
+		item.ShopLogoRemoteURL = s(shopLogoRemoteUrl); item.ShopLogoLocalPath = s(shopLogoLocalPath)
 		item.UpdateDate = s(updateDate)
-
 		result = append(result, item)
 	}
 	return result, nil
 }
 
-// FetchSpecials retrieves specials from the database
 func (s *Server) FetchSpecials() ([]models.SpecialItem, error) {
 	if s.DB.Conn == nil {
 		return nil, fmt.Errorf("database not connected")
 	}
-
 	query := `SELECT
 		special_id, COALESCE(special_title_id,''), special_title,
 		title, COALESCE(sub_title,''), COALESCE(category_id,''), category_name, special_sub_body,
@@ -510,77 +454,40 @@ func (s *Server) FetchSpecials() ([]models.SpecialItem, error) {
 		COALESCE(pub_start,''), COALESCE(pub_end,''), update_date,
 		COALESCE(special_image_local_path,''), COALESCE(special_image2_local_path,'')
 		FROM specials`
-
 	rows, err := s.DB.Conn.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("query error: %v", err)
 	}
 	defer rows.Close()
-
 	var result []models.SpecialItem
-
 	for rows.Next() {
 		var item models.SpecialItem
-		var (
-			specialId, specialTitleId, specialTitle,
-			title, subTitle, categoryId, categoryName, specialSubBody,
-			shopId, shopName, genreMemo, shopLogo, shopLogoLocalPath,
-			shopFloorName, shopFloorsName, venue,
-			pubStart, pubEnd, updateDate,
-			specialImageLocalPath, specialImage2LocalPath *string
-		)
-
-		if err := rows.Scan(
-			&specialId, &specialTitleId, &specialTitle,
-			&title, &subTitle, &categoryId, &categoryName, &specialSubBody,
-			&shopId, &shopName, &genreMemo, &shopLogo, &shopLogoLocalPath,
-			&shopFloorName, &shopFloorsName, &venue,
-			&pubStart, &pubEnd, &updateDate,
-			&specialImageLocalPath, &specialImage2LocalPath,
-		); err != nil {
+		var (specialId, specialTitleId, specialTitle, title, subTitle, categoryId, categoryName, specialSubBody, shopId, shopName, genreMemo, shopLogo, shopLogoLocalPath, shopFloorName, shopFloorsName, venue, pubStart, pubEnd, updateDate, specialImageLocalPath, specialImage2LocalPath *string)
+		if err := rows.Scan(&specialId, &specialTitleId, &specialTitle, &title, &subTitle, &categoryId, &categoryName, &specialSubBody, &shopId, &shopName, &genreMemo, &shopLogo, &shopLogoLocalPath, &shopFloorName, &shopFloorsName, &venue, &pubStart, &pubEnd, &updateDate, &specialImageLocalPath, &specialImage2LocalPath); err != nil {
 			fmt.Printf("Scan error: %v\n", err)
 			continue
 		}
-
 		sv := func(ptr *string) string {
-			if ptr == nil {
-				return ""
-			}
+			if ptr == nil { return "" }
 			return *ptr
 		}
-
-		item.SpecialID = sv(specialId)
-		item.SpecialTitleID = sv(specialTitleId)
-		item.SpecialTitle = sv(specialTitle)
-		item.Title = sv(title)
-		item.SubTitle = sv(subTitle)
-		item.CategoryID = sv(categoryId)
-		item.CategoryName = sv(categoryName)
-		item.SpecialSubBody = sv(specialSubBody)
-		item.ShopID = sv(shopId)
-		item.ShopName = sv(shopName)
-		item.GenreMemo = sv(genreMemo)
-		item.ShopLogo = sv(shopLogo)
-		item.ShopLogoLocalPath = sv(shopLogoLocalPath)
-		item.ShopFloorName = sv(shopFloorName)
-		item.ShopFloorsName = sv(shopFloorsName)
-		item.Venue = sv(venue)
-		item.PubStart = sv(pubStart)
-		item.PubEnd = sv(pubEnd)
-		item.UpdateDate = sv(updateDate)
-		item.SpecialImageLocalPath = sv(specialImageLocalPath)
-
+		item.SpecialID = sv(specialId); item.SpecialTitleID = sv(specialTitleId); item.SpecialTitle = sv(specialTitle)
+		item.Title = sv(title); item.SubTitle = sv(subTitle); item.CategoryID = sv(categoryId)
+		item.CategoryName = sv(categoryName); item.SpecialSubBody = sv(specialSubBody)
+		item.ShopID = sv(shopId); item.ShopName = sv(shopName); item.GenreMemo = sv(genreMemo)
+		item.ShopLogo = sv(shopLogo); item.ShopLogoLocalPath = sv(shopLogoLocalPath)
+		item.ShopFloorName = sv(shopFloorName); item.ShopFloorsName = sv(shopFloorsName)
+		item.Venue = sv(venue); item.PubStart = sv(pubStart); item.PubEnd = sv(pubEnd)
+		item.UpdateDate = sv(updateDate); item.SpecialImageLocalPath = sv(specialImageLocalPath)
 		result = append(result, item)
 	}
 	return result, nil
 }
 
-// FetchSales retrieves sales from the database
 func (s *Server) FetchSales() ([]models.SaleItem, error) {
 	if s.DB.Conn == nil {
 		return nil, fmt.Errorf("database not connected")
 	}
-
 	query := `SELECT
 		sale_id, COALESCE(sale_title_id,''), COALESCE(sale_title,''),
 		COALESCE(sale_body,''), COALESCE(shop_id,''), COALESCE(shop_name,''),
@@ -591,110 +498,59 @@ func (s *Server) FetchSales() ([]models.SaleItem, error) {
 		COALESCE(sale_title_image,''), COALESCE(sale_title_image_local_path,''),
 		COALESCE(pub_start,''), COALESCE(pub_end,''), update_date
 		FROM sales`
-
 	rows, err := s.DB.Conn.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("query error: %v", err)
 	}
 	defer rows.Close()
-
 	var result []models.SaleItem
-
 	for rows.Next() {
 		var item models.SaleItem
-		var (
-			saleId, saleTitleId, saleTitle,
-			saleBody, shopId, shopName,
-			genre, genreMemo,
-			shopLogo, shopLogoLocalPath,
-			shopFloorName, shopFloorsName,
-			area, areaSub,
-			saleTitleImage, saleTitleImageLocalPath,
-			pubStart, pubEnd, updateDate *string
-		)
-
-		if err := rows.Scan(
-			&saleId, &saleTitleId, &saleTitle,
-			&saleBody, &shopId, &shopName,
-			&genre, &genreMemo,
-			&shopLogo, &shopLogoLocalPath,
-			&shopFloorName, &shopFloorsName,
-			&area, &areaSub,
-			&saleTitleImage, &saleTitleImageLocalPath,
-			&pubStart, &pubEnd, &updateDate,
-		); err != nil {
+		var (saleId, saleTitleId, saleTitle, saleBody, shopId, shopName, genre, genreMemo, shopLogo, shopLogoLocalPath, shopFloorName, shopFloorsName, area, areaSub, saleTitleImage, saleTitleImageLocalPath, pubStart, pubEnd, updateDate *string)
+		if err := rows.Scan(&saleId, &saleTitleId, &saleTitle, &saleBody, &shopId, &shopName, &genre, &genreMemo, &shopLogo, &shopLogoLocalPath, &shopFloorName, &shopFloorsName, &area, &areaSub, &saleTitleImage, &saleTitleImageLocalPath, &pubStart, &pubEnd, &updateDate); err != nil {
 			fmt.Printf("Scan error: %v\n", err)
 			continue
 		}
-
 		sv := func(ptr *string) string {
-			if ptr == nil {
-				return ""
-			}
+			if ptr == nil { return "" }
 			return *ptr
 		}
-
-		item.SaleID = sv(saleId)
-		item.SaleTitleID = sv(saleTitleId)
-		item.SaleTitle = sv(saleTitle)
-		item.SaleBody = sv(saleBody)
-		item.ShopID = sv(shopId)
-		item.ShopName = sv(shopName)
-		item.Genre = sv(genre)
-		item.GenreMemo = sv(genreMemo)
-		item.ShopLogo = sv(shopLogo)
-		item.ShopLogoLocalPath = sv(shopLogoLocalPath)
-		item.ShopFloorName = sv(shopFloorName)
-		item.ShopFloorsName = sv(shopFloorsName)
-		item.Area = sv(area)
-		item.AreaSub = sv(areaSub)
-		item.SaleTitleImage = sv(saleTitleImage)
-		item.SaleTitleImageLocalPath = sv(saleTitleImageLocalPath)
-		item.PubStart = sv(pubStart)
-		item.PubEnd = sv(pubEnd)
-		item.UpdateDate = sv(updateDate)
-
+		item.SaleID = sv(saleId); item.SaleTitleID = sv(saleTitleId); item.SaleTitle = sv(saleTitle)
+		item.SaleBody = sv(saleBody); item.ShopID = sv(shopId); item.ShopName = sv(shopName)
+		item.Genre = sv(genre); item.GenreMemo = sv(genreMemo)
+		item.ShopLogo = sv(shopLogo); item.ShopLogoLocalPath = sv(shopLogoLocalPath)
+		item.ShopFloorName = sv(shopFloorName); item.ShopFloorsName = sv(shopFloorsName)
+		item.Area = sv(area); item.AreaSub = sv(areaSub)
+		item.SaleTitleImage = sv(saleTitleImage); item.SaleTitleImageLocalPath = sv(saleTitleImageLocalPath)
+		item.PubStart = sv(pubStart); item.PubEnd = sv(pubEnd); item.UpdateDate = sv(updateDate)
 		result = append(result, item)
 	}
 	return result, nil
 }
 
-// FetchGenres retrieves genres from the database
 func (s *Server) FetchGenres() ([]models.GenreItem, error) {
 	if s.DB.Conn == nil {
 		return nil, fmt.Errorf("database not connected")
 	}
-
 	query := `SELECT genre_id, genre_name, genre_slug FROM genres`
-
 	rows, err := s.DB.Conn.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("query error: %v", err)
 	}
 	defer rows.Close()
-
 	var result []models.GenreItem
-
 	for rows.Next() {
 		var item models.GenreItem
 		var genreId, genreName, genreSlug *string
-
 		if err := rows.Scan(&genreId, &genreName, &genreSlug); err != nil {
 			fmt.Printf("Scan error: %v\n", err)
 			continue
 		}
-
 		s := func(ptr *string) string {
-			if ptr == nil {
-				return ""
-			}
+			if ptr == nil { return "" }
 			return *ptr
 		}
-
-		item.GenreID = s(genreId)
-		item.GenreName = s(genreName)
-		item.GenreSlug = s(genreSlug)
-
+		item.GenreID = s(genreId); item.GenreName = s(genreName); item.GenreSlug = s(genreSlug)
 		result = append(result, item)
 	}
 	return result, nil
@@ -702,46 +558,27 @@ func (s *Server) FetchGenres() ([]models.GenreItem, error) {
 
 func (s *Server) handleEventNewsList(w http.ResponseWriter, r *http.Request) {
 	result, err := s.FetchEventNews()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	if err != nil { http.Error(w, err.Error(), http.StatusInternalServerError); return }
 	s.respondJSON(w, result)
 }
-
 func (s *Server) handleShopNewsList(w http.ResponseWriter, r *http.Request) {
 	result, err := s.FetchShopNews()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	if err != nil { http.Error(w, err.Error(), http.StatusInternalServerError); return }
 	s.respondJSON(w, result)
 }
-
 func (s *Server) handleSpecialList(w http.ResponseWriter, r *http.Request) {
 	result, err := s.FetchSpecials()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	if err != nil { http.Error(w, err.Error(), http.StatusInternalServerError); return }
 	s.respondJSON(w, result)
 }
-
 func (s *Server) handleSaleList(w http.ResponseWriter, r *http.Request) {
 	result, err := s.FetchSales()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	if err != nil { http.Error(w, err.Error(), http.StatusInternalServerError); return }
 	s.respondJSON(w, result)
 }
-
 func (s *Server) handleGenreList(w http.ResponseWriter, r *http.Request) {
 	result, err := s.FetchGenres()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	if err != nil { http.Error(w, err.Error(), http.StatusInternalServerError); return }
 	s.respondJSON(w, result)
 }
 
@@ -754,29 +591,21 @@ func (s *Server) respondJSON(w http.ResponseWriter, data interface{}) {
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	// If looking for index.html explicitly or root, check if we should serve UI or Dashboard
-	// The original JS version served a dashboard at / and the UI via Electron file loading.
-	// But in Go version, we serve UI via lorca.
-	// The main.go loads "http://localhost:port/index.html".
-	// So if path is /index.html, serve static file.
-
 	if r.URL.Path == "/" || r.URL.Path == "/index.html" {
-		// Serve UI file if it exists in src/ui
 		http.ServeFile(w, r, "src/ui/index.html")
 		return
 	}
-
-	// Serve other static files from src/ui
 	fs := http.FileServer(http.Dir("./src/ui"))
 	fs.ServeHTTP(w, r)
 }
 
 // --- Management API handlers ---
 
-// configResponse is Config with password replaced by a sentinel for browser clients.
+// configResponse is Config with password and device tokens replaced by sentinel flags.
 type configResponse struct {
 	config.Config
-	APISettings apiSettingsResponse `json:"apiSettings"`
+	APISettings    apiSettingsResponse    `json:"apiSettings"`
+	PortalSettings portalSettingsResponse `json:"portalSettings"`
 }
 type apiSettingsResponse struct {
 	BaseURL     string `json:"baseUrl"`
@@ -798,6 +627,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			Password:    "",
 			PasswordSet: s.Config.APISettings.Password != "",
 		}
+		resp.PortalSettings = maskedPortalSettings(s.Config.PortalSettings)
 		json.NewEncoder(w).Encode(resp)
 
 	case http.MethodPost:
@@ -810,13 +640,24 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		if newCfg.APISettings.Password == "" {
 			newCfg.APISettings.Password = s.Config.APISettings.Password
 		}
+		// Empty device token means "keep existing"
+		for i := range newCfg.PortalSettings.Devices {
+			d := &newCfg.PortalSettings.Devices[i]
+			if d.DeviceToken == "" {
+				for _, existing := range s.Config.PortalSettings.Devices {
+					if existing.AppName == d.AppName && existing.Hostname == d.Hostname {
+						d.DeviceToken = existing.DeviceToken
+						break
+					}
+				}
+			}
+		}
 		if s.SaveConfigFunc != nil {
 			if err := s.SaveConfigFunc(newCfg); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 		} else {
-			// Fallback: update in-memory directly if no save func is set
 			*s.Config = newCfg
 		}
 		json.NewEncoder(w).Encode(map[string]bool{"success": true})
@@ -855,20 +696,11 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	today := time.Now().Format("2006-01-02")
 	from := r.URL.Query().Get("from")
 	to := r.URL.Query().Get("to")
-	if from == "" {
-		from = today
-	}
-	if to == "" {
-		to = today
-	}
-	// Never exceed today
-	if to > today {
-		to = today
-	}
+	if from == "" { from = today }
+	if to == "" { to = today }
+	if to > today { to = today }
 	entries := logging.GetEntriesForRange(from, to)
-	if entries == nil {
-		entries = []logging.LogEntry{}
-	}
+	if entries == nil { entries = []logging.LogEntry{} }
 	json.NewEncoder(w).Encode(entries)
 }
 
@@ -892,7 +724,6 @@ func (s *Server) handleBridgeJS(w http.ResponseWriter, r *http.Request) {
 				getConfig: () => _isLorca
 					? window.go_getConfig()
 					: _get('/api/config').then(cfg => {
-						// Normalise: restore passwordSet flag, clear sentinel
 						cfg.apiSettings = cfg.apiSettings || {};
 						return cfg;
 					}),
@@ -916,6 +747,9 @@ func (s *Server) handleBridgeJS(w http.ResponseWriter, r *http.Request) {
 				},
 				getApps: () => _get('/api/apps'),
 				getApp:  (id) => _get('/api/apps/' + id),
+				clearPortalDevice: (appName, hostname) => _isLorca
+					? window.go_clearPortalDevice(appName, hostname)
+					: _post('/api/portal/clear-device', {appName, hostname}),
 				onSyncProgress: function(callback) {
 					window._syncProgressCallback = callback;
 					if (!_isLorca && !window._syncProgressSSE) {
@@ -936,7 +770,3 @@ func (s *Server) handleBridgeJS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript")
 	w.Write([]byte(js))
 }
-
-
-
-

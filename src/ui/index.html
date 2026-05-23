@@ -28,15 +28,8 @@
             height: 52px;
             user-select: none;
         }
-        #header h1 {
-            font-size: 18px;
-            font-weight: 600;
-            letter-spacing: 0.03em;
-        }
-        #header-version {
-            font-size: 12px;
-            color: #8899bb;
-        }
+        #header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.03em; }
+        #header-version { font-size: 12px; color: #8899bb; }
 
         /* ── Tab Nav ── */
         #tab-nav {
@@ -67,7 +60,6 @@
 
         /* ── Content ── */
         #content { padding: 24px 20px; max-width: 960px; margin: 0 auto; }
-
         .view { display: none; }
         .view.active { display: block; }
 
@@ -99,14 +91,16 @@
             transition: background 0.15s, opacity 0.15s;
         }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: #1a6ef5; color: #fff; }
-        .btn-primary:hover:not(:disabled) { background: #0f5de0; }
+        .btn-primary   { background: #1a6ef5; color: #fff; }
+        .btn-primary:hover:not(:disabled)   { background: #0f5de0; }
         .btn-secondary { background: #eef0f4; color: #445; }
         .btn-secondary:hover:not(:disabled) { background: #dde2ea; }
-        .btn-success { background: #20a852; color: #fff; }
-        .btn-success:hover:not(:disabled) { background: #188a44; }
-        .btn-danger { background: #e74c3c; color: #fff; }
-        .btn-danger:hover:not(:disabled) { background: #c0392b; }
+        .btn-success   { background: #20a852; color: #fff; }
+        .btn-success:hover:not(:disabled)   { background: #188a44; }
+        .btn-danger    { background: #e74c3c; color: #fff; }
+        .btn-danger:hover:not(:disabled)    { background: #c0392b; }
+        .btn-warning   { background: #f5a623; color: #fff; }
+        .btn-warning:hover:not(:disabled)   { background: #e09318; }
         .btn-sm { padding: 5px 10px; font-size: 12px; }
 
         /* ── Form ── */
@@ -124,7 +118,7 @@
         }
         .field input:focus { outline: none; border-color: #1a6ef5; }
         .field input:read-only { background: #f5f7fa; color: #778; }
-        .field input:disabled { background: #f5f7fa; color: #778; }
+        .field input:disabled  { background: #f5f7fa; color: #778; }
         .field small { display: block; margin-top: 4px; color: #889; font-size: 11px; }
         .field-row { display: flex; gap: 8px; align-items: center; }
         .field-row input { flex: 1; }
@@ -138,7 +132,6 @@
             border-bottom: 1px solid #eef0f4;
         }
 
-        /* Checkbox group */
         .checkbox-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -146,19 +139,12 @@
             margin-top: 8px;
         }
         .checkbox-grid label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 13px;
-            cursor: pointer;
+            display: flex; align-items: center; gap: 6px;
+            font-size: 13px; cursor: pointer;
         }
         .toggle-label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 13px;
-            cursor: pointer;
-            margin-bottom: 8px;
+            display: flex; align-items: center; gap: 6px;
+            font-size: 13px; cursor: pointer; margin-bottom: 8px;
         }
 
         /* ── Message banner ── */
@@ -172,49 +158,32 @@
         .success { background: #eafaf1; color: #1a7a3f; border: 1px solid #a8d8bc; }
         .error   { background: #fef0f0; color: #c0392b; border: 1px solid #f5c0bb; }
 
-        /* ── Dashboard: data counts ── */
+        /* ── Dashboard counts ── */
         .counts-row {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-            padding-top: 16px;
-            border-top: 1px solid #eef0f4;
-            flex-wrap: wrap;
+            display: flex; gap: 10px; margin-top: 20px;
+            padding-top: 16px; border-top: 1px solid #eef0f4; flex-wrap: wrap;
         }
         .count-item {
-            flex: 1;
-            min-width: 100%;
-            background: #f5f7fa;
-            border: 1px solid #dde2ea;
-            border-radius: 6px;
-            padding: 12px 14px;
-            text-align: center;
+            flex: 1; min-width: 100%;
+            background: #f5f7fa; border: 1px solid #dde2ea;
+            border-radius: 6px; padding: 12px 14px; text-align: center;
         }
-        @media (min-width: 480px) {
-            .count-item { min-width: 0; }
-        }
+        @media (min-width: 480px) { .count-item { min-width: 0; } }
         .count-item .count-label { font-size: 11px; color: #778; margin-bottom: 4px; }
         .count-item .count-value { font-size: 20px; font-weight: 700; color: #1a2233; }
 
         /* ── Progress bar ── */
         .progress-wrapper { margin-top: 14px; display: none; }
         .progress-track {
-            background: #dde2ea;
-            border-radius: 6px;
-            overflow: hidden;
-            height: 18px;
-            margin-bottom: 6px;
+            background: #dde2ea; border-radius: 6px; overflow: hidden;
+            height: 18px; margin-bottom: 6px;
         }
         .progress-bar {
-            height: 100%;
-            background: #1a6ef5;
+            height: 100%; background: #1a6ef5;
             background-image: linear-gradient(45deg, rgba(255,255,255,.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.15) 50%, rgba(255,255,255,.15) 75%, transparent 75%, transparent);
             background-size: 1rem 1rem;
-            text-align: center;
-            line-height: 18px;
-            color: #fff;
-            font-size: 11px;
-            font-weight: 600;
+            text-align: center; line-height: 18px;
+            color: #fff; font-size: 11px; font-weight: 600;
             transition: width 0.3s ease;
             animation: stripes 1s linear infinite;
             width: 0%;
@@ -223,65 +192,38 @@
         .progress-status { font-size: 12px; color: #667; }
 
         /* ── Endpoints ── */
-        .endpoint-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 8px;
-        }
+        .endpoint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
         .endpoint-link {
-            display: block;
-            padding: 10px 12px;
-            background: #f5f7fa;
-            border: 1px solid #dde2ea;
-            border-radius: 6px;
-            text-decoration: none;
-            color: #334;
-            transition: all 0.15s;
+            display: block; padding: 10px 12px;
+            background: #f5f7fa; border: 1px solid #dde2ea; border-radius: 6px;
+            text-decoration: none; color: #334; transition: all 0.15s;
         }
         .endpoint-link:hover { background: #ebf3ff; border-color: #1a6ef5; color: #1a6ef5; }
         .endpoint-link strong { display: block; font-size: 13px; margin-bottom: 2px; }
         .endpoint-link small { font-size: 11px; color: #889; font-family: monospace; }
 
-        /* ── Local URL row ── */
         .url-row { display: flex; gap: 8px; align-items: center; }
         .url-row input { flex: 1; }
         #copy-message { font-size: 12px; color: #20a852; margin-top: 4px; display: none; }
 
         /* ── Log view ── */
         #log-toolbar {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 12px;
-            flex-wrap: wrap;
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 12px; flex-wrap: wrap;
         }
-        .log-filter-btn {
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-            background: #eef0f4;
-            color: #556;
-        }
-        .log-filter-btn.active { background: #1a6ef5; color: #fff; }
-        .log-filter-btn.info.active { background: #00b135; color: #fff; }
-        .log-filter-btn.warn  { color: #b85c00; }
+        .log-filter-btn { padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; background: #eef0f4; color: #556; }
+        .log-filter-btn.active       { background: #1a6ef5; color: #fff; }
+        .log-filter-btn.info.active  { background: #00b135; color: #fff; }
+        .log-filter-btn.warn         { color: #b85c00; }
         .log-filter-btn.warn.active  { background: #f5a623; color: #fff; }
-        .log-filter-btn.error { color: #c0392b; }
+        .log-filter-btn.error        { color: #c0392b; }
         .log-filter-btn.error.active { background: #e74c3c; color: #fff; }
         #log-count { font-size: 12px; color: #889; margin-left: auto; }
-
         #log-container {
             font-family: "Consolas", "Cascadia Code", monospace;
-            font-size: 12px;
-            background: #000000;
-            color: #c8d0e0;
-            border-radius: 6px;
-            padding: 12px;
-            height: 520px;
-            overflow-y: auto;
-            overflow-x: auto;
-            line-height: 1.6;
+            font-size: 12px; background: #000000; color: #c8d0e0;
+            border-radius: 6px; padding: 12px; height: 520px;
+            overflow-y: auto; overflow-x: auto; line-height: 1.6;
             -webkit-overflow-scrolling: touch;
         }
         .log-entry { display: flex; gap: 8px; padding: 1px 0; white-space: nowrap; min-width: max-content; }
@@ -301,89 +243,42 @@
 
         /* ── External Apps ── */
         .app-card {
-            background: #fff;
-            border: 1px solid #dde2ea;
-            border-radius: 8px;
-            padding: 18px 20px;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
+            background: #fff; border: 1px solid #dde2ea; border-radius: 8px;
+            padding: 18px 20px; margin-bottom: 12px;
+            display: flex; align-items: center; gap: 16px;
         }
-        .app-status-dot {
-            width: 10px; height: 10px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
+        .app-status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
         .app-status-dot.online  { background: #20a852; box-shadow: 0 0 0 3px rgba(32,168,82,.15); }
         .app-status-dot.offline { background: #bbb; }
         .app-card-body { flex: 1; min-width: 0; }
-        .app-card-title {
-            font-size: 15px; font-weight: 700; color: #1a2233;
-            display: flex; align-items: baseline; gap: 8px;
-        }
+        .app-card-title { font-size: 15px; font-weight: 700; color: #1a2233; display: flex; align-items: baseline; gap: 8px; }
         .app-card-version { font-size: 12px; font-weight: 400; color: #889; }
         .app-card-meta { font-size: 12px; color: #667; margin-top: 4px; }
         .app-card-lastseen { font-size: 11px; color: #aaa; margin-top: 4px; }
         .app-empty { color: #889; text-align: center; padding: 48px 0; font-size: 14px; }
 
-        /* ── Date range ── */
         .date-input {
-            padding: 5px 8px;
-            border: 1px solid #cdd2da;
-            border-radius: 5px;
-            font-size: 13px;
-            color: #334;
-            background: #fff;
+            padding: 5px 8px; border: 1px solid #cdd2da; border-radius: 5px;
+            font-size: 13px; color: #334; background: #fff;
         }
         .date-input:focus { outline: none; border-color: #1a6ef5; }
         .date-sep { font-size: 13px; color: #778; }
 
         /* ── Portal CMS ── */
         .portal-device-row {
-            background: #f5f7fa;
-            border: 1px solid #dde2ea;
-            border-radius: 6px;
-            padding: 14px 16px;
-            margin-bottom: 10px;
+            background: #f5f7fa; border: 1px solid #dde2ea;
+            border-radius: 6px; padding: 14px 16px; margin-bottom: 10px;
         }
-        .portal-device-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-        .portal-device-name {
-            font-size: 13px;
-            font-weight: 600;
-            color: #1a2233;
-            flex: 1;
-        }
-        .portal-badge {
-            font-size: 11px;
-            font-weight: 600;
-            padding: 2px 8px;
-            border-radius: 10px;
-            white-space: nowrap;
-        }
+        .portal-device-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .portal-device-name { font-size: 13px; font-weight: 600; color: #1a2233; flex: 1; }
+        .portal-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
         .portal-badge-pending    { background: #fff3cd; color: #856404; }
         .portal-badge-approved   { background: #d1ecf1; color: #0c5460; }
         .portal-badge-registered { background: #d4edda; color: #155724; }
-        .portal-device-fields {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        @media (max-width: 600px) {
-            .portal-device-fields { grid-template-columns: 1fr; }
-        }
+        .portal-device-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (max-width: 600px) { .portal-device-fields { grid-template-columns: 1fr; } }
         .portal-device-fields .field { margin-bottom: 0; }
-        .portal-empty {
-            color: #889;
-            font-size: 13px;
-            padding: 16px 0;
-            text-align: center;
-        }
+        .portal-empty { color: #889; font-size: 13px; padding: 16px 0; text-align: center; }
     </style>
 </head>
 <body>
@@ -393,10 +288,10 @@
     </div>
 
     <nav id="tab-nav">
-        <button class="tab-btn active" data-tab="main" style="border-radius: 0px;">ダッシュボード</button>
-        <button class="tab-btn" data-tab="logs" style="border-radius: 0px;">ログ</button>
-        <button class="tab-btn" data-tab="settings" style="border-radius: 0px;">設定</button>
-        <button class="tab-btn" data-tab="apps" style="border-radius: 0px;">外部アプリ</button>
+        <button class="tab-btn active" data-tab="main" style="border-radius:0;">ダッシュボード</button>
+        <button class="tab-btn" data-tab="logs" style="border-radius:0;">ログ</button>
+        <button class="tab-btn" data-tab="settings" style="border-radius:0;">設定</button>
+        <button class="tab-btn" data-tab="apps" style="border-radius:0;">外部アプリ</button>
     </nav>
 
     <div id="content">
@@ -419,7 +314,6 @@
                     <div class="count-item"><div class="count-label">セール</div><div class="count-value" id="count-sales">-</div></div>
                 </div>
             </div>
-
             <div class="card">
                 <h3>サーバー接続情報</h3>
                 <div class="field">
@@ -503,6 +397,7 @@
                 <div class="field">
                     <label>Worker Base URL</label>
                     <input type="text" id="portal-worker-url" placeholder="https://your-worker.example.com">
+                    <small>変更後はアプリの再起動が必要です。</small>
                 </div>
                 <div class="field">
                     <label>登録トークン</label>
@@ -522,20 +417,17 @@
                 <h3>サーバー・同期設定</h3>
                 <label class="toggle-label"><input type="checkbox" id="run-on-startup"> Windows 起動時に自動起動する</label>
                 <label class="toggle-label"><input type="checkbox" id="start-hidden"> 起動時にウィンドウを表示しない（タスクトレイ常駐）</label>
-
                 <div class="field" style="max-width:200px; margin-top:4px;">
                     <label>HTTP サーバーポート</label>
                     <input type="number" id="server-port-input" min="1024" max="65535">
-                    <small>1024〜65535</small>
+                    <small>1024〜65535（変更後は再起動が必要）</small>
                 </div>
-
                 <label class="toggle-label" style="margin-top:8px;"><input type="checkbox" id="auto-sync-enabled"> 自動同期を有効にする</label>
                 <div class="field" style="max-width:200px;">
                     <label>同期間隔（分）</label>
                     <input type="number" id="sync-interval" min="1">
                 </div>
                 <label class="toggle-label"><input type="checkbox" id="sync-on-startup"> アプリ起動時に自動同期を実行</label>
-
                 <div class="section-title">同期対象エンドポイント</div>
                 <div class="checkbox-grid">
                     <label><input type="checkbox" id="sync-target-shops"> 店舗データ</label>
@@ -556,13 +448,26 @@
         </div>
     </div>
 
-    <!-- Save success dialog -->
+    <!-- ── Save success dialog ── -->
     <div id="save-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
-        <div style="background:#fff; border-radius:10px; padding:32px 40px; text-align:center; max-width:380px; box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+        <div style="background:#fff; border-radius:10px; padding:32px 40px; text-align:center; max-width:360px; box-shadow:0 8px 32px rgba(0,0,0,0.18);">
             <div style="font-size:36px; color:#20a852; margin-bottom:12px;">&#10003;</div>
             <div style="font-size:16px; font-weight:700; margin-bottom:8px; color:#1a2233;">設定が保存されました</div>
-            <div style="font-size:13px; color:#667; margin-bottom:24px; line-height:1.6;">変更内容は即座に反映されます。<br>ポート番号を変更した場合はアプリの再起動が必要です。<br>Portal CMS の登録トークンを新たに設定した場合も再起動してください。</div>
+            <div style="font-size:13px; color:#667; margin-bottom:24px; line-height:1.6;">変更内容は即座に反映されます。</div>
             <button id="save-modal-close" class="btn-success" style="padding:9px 32px; font-size:14px;">OK</button>
+        </div>
+    </div>
+
+    <!-- ── Restart required dialog ── -->
+    <div id="restart-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:10px; padding:32px 40px; text-align:center; max-width:400px; box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+            <div style="font-size:36px; margin-bottom:12px;">&#9888;&#65039;</div>
+            <div style="font-size:16px; font-weight:700; margin-bottom:8px; color:#1a2233;">設定を反映するには再起動が必要です</div>
+            <div style="font-size:13px; color:#667; margin-bottom:24px; line-height:1.6;">保存されました。以下の変更はアプリの再起動後に有効になります。<br><br>ポート番号 / Worker Base URL / 登録トークン</div>
+            <div style="display:flex; gap:10px; justify-content:center;">
+                <button id="restart-later-btn" class="btn-secondary" style="padding:9px 20px; font-size:14px;">後で再起動</button>
+                <button id="restart-now-btn" class="btn-warning" style="padding:9px 20px; font-size:14px;">今すぐ再起動</button>
+            </div>
         </div>
     </div>
 

@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const msgDiv           = document.getElementById('messages');
     const saveModal        = document.getElementById('save-modal');
     const saveModalClose   = document.getElementById('save-modal-close');
+    const restartModal     = document.getElementById('restart-modal');
+    const restartNowBtn    = document.getElementById('restart-now-btn');
+    const restartLaterBtn  = document.getElementById('restart-later-btn');
 
     let currentConfig = {};
     let isPasswordEditable = false;
@@ -139,10 +142,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Portal CMS helpers ---
     function normalizePortalDevice(d) {
         return {
-            appName:      d.appName      || '',
-            hostname:     d.hostname     || '',
-            pendingId:    d.pendingId    || '',
-            deviceId:     d.deviceId     || '',
+            appName:        d.appName        || '',
+            hostname:       d.hostname       || '',
+            pendingId:      d.pendingId      || '',
+            deviceId:       d.deviceId       || '',
             deviceTokenSet: d.deviceTokenSet || false,
         };
     }
@@ -214,7 +217,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }).join('');
     }
 
-    // Called from inline onclick; needs to be global
     window.clearPortalDeviceCredentials = async function(index) {
         const d = portalDeviceStates[index];
         if (!d) return;
@@ -243,7 +245,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         passwordInput.type     = 'password';
         togglePasswordButton.textContent = '編集';
 
-        // Browser context returns passwordSet flag; Lorca returns actual password
         const hasPassword = api.passwordSet !== undefined ? api.passwordSet : !!api.password;
         if (hasPassword) {
             passwordInput.value       = '••••••••';
@@ -314,6 +315,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (e.target === saveModal) saveModal.style.display = 'none';
     });
 
+    // --- Restart Dialog ---
+    function showRestartModal() {
+        restartModal.style.display = 'flex';
+    }
+    restartLaterBtn.addEventListener('click', () => {
+        restartModal.style.display = 'none';
+    });
+    restartModal.addEventListener('click', (e) => {
+        if (e.target === restartModal) restartModal.style.display = 'none';
+    });
+    restartNowBtn.addEventListener('click', async () => {
+        restartModal.style.display = 'none';
+        restartNowBtn.disabled = true;
+        try {
+            await bridgeApi.restartApp();
+        } catch (err) {
+            showMessage('error', '再起動に失敗しました: ' + (err.message || err));
+            restartNowBtn.disabled = false;
+        }
+    });
+
     // --- Save Settings ---
     saveButton.addEventListener('click', async () => {
         const portVal     = parseInt(document.getElementById('server-port-input').value);
@@ -328,14 +350,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        // Password: send empty string if not edited (backend keeps existing)
+        // Capture pre-save values for restart detection
+        const oldPort      = (currentConfig.serverSettings || {}).port || 8090;
+        const oldWorkerUrl = (currentConfig.portalSettings  || {}).workerBaseUrl || '';
+        const oldRegToken  = (currentConfig.portalSettings  || {}).registrationToken || '';
+
         let newPassword = '';
         if (isPasswordEditable && passwordInput.value) {
             newPassword = passwordInput.value;
         }
 
-        // Collect portal device updates
-        // deviceToken: empty string = keep existing (backend preserves); only sent when user typed something
         const portalDevicesOut = portalDeviceStates.map((d, i) => {
             const idEl    = document.getElementById(`portal-device-id-${i}`);
             const tokenEl = document.getElementById(`portal-device-token-${i}`);
@@ -346,6 +370,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 deviceToken: tokenEl ? tokenEl.value : '',
             };
         });
+
+        const newWorkerUrl = document.getElementById('portal-worker-url').value;
+        const newRegToken  = document.getElementById('portal-reg-token').value;
 
         const newConfig = {
             apiSettings: {
@@ -374,8 +401,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             },
             portalSettings: {
-                workerBaseUrl:            document.getElementById('portal-worker-url').value,
-                registrationToken:        document.getElementById('portal-reg-token').value,
+                workerBaseUrl:            newWorkerUrl,
+                registrationToken:        newRegToken,
                 statusReportIntervalSecs: parseInt(document.getElementById('portal-interval').value) || 60,
                 devices: portalDevicesOut
             }
@@ -386,7 +413,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentConfig = await bridgeApi.getConfig();
             loadSettings(currentConfig);
             updateLocalApiUrlDisplay(portVal);
-            showSaveModal();
+
+            const needsRestart =
+                portVal !== oldPort ||
+                newWorkerUrl !== oldWorkerUrl ||
+                (newRegToken !== '' && newRegToken !== oldRegToken);
+
+            if (needsRestart) {
+                showRestartModal();
+            } else {
+                showSaveModal();
+            }
         } catch (err) {
             showMessage('error', '設定の保存に失敗しました: ' + (err.message || err));
             console.error(err);
@@ -401,7 +438,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     function startAutoRefresh() {
         stopAutoRefresh();
         const today = localDateStr();
-        if (logDateTo.value !== today) return; // only auto-refresh when viewing today
+        if (logDateTo.value !== today) return;
         autoRefreshTimer = setInterval(async () => {
             try {
                 const fresh = await bridgeApi.getLogs(logDateFrom.value, logDateTo.value);
@@ -411,7 +448,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     allLogEntries = fresh;
                     renderLogs(atBottom);
                 }
-            } catch (_) { /* ignore polling errors silently */ }
+            } catch (_) { }
         }, 5000);
         setAutoRefreshIndicator(true);
     }
@@ -434,7 +471,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const logDateFrom    = document.getElementById('log-date-from');
     const logDateTo      = document.getElementById('log-date-to');
 
-    // Default date range: today (local date so it matches JST log timestamps)
     function localDateStr(d = new Date()) {
         return d.getFullYear() + '-' +
             String(d.getMonth() + 1).padStart(2, '0') + '-' +
@@ -449,7 +485,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     logDateFrom.max   = todayStr;
     logDateTo.max     = todayStr;
 
-    // Keep from <= to
     logDateFrom.addEventListener('change', () => {
         if (logDateFrom.value > logDateTo.value) logDateTo.value = logDateFrom.value;
         loadLogs();
@@ -457,7 +492,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     logDateTo.addEventListener('change', () => {
         if (logDateTo.value < logDateFrom.value) logDateFrom.value = logDateTo.value;
         loadLogs();
-        startAutoRefresh(); // restarts (or stops if non-today date selected)
+        startAutoRefresh();
     });
 
     filterButtons.forEach(btn => {
@@ -495,13 +530,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         logContainer.innerHTML = '<div class="log-empty">読み込み中...</div>';
         try {
             allLogEntries = await bridgeApi.getLogs(logDateFrom.value, logDateTo.value);
-            renderLogs(true); // always scroll to bottom on manual/initial load
+            renderLogs(true);
         } catch (e) {
             logContainer.innerHTML = '<div class="log-empty">ログの読み込みに失敗しました。</div>';
         }
     }
 
-    // scrollToBottom: true = force scroll, false = preserve current scroll position
     function renderLogs(scrollToBottom = true) {
         const filtered = activeLevel === 'ALL'
             ? allLogEntries

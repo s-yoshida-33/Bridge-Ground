@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"sync"
 	"time"
 
@@ -32,8 +33,6 @@ var (
 )
 
 func main() {
-	// Initialize file logging before anything else.
-	// Redirects Go's standard logger (log.Printf etc.) to both stderr and the log file.
 	logging.CleanupOldLogs(30)
 	if err := logging.Init(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
@@ -86,6 +85,7 @@ func main() {
 		logging.Info("SYNC", "Manual sync completed")
 		return true, ""
 	}
+	srv.RestartFunc = restartSelf
 	go func() {
 		srv.Start()
 	}()
@@ -98,7 +98,6 @@ func main() {
 
 	// 5. Setup Progress Callback (Thread-safe)
 	syncMgr.SetProgressCallback(func(p appSync.SyncProgress) {
-		// Push to Lorca window
 		b, _ := json.Marshal(p)
 		jsCode := fmt.Sprintf("if(window.dispatchSyncProgress) window.dispatchSyncProgress(%s)", string(b))
 		uiMutex.Lock()
@@ -106,13 +105,9 @@ func main() {
 			_ = ui.Eval(jsCode)
 		}
 		uiMutex.Unlock()
-
-		// Also broadcast via SSE for browser clients
 		srv.BroadcastEvent("sync_progress", p)
 	})
 
-	// 分離パターン: SSEは「何が更新されたか」だけを通知し、
-	// クライアントは必要なREST エンドポイントを自分で取得する。
 	syncMgr.SetDataUpdateCallback(func(dataType string) {
 		logging.Info("SSE", fmt.Sprintf("Broadcasting %s update to SSE clients", dataType))
 		srv.BroadcastEvent(dataType, map[string]interface{}{
@@ -124,7 +119,6 @@ func main() {
 	// 6. Auto Sync Logic
 	if globalCfg.SyncSettings.SyncOnStartup {
 		go func() {
-			// Delay slightly to let server start
 			time.Sleep(3 * time.Second)
 			logging.Info("SYNC", "Starting startup sync")
 			syncMgr.StartSync()
@@ -143,7 +137,6 @@ func main() {
 	}
 
 	// 7. Start System Tray (Blocking)
-	// This will block main thread until systray.Quit() is called
 	systray.Run(onReady, onExit)
 }
 
@@ -161,7 +154,6 @@ func onReady() {
 	mOpen := systray.AddMenuItem("設定画面を開く", "設定画面を表示します")
 	mQuit := systray.AddMenuItem("終了", "アプリケーションを終了します")
 
-	// Event loop for tray items
 	go func() {
 		for {
 			select {
@@ -174,7 +166,6 @@ func onReady() {
 		}
 	}()
 
-	// Initial UI state
 	if !globalCfg.SystemSettings.StartHidden {
 		openUI()
 	}
@@ -194,7 +185,6 @@ func openUI() {
 	defer uiMutex.Unlock()
 
 	if ui != nil {
-		// Window is already open
 		return
 	}
 
@@ -205,7 +195,6 @@ func openUI() {
 		return
 	}
 
-	// Bind Go Functions
 	newUI.Bind("go_getConfig", func() *config.Config {
 		return globalCfg
 	})
@@ -257,7 +246,10 @@ func openUI() {
 		return fmt.Errorf("device not found: %s/%s", appName, hostname)
 	})
 
-	// Load App URL
+	newUI.Bind("go_restartApp", func() error {
+		return restartSelf()
+	})
+
 	port := globalCfg.ServerSettings.Port
 	url := fmt.Sprintf("http://localhost:%d/index.html", port)
 
@@ -270,7 +262,6 @@ func openUI() {
 
 	ui = newUI
 
-	// Watch for UI close
 	go func(u lorca.UI) {
 		<-u.Done()
 		uiMutex.Lock()
@@ -293,4 +284,23 @@ func waitForServer(url string, timeout time.Duration) bool {
 		time.Sleep(500 * time.Millisecond)
 	}
 	return false
+}
+
+func restartSelf() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(exe)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	logging.Info("SYSTEM", "Restarting application")
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		systray.Quit()
+	}()
+	return nil
 }

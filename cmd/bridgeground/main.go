@@ -242,6 +242,21 @@ func openUI() {
 		return counts
 	})
 
+	newUI.Bind("go_clearPortalDevice", func(appName, hostname string) error {
+		for i, d := range globalCfg.PortalSettings.Devices {
+			if d.AppName == appName && d.Hostname == hostname {
+				globalCfg.PortalSettings.Devices[i].DeviceID = ""
+				globalCfg.PortalSettings.Devices[i].DeviceToken = ""
+				if err := config.SaveConfig(globalCfg); err != nil {
+					return err
+				}
+				logging.Info("PORTAL", fmt.Sprintf("Cleared device credentials: %s/%s", appName, hostname))
+				return nil
+			}
+		}
+		return fmt.Errorf("device not found: %s/%s", appName, hostname)
+	})
+
 	// Load App URL
 	port := globalCfg.ServerSettings.Port
 	url := fmt.Sprintf("http://localhost:%d/index.html", port)

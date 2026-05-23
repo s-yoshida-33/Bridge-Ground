@@ -18,6 +18,7 @@ type Server struct {
 	Apps           *AppRegistry
 	SaveConfigFunc func(cfg config.Config) error
 	StartSyncFunc  func() (bool, string)
+	RestartFunc    func() error
 	AppVersion     string
 }
 
@@ -39,10 +40,11 @@ func (s *Server) Start() {
 	mux.HandleFunc("/api/counts", s.handleCounts)
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/version", s.handleVersion)
+	mux.HandleFunc("/api/restart", s.handleRestart)
 
 	// External Apps API
 	mux.HandleFunc("/api/apps", s.handleAppsList)
-	mux.HandleFunc("/api/apps/ws", s.handleAppWS) // WebSocket — must be before the subtree pattern
+	mux.HandleFunc("/api/apps/ws", s.handleAppWS)
 	mux.HandleFunc("/api/apps/", s.handleAppsDetail)
 
 	// Portal CMS API
@@ -60,7 +62,7 @@ func (s *Server) Start() {
 	// SSE Endpoint
 	mux.Handle("/api/events", s.Broker)
 
-	// Dashboard (Basic implementation)
+	// Dashboard
 	mux.HandleFunc("/", s.handleDashboard)
 
 	// Bridge JS for UI integration
@@ -72,7 +74,6 @@ func (s *Server) Start() {
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		http.ServeFile(w, r, "src/assets/icon.ico")
 	})
-	// SVG Icon
 	mux.HandleFunc("/icon.svg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		http.ServeFile(w, r, "src/assets/icon.svg")
@@ -100,12 +101,10 @@ func (s *Server) withCORS(h http.Handler) http.Handler {
 	})
 }
 
-// BroadcastEvent sends an SSE event to all connected clients
 func (s *Server) BroadcastEvent(eventType string, data interface{}) {
 	s.Broker.Broadcast(eventType, data)
 }
 
-// FetchShopList retrieves the full list of shops from the database
 func (s *Server) FetchShopList() ([]models.ShopItem, error) {
 	if s.DB.Conn == nil {
 		return nil, fmt.Errorf("database not connected")
@@ -294,7 +293,6 @@ func (s *Server) FetchShopList() ([]models.ShopItem, error) {
 	return result, nil
 }
 
-// FetchGenericList retrieves data for a generic table as a list of maps
 func (s *Server) FetchGenericList(query string) ([]map[string]interface{}, error) {
 	if s.DB.Conn == nil {
 		return nil, fmt.Errorf("database not connected")
@@ -599,8 +597,6 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	fs.ServeHTTP(w, r)
 }
 
-// --- Management API handlers ---
-
 // configResponse is Config with password and device tokens replaced by sentinel flags.
 type configResponse struct {
 	config.Config
@@ -636,11 +632,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		// Empty password means "keep existing"
 		if newCfg.APISettings.Password == "" {
 			newCfg.APISettings.Password = s.Config.APISettings.Password
 		}
-		// Empty device token means "keep existing"
 		for i := range newCfg.PortalSettings.Devices {
 			d := &newCfg.PortalSettings.Devices[i]
 			if d.DeviceToken == "" {
@@ -709,6 +703,23 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"version": s.AppVersion})
 }
 
+func (s *Server) handleRestart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if s.RestartFunc == nil {
+		json.NewEncoder(w).Encode(map[string]bool{"success": false})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		s.RestartFunc()
+	}()
+}
+
 func (s *Server) handleBridgeJS(w http.ResponseWriter, r *http.Request) {
 	js := `
 		(function() {
@@ -750,6 +761,9 @@ func (s *Server) handleBridgeJS(w http.ResponseWriter, r *http.Request) {
 				clearPortalDevice: (appName, hostname) => _isLorca
 					? window.go_clearPortalDevice(appName, hostname)
 					: _post('/api/portal/clear-device', {appName, hostname}),
+				restartApp: () => _isLorca
+					? window.go_restartApp()
+					: _post('/api/restart', {}),
 				onSyncProgress: function(callback) {
 					window._syncProgressCallback = callback;
 					if (!_isLorca && !window._syncProgressSSE) {

@@ -635,17 +635,10 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		if newCfg.APISettings.Password == "" {
 			newCfg.APISettings.Password = s.Config.APISettings.Password
 		}
-		for i := range newCfg.PortalSettings.Devices {
-			d := &newCfg.PortalSettings.Devices[i]
-			if d.DeviceToken == "" {
-				for _, existing := range s.Config.PortalSettings.Devices {
-					if existing.AppName == d.AppName && existing.Hostname == d.Hostname {
-						d.DeviceToken = existing.DeviceToken
-						break
-					}
-				}
-			}
-		}
+		newCfg.PortalSettings.Devices = mergePortalDevices(
+			newCfg.PortalSettings.Devices,
+			s.Config.PortalSettings.Devices,
+		)
 		if s.SaveConfigFunc != nil {
 			if err := s.SaveConfigFunc(newCfg); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)

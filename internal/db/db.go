@@ -22,15 +22,26 @@ type DataCounts struct {
 	Sales     int `json:"sales"`
 }
 
+// AppRecord is the DB-persisted form of a registered external app.
+type AppRecord struct {
+	ID           string
+	Name         string
+	Version      string
+	MallID       string
+	Hostname     string
+	IP           string
+	RegisteredAt string
+	LastSeen     string
+	StartedAt    string
+	LogDir       string
+	LogPrefix    string
+}
+
 func NewManager() *Manager {
-	// Construct path similar to Node.js version: %APPDATA%/TTI/BridgeGround/api/bridgeground.db
 	appData, _ := os.UserConfigDir()
 	dbDir := filepath.Join(appData, "TTI", "BridgeGround", "api")
 	dbPath := filepath.Join(dbDir, "bridgeground.db")
-
-	return &Manager{
-		Path: dbPath,
-	}
+	return &Manager{Path: dbPath}
 }
 
 func (m *Manager) Connect() error {
@@ -50,9 +61,7 @@ func (m *Manager) Connect() error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Enable WAL mode for better concurrency
 	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		// Log error but continue? Or fail?
 		fmt.Printf("Warning: Failed to set WAL mode: %v\n", err)
 	}
 
@@ -72,9 +81,7 @@ func (m *Manager) Close() {
 }
 
 func (m *Manager) InitializeSchema() error {
-	// Basic schema creation if not exists
 	queries := []string{
-		// `DROP TABLE IF EXISTS shops`, // Removed: This was causing full sync on every restart
 		`CREATE TABLE IF NOT EXISTS shops (
 			shop_id TEXT PRIMARY KEY,
 			shop_name TEXT,
@@ -253,6 +260,19 @@ func (m *Manager) InitializeSchema() error {
 			key TEXT PRIMARY KEY,
 			value TEXT
 		)`,
+		`CREATE TABLE IF NOT EXISTS registered_apps (
+			id            TEXT PRIMARY KEY,
+			name          TEXT NOT NULL,
+			version       TEXT,
+			mall_id       TEXT,
+			hostname      TEXT NOT NULL,
+			ip            TEXT,
+			registered_at TEXT NOT NULL,
+			last_seen     TEXT NOT NULL,
+			started_at    TEXT,
+			log_dir       TEXT,
+			log_prefix    TEXT
+		)`,
 	}
 
 	for _, query := range queries {
@@ -261,7 +281,6 @@ func (m *Manager) InitializeSchema() error {
 		}
 	}
 
-	// Migrations: Try to add columns if they don't exist (ignore errors for existing columns)
 	migrations := []string{
 		"ALTER TABLE event_news ADD COLUMN categories TEXT",
 		"ALTER TABLE event_news ADD COLUMN display_end TEXT",
@@ -278,7 +297,6 @@ func (m *Manager) InitializeSchema() error {
 		"ALTER TABLE shop_news ADD COLUMN date_end TEXT",
 		"ALTER TABLE shop_news ADD COLUMN photo1 TEXT",
 
-		// Thumbnail columns (existing)
 		"ALTER TABLE shops ADD COLUMN photo1_thumb_w640 TEXT",
 		"ALTER TABLE shops ADD COLUMN photo1_thumb_w640_remote_url TEXT",
 		"ALTER TABLE shops ADD COLUMN photo1_thumb_w640_local_path TEXT",
@@ -292,7 +310,6 @@ func (m *Manager) InitializeSchema() error {
 		"ALTER TABLE shops ADD COLUMN shop_logo_thumb_w640_remote_url TEXT",
 		"ALTER TABLE shops ADD COLUMN shop_logo_thumb_w640_local_path TEXT",
 
-		// Full-field migration: multi-language names
 		"ALTER TABLE shops ADD COLUMN shop_name_china_cn TEXT",
 		"ALTER TABLE shops ADD COLUMN shop_name_china_tw TEXT",
 		"ALTER TABLE shops ADD COLUMN shop_name_korea TEXT",
@@ -302,7 +319,6 @@ func (m *Manager) InitializeSchema() error {
 		"ALTER TABLE shops ADD COLUMN abbr TEXT",
 		"ALTER TABLE shops ADD COLUMN web_status TEXT",
 
-		// Full-field migration: multi-language genre memos
 		"ALTER TABLE shops ADD COLUMN genre_memo_china_cn TEXT",
 		"ALTER TABLE shops ADD COLUMN genre_memo_china_tw TEXT",
 		"ALTER TABLE shops ADD COLUMN genre_memo_korea TEXT",
@@ -310,7 +326,6 @@ func (m *Manager) InitializeSchema() error {
 		"ALTER TABLE shops ADD COLUMN genre_memo_vietnam TEXT",
 		"ALTER TABLE shops ADD COLUMN genre_memo_thai TEXT",
 
-		// Full-field migration: additional shop info
 		"ALTER TABLE shops ADD COLUMN tenant_code TEXT",
 		"ALTER TABLE shops ADD COLUMN user_url TEXT",
 		"ALTER TABLE shops ADD COLUMN floor TEXT",
@@ -332,7 +347,6 @@ func (m *Manager) InitializeSchema() error {
 		"ALTER TABLE shops ADD COLUMN alcohol TEXT",
 		"ALTER TABLE shops ADD COLUMN options TEXT",
 
-		// Full-field migration: additional thumbnail URL fields
 		"ALTER TABLE shops ADD COLUMN photo1_thumb TEXT",
 		"ALTER TABLE shops ADD COLUMN photo1_thumb_150x150 TEXT",
 		"ALTER TABLE shops ADD COLUMN photo1_thumb_640x640 TEXT",
@@ -345,7 +359,6 @@ func (m *Manager) InitializeSchema() error {
 		"ALTER TABLE shops ADD COLUMN shop_logo_thumb_150x150 TEXT",
 		"ALTER TABLE shops ADD COLUMN shop_logo_thumb_w320 TEXT",
 
-		// Specials: new columns from updated API
 		"ALTER TABLE specials ADD COLUMN special_title_id TEXT",
 		"ALTER TABLE specials ADD COLUMN sub_title TEXT",
 		"ALTER TABLE specials ADD COLUMN category_id TEXT",
@@ -360,20 +373,18 @@ func (m *Manager) InitializeSchema() error {
 		"ALTER TABLE specials ADD COLUMN special_image_remote_url TEXT",
 		"ALTER TABLE specials ADD COLUMN special_image2_local_path TEXT",
 
-		// Sales: title-level image columns
 		"ALTER TABLE sales ADD COLUMN sale_title_image TEXT",
 		"ALTER TABLE sales ADD COLUMN sale_title_image_local_path TEXT",
 	}
 
 	for _, query := range migrations {
-		m.Conn.Exec(query) // Ignore error as column might exist
+		m.Conn.Exec(query)
 	}
 
 	return nil
 }
 
 func (m *Manager) GetDataCounts() (*DataCounts, error) {
-	// Ensure connection if not already connected
 	if m.Conn == nil {
 		if err := m.Connect(); err != nil {
 			return nil, err
@@ -382,13 +393,62 @@ func (m *Manager) GetDataCounts() (*DataCounts, error) {
 	}
 
 	counts := &DataCounts{}
-
-	// Ignore errors for individual counts, just return 0
 	m.Conn.QueryRow("SELECT COUNT(*) FROM shops").Scan(&counts.Shops)
 	m.Conn.QueryRow("SELECT COUNT(*) FROM shop_news").Scan(&counts.ShopNews)
 	m.Conn.QueryRow("SELECT COUNT(*) FROM event_news").Scan(&counts.EventNews)
 	m.Conn.QueryRow("SELECT COUNT(*) FROM specials").Scan(&counts.Specials)
 	m.Conn.QueryRow("SELECT COUNT(*) FROM sales").Scan(&counts.Sales)
-
 	return counts, nil
+}
+
+// UpsertApp inserts or replaces an app record in the DB.
+func (m *Manager) UpsertApp(r AppRecord) error {
+	if m.Conn == nil {
+		return fmt.Errorf("db not connected")
+	}
+	_, err := m.Conn.Exec(
+		`INSERT OR REPLACE INTO registered_apps
+		(id, name, version, mall_id, hostname, ip, registered_at, last_seen, started_at, log_dir, log_prefix)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.ID, r.Name, r.Version, r.MallID, r.Hostname, r.IP,
+		r.RegisteredAt, r.LastSeen, r.StartedAt, r.LogDir, r.LogPrefix,
+	)
+	return err
+}
+
+// UpdateAppLastSeen updates only the last_seen field for an app.
+func (m *Manager) UpdateAppLastSeen(id, lastSeen string) error {
+	if m.Conn == nil {
+		return fmt.Errorf("db not connected")
+	}
+	_, err := m.Conn.Exec(`UPDATE registered_apps SET last_seen = ? WHERE id = ?`, lastSeen, id)
+	return err
+}
+
+// LoadApps returns all persisted app records ordered by registration time.
+func (m *Manager) LoadApps() ([]AppRecord, error) {
+	if m.Conn == nil {
+		return nil, fmt.Errorf("db not connected")
+	}
+	rows, err := m.Conn.Query(
+		`SELECT id, name, version, mall_id, hostname, ip,
+		        registered_at, last_seen, COALESCE(started_at,''), log_dir, log_prefix
+		 FROM registered_apps ORDER BY registered_at ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []AppRecord
+	for rows.Next() {
+		var r AppRecord
+		if err := rows.Scan(
+			&r.ID, &r.Name, &r.Version, &r.MallID, &r.Hostname, &r.IP,
+			&r.RegisteredAt, &r.LastSeen, &r.StartedAt, &r.LogDir, &r.LogPrefix,
+		); err != nil {
+			continue
+		}
+		result = append(result, r)
+	}
+	return result, nil
 }

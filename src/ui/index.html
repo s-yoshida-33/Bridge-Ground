@@ -105,6 +105,8 @@
         .btn-secondary:hover:not(:disabled) { background: #dde2ea; }
         .btn-success { background: #20a852; color: #fff; }
         .btn-success:hover:not(:disabled) { background: #188a44; }
+        .btn-danger { background: #e74c3c; color: #fff; }
+        .btn-danger:hover:not(:disabled) { background: #c0392b; }
         .btn-sm { padding: 5px 10px; font-size: 12px; }
 
         /* ── Form ── */
@@ -122,6 +124,7 @@
         }
         .field input:focus { outline: none; border-color: #1a6ef5; }
         .field input:read-only { background: #f5f7fa; color: #778; }
+        .field input:disabled { background: #f5f7fa; color: #778; }
         .field small { display: block; margin-top: 4px; color: #889; font-size: 11px; }
         .field-row { display: flex; gap: 8px; align-items: center; }
         .field-row input { flex: 1; }
@@ -335,6 +338,52 @@
         }
         .date-input:focus { outline: none; border-color: #1a6ef5; }
         .date-sep { font-size: 13px; color: #778; }
+
+        /* ── Portal CMS ── */
+        .portal-device-row {
+            background: #f5f7fa;
+            border: 1px solid #dde2ea;
+            border-radius: 6px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+        }
+        .portal-device-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .portal-device-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #1a2233;
+            flex: 1;
+        }
+        .portal-badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 10px;
+            white-space: nowrap;
+        }
+        .portal-badge-pending    { background: #fff3cd; color: #856404; }
+        .portal-badge-approved   { background: #d1ecf1; color: #0c5460; }
+        .portal-badge-registered { background: #d4edda; color: #155724; }
+        .portal-device-fields {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        @media (max-width: 600px) {
+            .portal-device-fields { grid-template-columns: 1fr; }
+        }
+        .portal-device-fields .field { margin-bottom: 0; }
+        .portal-empty {
+            color: #889;
+            font-size: 13px;
+            padding: 16px 0;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -450,6 +499,26 @@
             </div>
 
             <div class="card">
+                <h3>Portal CMS 設定</h3>
+                <div class="field">
+                    <label>Worker Base URL</label>
+                    <input type="text" id="portal-worker-url" placeholder="https://your-worker.example.com">
+                </div>
+                <div class="field">
+                    <label>登録トークン</label>
+                    <input type="text" id="portal-reg-token" placeholder="CMS から発行されたトークンを貼り付け">
+                    <small>初回登録時に使用します。設定後にアプリを再起動すると CMS の承認待ちデバイスに表示されます。</small>
+                </div>
+                <div class="field" style="max-width:200px;">
+                    <label>ステータス送信間隔（秒）</label>
+                    <input type="number" id="portal-interval" min="10" value="60">
+                </div>
+                <div class="section-title">登録済みデバイス</div>
+                <div id="portal-devices-container"><div class="portal-empty">デバイスはありません。</div></div>
+                <small style="display:block; margin-top:8px; color:#889;">承認後に CMS の管理画面からデバイス ID・トークンをコピーして貼り付けてください。一度設定すると編集不可になります。削除ボタンで再設定できます。</small>
+            </div>
+
+            <div class="card">
                 <h3>サーバー・同期設定</h3>
                 <label class="toggle-label"><input type="checkbox" id="run-on-startup"> Windows 起動時に自動起動する</label>
                 <label class="toggle-label"><input type="checkbox" id="start-hidden"> 起動時にウィンドウを表示しない（タスクトレイ常駐）</label>
@@ -492,7 +561,7 @@
         <div style="background:#fff; border-radius:10px; padding:32px 40px; text-align:center; max-width:380px; box-shadow:0 8px 32px rgba(0,0,0,0.18);">
             <div style="font-size:36px; color:#20a852; margin-bottom:12px;">&#10003;</div>
             <div style="font-size:16px; font-weight:700; margin-bottom:8px; color:#1a2233;">設定が保存されました</div>
-            <div style="font-size:13px; color:#667; margin-bottom:24px; line-height:1.6;">変更内容は即座に反映されます。<br>ポート番号を変更した場合はアプリの再起動が必要です。</div>
+            <div style="font-size:13px; color:#667; margin-bottom:24px; line-height:1.6;">変更内容は即座に反映されます。<br>ポート番号を変更した場合はアプリの再起動が必要です。<br>Portal CMS の登録トークンを新たに設定した場合も再起動してください。</div>
             <button id="save-modal-close" class="btn-success" style="padding:9px 32px; font-size:14px;">OK</button>
         </div>
     </div>

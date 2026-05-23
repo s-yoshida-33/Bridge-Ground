@@ -20,6 +20,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentConfig = {};
     let isPasswordEditable = false;
 
+    // Portal CMS device state loaded from config
+    let portalDeviceStates = [];
+
     // --- Version ---
     try {
         const version = await bridgeApi.getAppVersion();
@@ -133,6 +136,98 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     updateDataCounts();
 
+    // --- Portal CMS helpers ---
+    function normalizePortalDevice(d) {
+        return {
+            appName:      d.appName      || '',
+            hostname:     d.hostname     || '',
+            pendingId:    d.pendingId    || '',
+            deviceId:     d.deviceId     || '',
+            deviceTokenSet: d.deviceTokenSet || false,
+        };
+    }
+
+    function loadPortalSettings(config) {
+        const ps = config.portalSettings || {};
+        document.getElementById('portal-worker-url').value = ps.workerBaseUrl || '';
+        document.getElementById('portal-reg-token').value  = ps.registrationToken || '';
+        document.getElementById('portal-interval').value   = ps.statusReportIntervalSecs || 60;
+
+        const devices = ps.devices || [];
+        portalDeviceStates = devices.map(normalizePortalDevice);
+        renderPortalDevices();
+    }
+
+    function renderPortalDevices() {
+        const container = document.getElementById('portal-devices-container');
+        if (!container) return;
+        if (portalDeviceStates.length === 0) {
+            container.innerHTML = '<div class="portal-empty">デバイスはまだ登録されていません。</div>';
+            return;
+        }
+        container.innerHTML = portalDeviceStates.map((d, i) => {
+            let badge = '';
+            if (d.deviceId && d.deviceTokenSet) {
+                badge = '<span class="portal-badge portal-badge-registered">登録完了</span>';
+            } else if (d.deviceId) {
+                badge = '<span class="portal-badge portal-badge-approved">承認済み</span>';
+            } else if (d.pendingId) {
+                badge = '<span class="portal-badge portal-badge-pending">承認待ち</span>';
+            }
+
+            const deviceIdHtml = `<div class="field">
+                <label>デバイス ID</label>
+                <input type="text" id="portal-device-id-${i}"
+                    value="${esc(d.deviceId)}"
+                    placeholder="CMS から貼り付け"
+                    ${d.deviceId ? 'readonly' : ''}>
+            </div>`;
+
+            let deviceTokenHtml;
+            if (d.deviceTokenSet) {
+                deviceTokenHtml = `<div class="field">
+                    <label>デバイストークン</label>
+                    <div class="field-row">
+                        <input type="password" value="設定済み" disabled>
+                        <button class="btn-danger btn-sm" onclick="clearPortalDeviceCredentials(${i})">削除</button>
+                    </div>
+                </div>`;
+            } else {
+                deviceTokenHtml = `<div class="field">
+                    <label>デバイストークン</label>
+                    <input type="text" id="portal-device-token-${i}"
+                        value=""
+                        placeholder="CMS から貼り付け">
+                </div>`;
+            }
+
+            return `<div class="portal-device-row">
+                <div class="portal-device-header">
+                    <span class="portal-device-name">${esc(d.appName)} / ${esc(d.hostname)}</span>
+                    ${badge}
+                </div>
+                <div class="portal-device-fields">
+                    ${deviceIdHtml}
+                    ${deviceTokenHtml}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // Called from inline onclick; needs to be global
+    window.clearPortalDeviceCredentials = async function(index) {
+        const d = portalDeviceStates[index];
+        if (!d) return;
+        if (!confirm(`${d.appName} / ${d.hostname} のデバイス認証情報を削除しますか？`)) return;
+        try {
+            await bridgeApi.clearPortalDevice(d.appName, d.hostname);
+            currentConfig = await bridgeApi.getConfig();
+            loadPortalSettings(currentConfig);
+        } catch (err) {
+            alert('削除に失敗しました: ' + (err.message || err));
+        }
+    };
+
     // --- Settings Load ---
     function loadSettings(config) {
         const api  = config.apiSettings  || {};
@@ -174,6 +269,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('sync-target-shop-app').checked   = targets.shopApp   || false;
         document.getElementById('sync-target-genres').checked     = targets.genres    || false;
         document.getElementById('sync-target-floors').checked     = targets.floors    || false;
+
+        loadPortalSettings(config);
     }
 
     // --- Password Toggle ---
@@ -237,6 +334,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             newPassword = passwordInput.value;
         }
 
+        // Collect portal device updates
+        // deviceToken: empty string = keep existing (backend preserves); only sent when user typed something
+        const portalDevicesOut = portalDeviceStates.map((d, i) => {
+            const idEl    = document.getElementById(`portal-device-id-${i}`);
+            const tokenEl = document.getElementById(`portal-device-token-${i}`);
+            return {
+                appName:     d.appName,
+                hostname:    d.hostname,
+                deviceId:    idEl    ? idEl.value    : d.deviceId,
+                deviceToken: tokenEl ? tokenEl.value : '',
+            };
+        });
+
         const newConfig = {
             apiSettings: {
                 baseUrl:  document.getElementById('api-url').value,
@@ -262,6 +372,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     genres:    document.getElementById('sync-target-genres').checked,
                     floors:    document.getElementById('sync-target-floors').checked
                 }
+            },
+            portalSettings: {
+                workerBaseUrl:            document.getElementById('portal-worker-url').value,
+                registrationToken:        document.getElementById('portal-reg-token').value,
+                statusReportIntervalSecs: parseInt(document.getElementById('portal-interval').value) || 60,
+                devices: portalDevicesOut
             }
         };
 

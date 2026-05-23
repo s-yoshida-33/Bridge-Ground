@@ -43,6 +43,31 @@ func maskedPortalSettings(ps config.PortalSettings) portalSettingsResponse {
 	}
 }
 
+// mergePortalDevices preserves sensitive/auto-managed fields from the existing config
+// that the UI doesn't send back (deviceToken is masked; pendingId and deviceId are
+// managed by the portal manager and should never be cleared via the settings form).
+func mergePortalDevices(incoming []config.PortalDevice, existing []config.PortalDevice) []config.PortalDevice {
+	for i := range incoming {
+		d := &incoming[i]
+		for _, ex := range existing {
+			if ex.AppName != d.AppName || ex.Hostname != d.Hostname {
+				continue
+			}
+			if d.DeviceToken == "" {
+				d.DeviceToken = ex.DeviceToken
+			}
+			if d.PendingID == "" {
+				d.PendingID = ex.PendingID
+			}
+			if d.DeviceID == "" && ex.DeviceID != "" {
+				d.DeviceID = ex.DeviceID
+			}
+			break
+		}
+	}
+	return incoming
+}
+
 // handlePortalClearDevice handles POST /api/portal/clear-device.
 // Clears deviceId and deviceToken for a specific device entry.
 func (s *Server) handlePortalClearDevice(w http.ResponseWriter, r *http.Request) {

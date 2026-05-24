@@ -52,7 +52,6 @@ func (m *Manager) Start() {
 
 	for range ticker.C {
 		m.registerNewApps()
-		m.pollPendingApprovals()
 		m.reportAllStatus()
 	}
 }
@@ -129,52 +128,6 @@ func (m *Manager) registerNewApps() {
 			logging.Warn("PORTAL", fmt.Sprintf("Failed to save config after app registration: %v", err))
 		}
 		logging.Info("PORTAL", fmt.Sprintf("Registered app %s (%s), pendingId=%s", app.Name, app.Hostname, resp.PendingID))
-	}
-}
-
-// pollPendingApprovals checks whether any pending registrations have been approved
-// by the Portal CMS admin and promotes them to full device credentials.
-func (m *Manager) pollPendingApprovals() {
-	m.mu.Lock()
-	var pending []config.PortalDevice
-	for _, d := range m.cfg.PortalSettings.Devices {
-		if d.PendingID != "" && d.DeviceID == "" {
-			pending = append(pending, d)
-		}
-	}
-	m.mu.Unlock()
-
-	if len(pending) == 0 {
-		return
-	}
-
-	token := m.cfg.PortalSettings.RegistrationToken
-	changed := false
-	for _, d := range pending {
-		resp, err := m.client.CheckPending(token, d.PendingID)
-		if err != nil {
-			logging.Warn("PORTAL", fmt.Sprintf("Failed to check pending approval for %s/%s: %v", d.AppName, d.Hostname, err))
-			continue
-		}
-		if resp.Status != "approved" {
-			continue
-		}
-		m.mu.Lock()
-		m.upsertDevice(config.PortalDevice{
-			AppName:     d.AppName,
-			Hostname:    d.Hostname,
-			DeviceID:    resp.DeviceID,
-			DeviceToken: resp.DeviceToken,
-		})
-		m.mu.Unlock()
-		logging.Info("PORTAL", fmt.Sprintf("Device approved: %s/%s -> deviceId=%s", d.AppName, d.Hostname, resp.DeviceID))
-		changed = true
-	}
-
-	if changed {
-		if err := m.saveConfig(m.cfg); err != nil {
-			logging.Warn("PORTAL", fmt.Sprintf("Failed to save config after approval: %v", err))
-		}
 	}
 }
 

@@ -187,51 +187,41 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (d.deviceId && d.deviceTokenSet) {
                 badge = '<span class="portal-badge portal-badge-registered">登録完了</span>';
             } else if (d.deviceId) {
-                badge = '<span class="portal-badge portal-badge-approved">承認済み</span>';
+                badge = '<span class="portal-badge portal-badge-approved">ID設定済み</span>';
             } else if (d.pendingId) {
                 badge = '<span class="portal-badge portal-badge-pending">承認待ち</span>';
             }
 
-            let fieldsHtml = '';
+            // Info note shown while waiting for CMS admin to approve
+            const pendingNote = (d.pendingId && !d.deviceId)
+                ? `<div class="field" style="grid-column:1/-1;">
+                    <p class="portal-pending-note">CMS で承認後、デバイス ID とデバイストークンを入力してください。</p>
+                  </div>`
+                : '';
 
-            if (d.pendingId && !d.deviceId) {
-                // Pending approval: show pendingId for CMS admin reference.
-                // deviceId/token will be populated automatically by approval polling.
-                fieldsHtml = `<div class="field" style="grid-column:1/-1;">
-                    <label>承認待ち ID（Portal CMS 管理画面でこの ID を承認してください）</label>
+            const deviceIdHtml = `<div class="field">
+                <label>デバイス ID</label>
+                <input type="text" id="portal-device-id-${i}"
+                    value="${esc(d.deviceId)}"
+                    placeholder="CMS から貼り付け">
+            </div>`;
+
+            let deviceTokenHtml;
+            if (d.deviceTokenSet) {
+                deviceTokenHtml = `<div class="field">
+                    <label>デバイストークン</label>
                     <div class="field-row">
-                        <input type="text" value="${esc(d.pendingId)}" readonly>
-                        <button class="btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${esc(d.pendingId)}').catch(()=>{})">コピー</button>
+                        <input type="password" value="設定済み" disabled>
+                        <button class="btn-danger btn-sm" onclick="clearPortalDeviceCredentials(${i})">削除</button>
                     </div>
-                    <small>承認されると自動的に反映されます（ステータス送信間隔ごとに確認）。</small>
                 </div>`;
             } else {
-                // Approved or fully registered: show deviceId (readonly) and token field.
-                const deviceIdHtml = `<div class="field">
-                    <label>デバイス ID</label>
-                    <input type="text" id="portal-device-id-${i}"
-                        value="${esc(d.deviceId)}" readonly>
+                deviceTokenHtml = `<div class="field">
+                    <label>デバイストークン</label>
+                    <input type="text" id="portal-device-token-${i}"
+                        value=""
+                        placeholder="CMS から貼り付け">
                 </div>`;
-
-                let deviceTokenHtml;
-                if (d.deviceTokenSet) {
-                    deviceTokenHtml = `<div class="field">
-                        <label>デバイストークン</label>
-                        <div class="field-row">
-                            <input type="password" value="設定済み" disabled>
-                            <button class="btn-danger btn-sm" onclick="clearPortalDeviceCredentials(${i})">削除</button>
-                        </div>
-                    </div>`;
-                } else {
-                    deviceTokenHtml = `<div class="field">
-                        <label>デバイストークン</label>
-                        <input type="text" id="portal-device-token-${i}"
-                            value=""
-                            placeholder="CMS から貼り付け">
-                    </div>`;
-                }
-
-                fieldsHtml = deviceIdHtml + deviceTokenHtml;
             }
 
             return `<div class="portal-device-row">
@@ -240,7 +230,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     ${badge}
                 </div>
                 <div class="portal-device-fields">
-                    ${fieldsHtml}
+                    ${pendingNote}
+                    ${deviceIdHtml}
+                    ${deviceTokenHtml}
                 </div>
             </div>`;
         }).join('');
@@ -390,10 +382,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Build portal devices payload.
-        // - pendingId is always preserved from state (never user-editable).
-        // - deviceId is read from the readonly input, or falls back to stored state.
-        // - deviceToken: use newly typed value if present, otherwise fall back to stored
-        //   d.deviceToken (populated in Lorca mode from go_getConfig raw value).
+        // pendingId is always preserved from state (never user-editable).
+        // deviceId and deviceToken come from the input fields the admin fills in.
         const portalDevicesOut = portalDeviceStates.map((d, i) => {
             const idEl    = document.getElementById(`portal-device-id-${i}`);
             const tokenEl = document.getElementById(`portal-device-token-${i}`);

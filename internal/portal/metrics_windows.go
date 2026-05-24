@@ -3,6 +3,7 @@
 package portal
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -45,6 +46,10 @@ var (
 	prevKernel   uint64
 	prevUser     uint64
 )
+
+func round1(v float64) float64 {
+	return math.Round(v*10) / 10
+}
 
 func memoryPercent() float64 {
 	var m memStatusEx
@@ -116,12 +121,12 @@ func storagePercent() float64 {
 	return float64(total-totalFree) / float64(total) * 100
 }
 
-// CollectMetrics returns current system performance metrics.
+// CollectMetrics returns current system performance metrics rounded to 1 decimal place.
 func CollectMetrics() Metrics {
 	return Metrics{
-		CPU:         cpuPercent(),
-		Memory:      memoryPercent(),
+		CPU:         round1(cpuPercent()),
+		Memory:      round1(memoryPercent()),
 		Temperature: 0,
-		Storage:     storagePercent(),
+		Storage:     round1(storagePercent()),
 	}
 }

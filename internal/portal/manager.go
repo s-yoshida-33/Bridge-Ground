@@ -165,10 +165,14 @@ func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, upt
 		}
 	}
 	status := "offline"
+	var appUptimeHrs int
 	for _, app := range apps {
 		if app.Name == d.AppName && app.Hostname == d.Hostname {
 			if app.Online {
 				status = "online"
+			}
+			if app.StartedAt != nil {
+				appUptimeHrs = int(time.Since(*app.StartedAt).Hours())
 			}
 			break
 		}
@@ -176,6 +180,7 @@ func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, upt
 	return StatusRequest{
 		DeviceID: d.DeviceID,
 		Status:   status,
+		Uptime:   appUptimeHrs,
 	}
 }
 

@@ -235,19 +235,6 @@ func (r *AppRegistry) RemoveWSConn(id string) {
 	delete(r.wsConns, id)
 }
 
-func (r *AppRegistry) SendScreenshotRequest(id string) error {
-	r.mu.Lock()
-	entry := r.wsConns[id]
-	r.mu.Unlock()
-	if entry == nil {
-		return fmt.Errorf("app not connected via WebSocket")
-	}
-	msg, _ := json.Marshal(map[string]string{"type": "screenshot_request"})
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-	return entry.conn.WriteMessage(websocket.TextMessage, msg)
-}
-
 func (r *AppRegistry) GetAppLogs(id, from, to string) []logging.LogEntry {
 	r.mu.Lock()
 	app, ok := r.apps[id]
@@ -364,17 +351,26 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// screenshot/request: capture the display containing the app window via Win32 GDI.
+	// Responds immediately with {ok:true}; capture runs in background and broadcasts
+	// screenshot_ready when complete. Falls back to primary display if window not found.
 	if strings.HasSuffix(sub, "/screenshot/request") && r.Method == http.MethodPost {
 		id := strings.TrimSuffix(sub, "/screenshot/request")
-		if _, ok := s.Apps.Get(id); !ok {
+		app, ok := s.Apps.Get(id)
+		if !ok {
 			http.Error(w, "app not found", http.StatusNotFound)
 			return
 		}
-		if err := s.Apps.SendScreenshotRequest(id); err != nil {
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
-			return
-		}
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		go func() {
+			data, err := CaptureAppScreen(app.Name)
+			if err != nil {
+				logging.Warn("SCREENSHOT", fmt.Sprintf("Capture failed for %s: %v", app.Name, err))
+				return
+			}
+			s.Apps.StoreScreenshot(id, data, "image/jpeg")
+			s.Broker.Broadcast("screenshot_ready", map[string]string{"appId": id})
+		}()
 		return
 	}
 

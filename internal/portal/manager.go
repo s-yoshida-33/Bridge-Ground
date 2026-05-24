@@ -148,9 +148,10 @@ func (m *Manager) pollPendingApprovals() {
 		return
 	}
 
+	token := m.cfg.PortalSettings.RegistrationToken
 	changed := false
 	for _, d := range pending {
-		resp, err := m.client.CheckPending(d.PendingID)
+		resp, err := m.client.CheckPending(token, d.PendingID)
 		if err != nil {
 			logging.Warn("PORTAL", fmt.Sprintf("Failed to check pending approval for %s/%s: %v", d.AppName, d.Hostname, err))
 			continue

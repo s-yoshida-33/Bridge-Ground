@@ -39,7 +39,7 @@ type RegisterResponse struct {
 
 // CheckPendingResponse is the JSON response from GET /v1/pending/{pendingId}.
 type CheckPendingResponse struct {
-	Status      string `json:"status"` // "pending" or "approved"
+	Status      string `json:"status"` // "pending", "approved", or "rejected"
 	DeviceID    string `json:"deviceId,omitempty"`
 	DeviceToken string `json:"deviceToken,omitempty"`
 	Error       string `json:"error,omitempty"`
@@ -83,11 +83,13 @@ func (c *Client) Register(token string, req RegisterRequest) (*RegisterResponse,
 }
 
 // CheckPending polls GET /v1/pending/{pendingId} to detect CMS approval.
-func (c *Client) CheckPending(pendingID string) (*CheckPendingResponse, error) {
+// The registration token is required by the Worker for authentication.
+func (c *Client) CheckPending(token string, pendingID string) (*CheckPendingResponse, error) {
 	httpReq, err := http.NewRequest(http.MethodGet, c.baseURL+"/v1/pending/"+pendingID, nil)
 	if err != nil {
 		return nil, err
 	}
+	httpReq.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {

@@ -18,21 +18,22 @@ var (
 	_u32 = syscall.NewLazyDLL("user32.dll")
 	_g32 = syscall.NewLazyDLL("gdi32.dll")
 
-	_EnumWindows            = _u32.NewProc("EnumWindows")
-	_GetWindowTextW         = _u32.NewProc("GetWindowTextW")
-	_IsWindowVisible        = _u32.NewProc("IsWindowVisible")
-	_MonitorFromWindow      = _u32.NewProc("MonitorFromWindow")
-	_GetMonitorInfoW        = _u32.NewProc("GetMonitorInfoW")
-	_GetDC                  = _u32.NewProc("GetDC")
-	_ReleaseDC              = _u32.NewProc("ReleaseDC")
-	_GetSystemMetrics       = _u32.NewProc("GetSystemMetrics")
-	_CreateCompatibleDC     = _g32.NewProc("CreateCompatibleDC")
-	_CreateCompatibleBitmap = _g32.NewProc("CreateCompatibleBitmap")
-	_SelectObject           = _g32.NewProc("SelectObject")
-	_BitBlt                 = _g32.NewProc("BitBlt")
-	_DeleteDC               = _g32.NewProc("DeleteDC")
-	_DeleteObject           = _g32.NewProc("DeleteObject")
-	_GetDIBits              = _g32.NewProc("GetDIBits")
+	_EnumWindows       = _u32.NewProc("EnumWindows")
+	_GetWindowTextW    = _u32.NewProc("GetWindowTextW")
+	_IsWindowVisible   = _u32.NewProc("IsWindowVisible")
+	_MonitorFromWindow = _u32.NewProc("MonitorFromWindow")
+	_GetMonitorInfoW   = _u32.NewProc("GetMonitorInfoW")
+	_GetDC             = _u32.NewProc("GetDC")
+	_ReleaseDC         = _u32.NewProc("ReleaseDC")
+	_GetSystemMetrics  = _u32.NewProc("GetSystemMetrics")
+
+	_CreateCompatibleDC = _g32.NewProc("CreateCompatibleDC")
+	_CreateDIBSection   = _g32.NewProc("CreateDIBSection")
+	_SelectObject       = _g32.NewProc("SelectObject")
+	_BitBlt             = _g32.NewProc("BitBlt")
+	_DeleteDC           = _g32.NewProc("DeleteDC")
+	_DeleteObject       = _g32.NewProc("DeleteObject")
+	_GdiFlush           = _g32.NewProc("GdiFlush")
 )
 
 // ── Win32 constants ───────────────────────────────────────────────────────────
@@ -116,16 +117,16 @@ func monitorBoundsForWindow(hwnd syscall.Handle) (x, y, w, h int) {
 				int(r.Right-r.Left), int(r.Bottom-r.Top)
 		}
 	}
-	// Primary monitor fallback
 	cx, _, _ := _GetSystemMetrics.Call(_SM_CXSCREEN)
 	cy, _, _ := _GetSystemMetrics.Call(_SM_CYSCREEN)
 	return 0, 0, int(cx), int(cy)
 }
 
-// ── GDI BitBlt capture ────────────────────────────────────────────────────────
+// ── GDI screen capture ────────────────────────────────────────────────────────────
 
-// captureRect captures the rectangle (x,y,w,h) from the virtual screen
-// (GetDC(NULL) covers all monitors on Windows Vista+) and returns JPEG bytes.
+// captureRect captures the rectangle (x,y,w,h) from the virtual screen and
+// returns JPEG bytes. Uses CreateDIBSection so pixel data is directly
+// accessible without a GetDIBits call.
 func captureRect(x, y, w, h int) ([]byte, error) {
 	if w <= 0 || h <= 0 {
 		return nil, fmt.Errorf("invalid capture bounds: %dx%d at (%d,%d)", w, h, x, y)
@@ -143,14 +144,30 @@ func captureRect(x, y, w, h int) ([]byte, error) {
 	}
 	defer _DeleteDC.Call(memDC)
 
-	bmp, _, _ := _CreateCompatibleBitmap.Call(screenDC, uintptr(w), uintptr(h))
-	if bmp == 0 {
-		return nil, fmt.Errorf("CreateCompatibleBitmap failed")
+	// Describe a 32-bit top-down DIB.
+	bmi := _BITMAPINFO{}
+	bmi.BmiHeader.BiSize = uint32(unsafe.Sizeof(bmi.BmiHeader))
+	bmi.BmiHeader.BiWidth = int32(w)
+	bmi.BmiHeader.BiHeight = -int32(h) // negative = top-down scanlines
+	bmi.BmiHeader.BiPlanes = 1
+	bmi.BmiHeader.BiBitCount = 32
+	bmi.BmiHeader.BiCompression = 0 // BI_RGB
+
+	// CreateDIBSection allocates the pixel buffer and returns a pointer to it.
+	// This avoids GetDIBits entirely.
+	var ppvBits uintptr
+	bmp, _, _ := _CreateDIBSection.Call(
+		screenDC,
+		uintptr(unsafe.Pointer(&bmi)),
+		_DIB_RGB_COLORS,
+		uintptr(unsafe.Pointer(&ppvBits)),
+		0, 0,
+	)
+	if bmp == 0 || ppvBits == 0 {
+		return nil, fmt.Errorf("CreateDIBSection failed")
 	}
 	defer _DeleteObject.Call(bmp)
 
-	// SelectObject returns the previously selected object; save it so we can
-	// deselect bmp before calling GetDIBits (required by Win32 API contract).
 	oldBmp, _, _ := _SelectObject.Call(memDC, bmp)
 
 	ret, _, _ := _BitBlt.Call(
@@ -162,37 +179,20 @@ func captureRect(x, y, w, h int) ([]byte, error) {
 		return nil, fmt.Errorf("BitBlt failed")
 	}
 
-	// Deselect bmp from memDC before calling GetDIBits.
-	// GetDIBits requires the target bitmap to not be selected into any DC.
+	// Deselect bmp and flush before reading ppvBits.
+	// MSDN: "The bits of the DIB section are valid after the DIB section is
+	// deselected from the DC. Calling GdiFlush helps ensure the contents
+	// are up-to-date."
 	_SelectObject.Call(memDC, oldBmp)
+	_GdiFlush.Call()
 
-	// GetDIBits: 32-bit BGRA, top-down (negative BiHeight)
-	bmi := _BITMAPINFO{}
-	bmi.BmiHeader.BiSize = uint32(unsafe.Sizeof(bmi.BmiHeader))
-	bmi.BmiHeader.BiWidth = int32(w)
-	bmi.BmiHeader.BiHeight = -int32(h)
-	bmi.BmiHeader.BiPlanes = 1
-	bmi.BmiHeader.BiBitCount = 32
-	bmi.BmiHeader.BiCompression = 0 // BI_RGB
-
-	pixels := make([]byte, w*h*4)
-	rows, _, _ := _GetDIBits.Call(
-		memDC, bmp,
-		0, uintptr(h),
-		uintptr(unsafe.Pointer(&pixels[0])),
-		uintptr(unsafe.Pointer(&bmi)),
-		_DIB_RGB_COLORS,
-	)
-	if rows == 0 {
-		return nil, fmt.Errorf("GetDIBits failed")
-	}
-
-	// Windows GDI returns BGRA; convert to RGBA for image.RGBA
+	// ppvBits points to the BGRA pixel data; convert to RGBA for image.RGBA.
+	pixels := unsafe.Slice((*byte)(unsafe.Pointer(ppvBits)), w*h*4)
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for i := 0; i < w*h; i++ {
-		img.Pix[i*4+0] = pixels[i*4+2] // R
+		img.Pix[i*4+0] = pixels[i*4+2] // R ← B
 		img.Pix[i*4+1] = pixels[i*4+1] // G
-		img.Pix[i*4+2] = pixels[i*4+0] // B
+		img.Pix[i*4+2] = pixels[i*4+0] // B ← R
 		img.Pix[i*4+3] = 0xFF           // A
 	}
 
@@ -204,8 +204,6 @@ func captureRect(x, y, w, h int) ([]byte, error) {
 }
 
 // CaptureAppScreen captures the monitor containing the named app's window.
-// It uses EnumWindows to find a visible window whose title contains appName,
-// then MonitorFromWindow + GetMonitorInfo to identify the display.
 // Falls back to the primary monitor when no matching window is found.
 func CaptureAppScreen(appName string) ([]byte, error) {
 	x, y, w, h := 0, 0, 0, 0

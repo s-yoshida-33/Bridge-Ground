@@ -149,7 +149,9 @@ func captureRect(x, y, w, h int) ([]byte, error) {
 	}
 	defer _DeleteObject.Call(bmp)
 
-	_SelectObject.Call(memDC, bmp)
+	// SelectObject returns the previously selected object; save it so we can
+	// deselect bmp before calling GetDIBits (required by Win32 API contract).
+	oldBmp, _, _ := _SelectObject.Call(memDC, bmp)
 
 	ret, _, _ := _BitBlt.Call(
 		memDC, 0, 0, uintptr(w), uintptr(h),
@@ -159,6 +161,10 @@ func captureRect(x, y, w, h int) ([]byte, error) {
 	if ret == 0 {
 		return nil, fmt.Errorf("BitBlt failed")
 	}
+
+	// Deselect bmp from memDC before calling GetDIBits.
+	// GetDIBits requires the target bitmap to not be selected into any DC.
+	_SelectObject.Call(memDC, oldBmp)
 
 	// GetDIBits: 32-bit BGRA, top-down (negative BiHeight)
 	bmi := _BITMAPINFO{}

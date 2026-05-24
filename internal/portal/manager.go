@@ -177,10 +177,16 @@ func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, upt
 			break
 		}
 	}
+	// Per-process CPU/Memory; Temperature and Storage are machine-wide (shared).
+	procCPU, procMem := CollectProcessMetrics(d.AppName)
 	return StatusRequest{
-		DeviceID: d.DeviceID,
-		Status:   status,
-		Uptime:   appUptimeHrs,
+		DeviceID:    d.DeviceID,
+		Status:      status,
+		CPU:         procCPU,
+		Memory:      procMem,
+		Temperature: metrics.Temperature,
+		Storage:     metrics.Storage,
+		Uptime:      appUptimeHrs,
 	}
 }
 

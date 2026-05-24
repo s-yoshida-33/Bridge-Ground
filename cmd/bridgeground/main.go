@@ -204,6 +204,11 @@ func openUI() {
 	})
 
 	newUI.Bind("go_saveConfig", func(newCfg config.Config) error {
+		// Preserve password when UI sends empty string (masked/non-edit state).
+		// Mirrors the same guard in handleConfig POST for HTTP mode.
+		if newCfg.APISettings.Password == "" {
+			newCfg.APISettings.Password = globalCfg.APISettings.Password
+		}
 		if err := config.SaveConfig(&newCfg); err != nil {
 			return err
 		}

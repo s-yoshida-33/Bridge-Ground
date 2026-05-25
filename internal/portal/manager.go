@@ -132,9 +132,9 @@ func (m *Manager) registerNewApps() {
 }
 
 func (m *Manager) reportAllStatus() {
-	metrics   := CollectMetrics()
-	uptimeHrs := int(time.Since(m.startTime).Hours())
-	appList   := m.apps.List()
+	metrics    := CollectMetrics()
+	uptimeSecs := int(time.Since(m.startTime).Seconds())
+	appList    := m.apps.List()
 
 	m.mu.Lock()
 	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
@@ -145,14 +145,14 @@ func (m *Manager) reportAllStatus() {
 		if d.DeviceID == "" || d.DeviceToken == "" {
 			continue
 		}
-		req := m.buildStatusRequest(d, metrics, uptimeHrs, appList)
+		req := m.buildStatusRequest(d, metrics, uptimeSecs, appList)
 		if err := m.client.ReportStatus(d.DeviceToken, req); err != nil {
 			logging.Warn("PORTAL", fmt.Sprintf("Status report failed for %s/%s: %v", d.AppName, d.Hostname, err))
 		}
 	}
 }
 
-func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, uptimeHrs int, apps []server.AppInfo) StatusRequest {
+func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, uptimeSecs int, apps []server.AppInfo) StatusRequest {
 	if d.AppName == "Bridge-Ground" {
 		return StatusRequest{
 			DeviceID:    d.DeviceID,
@@ -161,18 +161,18 @@ func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, upt
 			Memory:      metrics.Memory,
 			Temperature: metrics.Temperature,
 			Storage:     metrics.Storage,
-			Uptime:      uptimeHrs,
+			Uptime:      uptimeSecs,
 		}
 	}
 	status := "offline"
-	var appUptimeHrs int
+	var appUptimeSecs int
 	for _, app := range apps {
 		if app.Name == d.AppName && app.Hostname == d.Hostname {
 			if app.Online {
 				status = "online"
 			}
 			if app.StartedAt != nil {
-				appUptimeHrs = int(time.Since(*app.StartedAt).Hours())
+				appUptimeSecs = int(time.Since(*app.StartedAt).Seconds())
 			}
 			break
 		}
@@ -184,7 +184,7 @@ func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, upt
 		Memory:      metrics.Memory,
 		Temperature: metrics.Temperature,
 		Storage:     metrics.Storage,
-		Uptime:      appUptimeHrs,
+		Uptime:      appUptimeSecs,
 	}
 }
 

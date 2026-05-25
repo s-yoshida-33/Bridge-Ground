@@ -11,14 +11,17 @@ import (
 	"time"
 )
 
+const maxLogBatch = 200
+
 // Manager handles Portal CMS device registration and periodic status reporting.
 type Manager struct {
-	mu         sync.Mutex
-	cfg        *config.Config
-	apps       *server.AppRegistry
-	saveConfig func(*config.Config) error
-	client     *Client
-	startTime  time.Time
+	mu            sync.Mutex
+	cfg           *config.Config
+	apps          *server.AppRegistry
+	saveConfig    func(*config.Config) error
+	client        *Client
+	startTime     time.Time
+	lastLogSentAt time.Time
 }
 
 // NewManager creates a portal Manager.
@@ -53,6 +56,7 @@ func (m *Manager) Start() {
 	for range ticker.C {
 		m.registerNewApps()
 		m.reportAllStatus()
+		m.sendAllLogs()
 	}
 }
 
@@ -227,6 +231,85 @@ func (m *Manager) upsertDevice(d config.PortalDevice) {
 		}
 	}
 	m.cfg.PortalSettings.Devices = append(m.cfg.PortalSettings.Devices, d)
+}
+
+// sendAllLogs collects new log entries since the last send and pushes them to the portal.
+func (m *Manager) sendAllLogs() {
+	now  := time.Now()
+	from := m.lastLogSentAt
+	if from.IsZero() {
+		from = now.Add(-24 * time.Hour)
+	}
+
+	fromDate := from.Format("2006-01-02")
+	toDate   := now.Format("2006-01-02")
+
+	m.mu.Lock()
+	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+	copy(devices, m.cfg.PortalSettings.Devices)
+	m.mu.Unlock()
+
+	// Bridge-Ground own logs
+	bgEntries := filterEntriesAfter(logging.GetEntriesForRange(fromDate, toDate), from)
+	for _, d := range devices {
+		if d.AppName != "Bridge-Ground" || d.DeviceID == "" || d.DeviceToken == "" {
+			continue
+		}
+		if err := m.sendLogBatch(d.DeviceToken, d.DeviceID, "Bridge-Ground", bgEntries); err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Log send failed for Bridge-Ground: %v", err))
+		}
+		break
+	}
+
+	// Per-app logs
+	for _, app := range m.apps.List() {
+		if app.LogDir == "" || app.LogPrefix == "" {
+			continue
+		}
+		appEntries := filterEntriesAfter(logging.ReadAppLogsFromDir(app.LogDir, app.LogPrefix, fromDate, toDate), from)
+		if len(appEntries) == 0 {
+			continue
+		}
+		for _, d := range devices {
+			if d.AppName == app.Name && d.Hostname == app.Hostname && d.DeviceID != "" && d.DeviceToken != "" {
+				if err := m.sendLogBatch(d.DeviceToken, d.DeviceID, app.Name, appEntries); err != nil {
+					logging.Warn("PORTAL", fmt.Sprintf("Log send failed for %s/%s: %v", app.Name, app.Hostname, err))
+				}
+				break
+			}
+		}
+	}
+
+	m.lastLogSentAt = now
+}
+
+func (m *Manager) sendLogBatch(token, deviceID, appName string, entries []logging.LogEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	if len(entries) > maxLogBatch {
+		entries = entries[len(entries)-maxLogBatch:]
+	}
+	logEntries := make([]LogEntry, len(entries))
+	for i, e := range entries {
+		logEntries[i] = LogEntry{Timestamp: e.Timestamp, Level: e.Level, Tag: e.Tag, Message: e.Message}
+	}
+	return m.client.SendLogs(token, LogsRequest{DeviceID: deviceID, App: appName, Entries: logEntries})
+}
+
+// filterEntriesAfter returns only entries whose timestamp is strictly after `after`.
+func filterEntriesAfter(entries []logging.LogEntry, after time.Time) []logging.LogEntry {
+	if after.IsZero() || len(entries) == 0 {
+		return entries
+	}
+	afterStr := after.Format("2006-01-02 15:04:05.000")
+	var result []logging.LogEntry
+	for _, e := range entries {
+		if e.Timestamp > afterStr {
+			result = append(result, e)
+		}
+	}
+	return result
 }
 
 // localIP returns this machine's preferred outbound IP address.

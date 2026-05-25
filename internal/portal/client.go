@@ -37,6 +37,21 @@ type RegisterResponse struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// LogEntry is a single log line sent to the portal.
+type LogEntry struct {
+	Timestamp string `json:"timestamp"`
+	Level     string `json:"level"`
+	Tag       string `json:"tag"`
+	Message   string `json:"message"`
+}
+
+// LogsRequest is the body for POST /v1/logs.
+type LogsRequest struct {
+	DeviceID string     `json:"deviceId"`
+	App      string     `json:"app"`
+	Entries  []LogEntry `json:"entries"`
+}
+
 // StatusRequest is the body for POST /v1/status.
 type StatusRequest struct {
 	DeviceID    string  `json:"deviceId"`
@@ -47,6 +62,32 @@ type StatusRequest struct {
 	Temperature float64 `json:"temperature,omitempty"`
 	Storage     float64 `json:"storage,omitempty"`
 	Uptime      int     `json:"uptime,omitempty"`
+}
+
+// SendLogs calls POST /v1/logs with a device token.
+func (c *Client) SendLogs(token string, req LogsRequest) error {
+	body, _ := json.Marshal(req)
+	httpReq, err := http.NewRequest(http.MethodPost, c.baseURL+"/v1/logs", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var result struct {
+			Error string `json:"error"`
+		}
+		json.NewDecoder(resp.Body).Decode(&result)
+		return fmt.Errorf("log send failed (status %d): %s", resp.StatusCode, result.Error)
+	}
+	return nil
 }
 
 // Register calls POST /v1/register with a registration token.

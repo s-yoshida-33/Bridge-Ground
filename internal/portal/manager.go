@@ -338,9 +338,16 @@ func (m *Manager) checkAndUploadScreenshots() {
 		if !ok {
 			continue
 		}
-		data, _, _, ok := m.apps.GetScreenshot(app.ID)
-		if !ok || len(data) == 0 {
-			continue
+		data, _, _, hasCache := m.apps.GetScreenshot(app.ID)
+		if !hasCache || len(data) == 0 {
+			// No cached screenshot — attempt a live GDI capture (Windows only; no-op on other platforms)
+			captured, err := server.CaptureAppScreen(app.Name)
+			if err != nil || len(captured) == 0 {
+				logging.Warn("PORTAL", fmt.Sprintf("No screenshot available for %s: %v", d.AppName, err))
+				continue
+			}
+			m.apps.StoreScreenshot(app.ID, captured, "image/jpeg")
+			data = captured
 		}
 		if err := m.client.UploadScreenshot(d.DeviceToken, d.DeviceID, data); err != nil {
 			logging.Warn("PORTAL", fmt.Sprintf("Screenshot upload failed for %s: %v", d.AppName, err))

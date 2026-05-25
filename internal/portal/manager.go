@@ -135,6 +135,7 @@ func (m *Manager) reportAllStatus() {
 	metrics    := CollectMetrics()
 	uptimeSecs := int(time.Since(m.startTime).Seconds())
 	appList    := m.apps.List()
+	currentIP  := localIP()
 
 	m.mu.Lock()
 	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
@@ -145,18 +146,19 @@ func (m *Manager) reportAllStatus() {
 		if d.DeviceID == "" || d.DeviceToken == "" {
 			continue
 		}
-		req := m.buildStatusRequest(d, metrics, uptimeSecs, appList)
+		req := m.buildStatusRequest(d, metrics, uptimeSecs, appList, currentIP)
 		if err := m.client.ReportStatus(d.DeviceToken, req); err != nil {
 			logging.Warn("PORTAL", fmt.Sprintf("Status report failed for %s/%s: %v", d.AppName, d.Hostname, err))
 		}
 	}
 }
 
-func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, uptimeSecs int, apps []server.AppInfo) StatusRequest {
+func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, uptimeSecs int, apps []server.AppInfo, currentIP string) StatusRequest {
 	if d.AppName == "Bridge-Ground" {
 		return StatusRequest{
 			DeviceID:    d.DeviceID,
 			Status:      "online",
+			IP:          currentIP,
 			CPU:         metrics.CPU,
 			Memory:      metrics.Memory,
 			Temperature: metrics.Temperature,
@@ -166,6 +168,7 @@ func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, upt
 	}
 	status := "offline"
 	var appUptimeSecs int
+	var appIP string
 	for _, app := range apps {
 		if app.Name == d.AppName && app.Hostname == d.Hostname {
 			if app.Online {
@@ -174,12 +177,17 @@ func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, upt
 			if app.StartedAt != nil {
 				appUptimeSecs = int(time.Since(*app.StartedAt).Seconds())
 			}
+			appIP = app.IP
 			break
 		}
+	}
+	if appIP == "" {
+		appIP = currentIP
 	}
 	return StatusRequest{
 		DeviceID:    d.DeviceID,
 		Status:      status,
+		IP:          appIP,
 		CPU:         metrics.CPU,
 		Memory:      metrics.Memory,
 		Temperature: metrics.Temperature,

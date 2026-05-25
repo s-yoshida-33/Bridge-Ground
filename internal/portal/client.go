@@ -41,6 +41,7 @@ type RegisterResponse struct {
 type StatusRequest struct {
 	DeviceID    string  `json:"deviceId"`
 	Status      string  `json:"status,omitempty"`
+	IP          string  `json:"ip,omitempty"`
 	CPU         float64 `json:"cpu,omitempty"`
 	Memory      float64 `json:"memory,omitempty"`
 	Temperature float64 `json:"temperature,omitempty"`

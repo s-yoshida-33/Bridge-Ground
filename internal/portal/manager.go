@@ -57,6 +57,7 @@ func (m *Manager) Start() {
 		m.registerNewApps()
 		m.reportAllStatus()
 		m.sendAllLogs()
+		m.checkAndUploadScreenshots()
 	}
 }
 
@@ -310,6 +311,53 @@ func filterEntriesAfter(entries []logging.LogEntry, after time.Time) []logging.L
 		}
 	}
 	return result
+}
+
+// checkAndUploadScreenshots polls the Worker for pending screenshot requests and uploads
+// any available screenshots from the local AppRegistry.
+func (m *Manager) checkAndUploadScreenshots() {
+	m.mu.Lock()
+	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+	copy(devices, m.cfg.PortalSettings.Devices)
+	m.mu.Unlock()
+
+	for _, d := range devices {
+		if d.AppName == "Bridge-Ground" || d.DeviceID == "" || d.DeviceToken == "" {
+			continue
+		}
+		pending, err := m.client.CheckScreenshotPending(d.DeviceToken, d.DeviceID)
+		if err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Screenshot pending check failed for %s: %v", d.AppName, err))
+			continue
+		}
+		if !pending {
+			continue
+		}
+
+		app, ok := m.findAppInfo(d.AppName, d.Hostname)
+		if !ok {
+			continue
+		}
+		data, _, _, ok := m.apps.GetScreenshot(app.ID)
+		if !ok || len(data) == 0 {
+			continue
+		}
+		if err := m.client.UploadScreenshot(d.DeviceToken, d.DeviceID, data); err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Screenshot upload failed for %s: %v", d.AppName, err))
+		} else {
+			logging.Info("PORTAL", fmt.Sprintf("Screenshot uploaded for %s (%s)", d.AppName, d.Hostname))
+		}
+	}
+}
+
+// findAppInfo returns the AppInfo whose (Name, Hostname) matches the given pair.
+func (m *Manager) findAppInfo(appName, hostname string) (server.AppInfo, bool) {
+	for _, app := range m.apps.List() {
+		if app.Name == appName && app.Hostname == hostname {
+			return app, true
+		}
+	}
+	return server.AppInfo{}, false
 }
 
 // localIP returns this machine's preferred outbound IP address.

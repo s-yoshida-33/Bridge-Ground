@@ -141,3 +141,54 @@ func (c *Client) ReportStatus(token string, req StatusRequest) error {
 	}
 	return nil
 }
+
+// CheckScreenshotPending calls GET /v1/screenshot/pending to check for a pending request.
+func (c *Client) CheckScreenshotPending(token, deviceID string) (bool, error) {
+	url := fmt.Sprintf("%s/v1/screenshot/pending?deviceId=%s", c.baseURL, deviceID)
+	httpReq, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return false, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, nil
+	}
+	var result struct {
+		Pending bool `json:"pending"`
+	}
+	json.NewDecoder(resp.Body).Decode(&result)
+	return result.Pending, nil
+}
+
+// UploadScreenshot calls POST /v1/screenshot with JPEG bytes for a given device.
+func (c *Client) UploadScreenshot(token, deviceID string, data []byte) error {
+	url := fmt.Sprintf("%s/v1/screenshot?deviceId=%s", c.baseURL, deviceID)
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "image/jpeg")
+	httpReq.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var result struct {
+			Error string `json:"error"`
+		}
+		json.NewDecoder(resp.Body).Decode(&result)
+		return fmt.Errorf("screenshot upload failed (status %d): %s", resp.StatusCode, result.Error)
+	}
+	return nil
+}

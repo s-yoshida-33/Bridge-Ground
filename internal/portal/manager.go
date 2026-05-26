@@ -54,6 +54,7 @@ func (m *Manager) Start() {
 	defer ticker.Stop()
 
 	for range ticker.C {
+		m.checkPendingApprovals()
 		m.registerNewApps()
 		m.reportAllStatus()
 		m.sendAllLogs()
@@ -353,6 +354,45 @@ func (m *Manager) checkAndUploadScreenshots() {
 			logging.Warn("PORTAL", fmt.Sprintf("Screenshot upload failed for %s: %v", d.AppName, err))
 		} else {
 			logging.Info("PORTAL", fmt.Sprintf("Screenshot uploaded for %s (%s)", d.AppName, d.Hostname))
+		}
+	}
+}
+
+// checkPendingApprovals polls the Worker for any pending device approvals and saves credentials.
+func (m *Manager) checkPendingApprovals() {
+	m.mu.Lock()
+	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+	copy(devices, m.cfg.PortalSettings.Devices)
+	m.mu.Unlock()
+
+	changed := false
+	for _, d := range devices {
+		if d.PendingID == "" || d.DeviceID != "" {
+			continue
+		}
+		result, err := m.client.PollApproval(m.cfg.PortalSettings.RegistrationToken, d.PendingID)
+		if err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Approval poll failed for %s/%s: %v", d.AppName, d.Hostname, err))
+			continue
+		}
+		if !result.Approved {
+			continue
+		}
+		m.mu.Lock()
+		m.upsertDevice(config.PortalDevice{
+			AppName:     d.AppName,
+			Hostname:    d.Hostname,
+			DeviceID:    result.DeviceID,
+			DeviceToken: result.DeviceToken,
+		})
+		m.mu.Unlock()
+		changed = true
+		logging.Info("PORTAL", fmt.Sprintf("Device credentials received: %s/%s → deviceId=%s", d.AppName, d.Hostname, result.DeviceID))
+	}
+
+	if changed {
+		if err := m.saveConfig(m.cfg); err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Failed to save config after approval: %v", err))
 		}
 	}
 }

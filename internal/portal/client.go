@@ -142,6 +142,38 @@ func (c *Client) ReportStatus(token string, req StatusRequest) error {
 	return nil
 }
 
+// ApprovalResponse is the JSON response from GET /v1/approval/{pendingId}.
+type ApprovalResponse struct {
+	Approved    bool   `json:"approved"`
+	DeviceID    string `json:"deviceId"`
+	DeviceToken string `json:"deviceToken"`
+}
+
+// PollApproval calls GET /v1/approval/{pendingId} with the registration token.
+func (c *Client) PollApproval(registrationToken, pendingID string) (*ApprovalResponse, error) {
+	url := fmt.Sprintf("%s/v1/approval/%s", c.baseURL, pendingID)
+	httpReq, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+registrationToken)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("poll approval failed (status %d)", resp.StatusCode)
+	}
+	var result ApprovalResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // CheckScreenshotPending calls GET /v1/screenshot/pending to check for a pending request.
 func (c *Client) CheckScreenshotPending(token, deviceID string) (bool, error) {
 	url := fmt.Sprintf("%s/v1/screenshot/pending?deviceId=%s", c.baseURL, deviceID)

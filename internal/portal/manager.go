@@ -50,14 +50,26 @@ func (m *Manager) Start() {
 	if interval <= 0 {
 		interval = 60
 	}
-	ticker := time.NewTicker(time.Duration(interval) * time.Second)
-	defer ticker.Stop()
+	mainTicker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer mainTicker.Stop()
 
-	for range ticker.C {
+	ssInterval := ps.ScreenshotPollIntervalSecs
+	if ssInterval <= 0 {
+		ssInterval = 5
+	}
+	ssTicker := time.NewTicker(time.Duration(ssInterval) * time.Second)
+	defer ssTicker.Stop()
+
+	go func() {
+		for range ssTicker.C {
+			m.checkAndUploadScreenshots()
+		}
+	}()
+
+	for range mainTicker.C {
 		m.registerNewApps()
 		m.reportAllStatus()
 		m.sendAllLogs()
-		m.checkAndUploadScreenshots()
 	}
 }
 

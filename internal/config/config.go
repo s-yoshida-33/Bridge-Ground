@@ -55,7 +55,8 @@ type ServerSettings struct {
 type PortalSettings struct {
 	WorkerBaseURL            string         `json:"workerBaseUrl"`
 	RegistrationToken        string         `json:"registrationToken"`
-	StatusReportIntervalSecs int            `json:"statusReportIntervalSecs"`
+	StatusReportIntervalSecs  int            `json:"statusReportIntervalSecs"`
+	ScreenshotPollIntervalSecs int           `json:"screenshotPollIntervalSecs"`
 	Devices                  []PortalDevice `json:"devices"`
 }
 
@@ -166,6 +167,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if cfg.PortalSettings.StatusReportIntervalSecs == 0 {
 		cfg.PortalSettings.StatusReportIntervalSecs = 60
+	}
+	if cfg.PortalSettings.ScreenshotPollIntervalSecs == 0 {
+		cfg.PortalSettings.ScreenshotPollIntervalSecs = 5
 	}
 
 	return &cfg, nil

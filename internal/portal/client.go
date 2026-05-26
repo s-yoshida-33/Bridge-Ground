@@ -47,14 +47,14 @@ type LogEntry struct {
 
 // LogsRequest is the body for POST /v1/logs.
 type LogsRequest struct {
-	DeviceID string     `json:"deviceId"`
-	App      string     `json:"app"`
-	Entries  []LogEntry `json:"entries"`
+	PendingID string     `json:"pendingId"`
+	App       string     `json:"app"`
+	Entries   []LogEntry `json:"entries"`
 }
 
 // StatusRequest is the body for POST /v1/status.
 type StatusRequest struct {
-	DeviceID    string  `json:"deviceId"`
+	PendingID   string  `json:"pendingId"`
 	Status      string  `json:"status,omitempty"`
 	IP          string  `json:"ip,omitempty"`
 	CPU         float64 `json:"cpu,omitempty"`
@@ -64,7 +64,7 @@ type StatusRequest struct {
 	Uptime      int     `json:"uptime,omitempty"`
 }
 
-// SendLogs calls POST /v1/logs with a device token.
+// SendLogs calls POST /v1/logs with the registration token.
 func (c *Client) SendLogs(token string, req LogsRequest) error {
 	body, _ := json.Marshal(req)
 	httpReq, err := http.NewRequest(http.MethodPost, c.baseURL+"/v1/logs", bytes.NewReader(body))
@@ -116,7 +116,7 @@ func (c *Client) Register(token string, req RegisterRequest) (*RegisterResponse,
 	return &result, nil
 }
 
-// ReportStatus calls POST /v1/status with a device token.
+// ReportStatus calls POST /v1/status with the registration token.
 func (c *Client) ReportStatus(token string, req StatusRequest) error {
 	body, _ := json.Marshal(req)
 	httpReq, err := http.NewRequest(http.MethodPost, c.baseURL+"/v1/status", bytes.NewReader(body))
@@ -142,41 +142,9 @@ func (c *Client) ReportStatus(token string, req StatusRequest) error {
 	return nil
 }
 
-// ApprovalResponse is the JSON response from GET /v1/approval/{pendingId}.
-type ApprovalResponse struct {
-	Approved    bool   `json:"approved"`
-	DeviceID    string `json:"deviceId"`
-	DeviceToken string `json:"deviceToken"`
-}
-
-// PollApproval calls GET /v1/approval/{pendingId} with the registration token.
-func (c *Client) PollApproval(registrationToken, pendingID string) (*ApprovalResponse, error) {
-	url := fmt.Sprintf("%s/v1/approval/%s", c.baseURL, pendingID)
-	httpReq, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+registrationToken)
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("poll approval failed (status %d)", resp.StatusCode)
-	}
-	var result ApprovalResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-// CheckScreenshotPending calls GET /v1/screenshot/pending to check for a pending request.
-func (c *Client) CheckScreenshotPending(token, deviceID string) (bool, error) {
-	url := fmt.Sprintf("%s/v1/screenshot/pending?deviceId=%s", c.baseURL, deviceID)
+// CheckScreenshotPending calls GET /v1/screenshot/pending with the registration token.
+func (c *Client) CheckScreenshotPending(token, pendingID string) (bool, error) {
+	url := fmt.Sprintf("%s/v1/screenshot/pending?pendingId=%s", c.baseURL, pendingID)
 	httpReq, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return false, err
@@ -199,9 +167,9 @@ func (c *Client) CheckScreenshotPending(token, deviceID string) (bool, error) {
 	return result.Pending, nil
 }
 
-// UploadScreenshot calls POST /v1/screenshot with JPEG bytes for a given device.
-func (c *Client) UploadScreenshot(token, deviceID string, data []byte) error {
-	url := fmt.Sprintf("%s/v1/screenshot?deviceId=%s", c.baseURL, deviceID)
+// UploadScreenshot calls POST /v1/screenshot with JPEG bytes for a given pendingId.
+func (c *Client) UploadScreenshot(token, pendingID string, data []byte) error {
+	url := fmt.Sprintf("%s/v1/screenshot?pendingId=%s", c.baseURL, pendingID)
 	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
 		return err

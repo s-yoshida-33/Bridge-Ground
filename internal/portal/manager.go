@@ -336,14 +336,17 @@ func (m *Manager) checkAndUploadScreenshots() {
 		if !ok {
 			continue
 		}
-		data, _, _, hasCache := m.apps.GetScreenshot(app.ID)
-		if !hasCache || len(data) == 0 {
-			// No cached screenshot — attempt a live GDI capture (Windows only; no-op on other platforms)
-			captured, err := server.CaptureAppScreen(app.Name)
-			if err != nil || len(captured) == 0 {
-				logging.Warn("PORTAL", fmt.Sprintf("No screenshot available for %s: %v", d.AppName, err))
+		// Always attempt a fresh live capture; fall back to cache only if capture fails.
+		var data []byte
+		captured, captureErr := server.CaptureAppScreen(app.Name)
+		if captureErr != nil || len(captured) == 0 {
+			cached, _, _, hasCache := m.apps.GetScreenshot(app.ID)
+			if !hasCache || len(cached) == 0 {
+				logging.Warn("PORTAL", fmt.Sprintf("No screenshot available for %s: %v", d.AppName, captureErr))
 				continue
 			}
+			data = cached
+		} else {
 			m.apps.StoreScreenshot(app.ID, captured, "image/jpeg")
 			data = captured
 		}

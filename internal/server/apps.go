@@ -285,17 +285,15 @@ func appRecordToInfo(rec db.AppRecord) AppInfo {
 		IP:        rec.IP,
 		LogDir:    rec.LogDir,
 		LogPrefix: rec.LogPrefix,
+		// StartedAt is intentionally not restored from DB.
+		// It is set only when an app explicitly calls Register(), ensuring
+		// stale startup timestamps are never reported after Bridge-Ground restarts.
 	}
 	if t, err := time.Parse(time.RFC3339, rec.RegisteredAt); err == nil {
 		a.RegisteredAt = t
 	}
 	if t, err := time.Parse(time.RFC3339, rec.LastSeen); err == nil {
 		a.LastSeen = t
-	}
-	if rec.StartedAt != "" {
-		if t, err := time.Parse(time.RFC3339, rec.StartedAt); err == nil {
-			a.StartedAt = &t
-		}
 	}
 	return a
 }

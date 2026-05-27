@@ -21,7 +21,8 @@ type LogEntry struct {
 
 var logLineRe = regexp.MustCompile(`^\[([^\]]+)\] \[([^\]]+)\] \[([^\]]+)\] (.*)$`)
 
-var logFile *os.File
+var logFile    *os.File
+var logFileDate string // YYYY-MM-DD of the currently open log file
 
 // getLogDir returns (and creates) %APPDATA%\TTI\BridgeGround\logs.
 func getLogDir() (string, error) {
@@ -49,23 +50,33 @@ func getLogFilePath() (string, error) {
 // Init opens today's log file and redirects Go's standard logger to write to
 // both stderr and the file. Call once at program start.
 func Init() error {
-	path, err := getLogFilePath()
+	if err := openLogFileForDate(time.Now().Format("2006-01-02")); err != nil {
+		return err
+	}
+	Info("LOGGING", fmt.Sprintf("Log file opened: %s", logFile.Name()))
+	return nil
+}
+
+// openLogFileForDate opens (or creates) the log file for the given date,
+// closing any previously open file first.
+func openLogFileForDate(date string) error {
+	dir, err := getLogDir()
 	if err != nil {
 		return err
 	}
+	path := filepath.Join(dir, fmt.Sprintf("bridge-ground-%s.log", date))
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open log file %s: %w", path, err)
 	}
-	logFile = f
-
-	// Redirect Go's standard logger to stderr + file, with no automatic prefix
-	// (we add our own timestamp/level/tag prefix in Write).
+	if logFile != nil {
+		_ = logFile.Close()
+	}
+	logFile     = f
+	logFileDate = date
 	mw := io.MultiWriter(os.Stderr, f)
 	log.SetOutput(mw)
 	log.SetFlags(0)
-
-	Info("LOGGING", fmt.Sprintf("Log file opened: %s", path))
 	return nil
 }
 
@@ -104,8 +115,15 @@ func Close() {
 
 // Write writes a structured log entry to the file (and stderr).
 // Format: [YYYY-MM-DD HH:MM:SS.mmm] [LEVEL] [TAG] message
+// Automatically rotates to a new file when the calendar date changes.
 func Write(level, tag, message string) {
-	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+	now := time.Now()
+	today := now.Format("2006-01-02")
+	if logFile != nil && logFileDate != today {
+		// Date has changed — rotate to a new log file silently.
+		_ = openLogFileForDate(today)
+	}
+	timestamp := now.Format("2006-01-02 15:04:05.000")
 	entry := fmt.Sprintf("[%s] [%s] [%s] %s\n", timestamp, level, tag, message)
 	fmt.Fprint(os.Stderr, entry)
 	if logFile != nil {

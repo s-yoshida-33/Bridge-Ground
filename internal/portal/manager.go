@@ -250,7 +250,10 @@ func (m *Manager) sendAllLogs() {
 		from = now.Add(-24 * time.Hour)
 	}
 
-	fromDate := from.Format("2006-01-02")
+	// Extend fromDate one day earlier to catch log entries still being written to
+	// the previous day's file when Bridge-Ground (or an app) runs past midnight.
+	// filterEntriesAfter ensures only genuinely new entries are sent.
+	fromDate := from.Add(-24 * time.Hour).Format("2006-01-02")
 	toDate   := now.Format("2006-01-02")
 
 	m.mu.Lock()

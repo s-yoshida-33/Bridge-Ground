@@ -376,7 +376,7 @@ func (m *Manager) checkAndUploadScreenshots() {
 // findAppInfo returns the AppInfo whose (Name, Hostname) matches the given pair.
 func (m *Manager) findAppInfo(appName, hostname string) (server.AppInfo, bool) {
 	for _, app := range m.apps.List() {
-		if app.Name == appName && app.Hostname == appName {
+		if app.Name == appName && app.Hostname == hostname {
 			return app, true
 		}
 	}

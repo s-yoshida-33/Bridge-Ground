@@ -55,7 +55,7 @@ func (m *Manager) Start() {
 
 	ssInterval := ps.ScreenshotPollIntervalSecs
 	if ssInterval <= 0 {
-		ssInterval = 5
+		ssInterval = 30
 	}
 	ssTicker := time.NewTicker(time.Duration(ssInterval) * time.Second)
 	defer ssTicker.Stop()
@@ -376,7 +376,7 @@ func (m *Manager) checkAndUploadScreenshots() {
 // findAppInfo returns the AppInfo whose (Name, Hostname) matches the given pair.
 func (m *Manager) findAppInfo(appName, hostname string) (server.AppInfo, bool) {
 	for _, app := range m.apps.List() {
-		if app.Name == appName && app.Hostname == hostname {
+		if app.Name == appName && app.Hostname == appName {
 			return app, true
 		}
 	}

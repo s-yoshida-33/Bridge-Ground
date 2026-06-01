@@ -169,7 +169,7 @@ func LoadConfig() (*Config, error) {
 		cfg.PortalSettings.StatusReportIntervalSecs = 60
 	}
 	if cfg.PortalSettings.ScreenshotPollIntervalSecs == 0 {
-		cfg.PortalSettings.ScreenshotPollIntervalSecs = 5
+		cfg.PortalSettings.ScreenshotPollIntervalSecs = 30
 	}
 
 	return &cfg, nil

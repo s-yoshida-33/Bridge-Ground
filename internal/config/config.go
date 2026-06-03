@@ -133,7 +133,7 @@ func LoadConfig() (*Config, error) {
 				RunOnStartup: false,
 			},
 			PortalSettings: PortalSettings{
-				StatusReportIntervalSecs: 60,
+				StatusReportIntervalSecs: 900,
 				Devices:                  []PortalDevice{},
 			},
 		}, nil
@@ -166,10 +166,10 @@ func LoadConfig() (*Config, error) {
 		cfg.PortalSettings.Devices = []PortalDevice{}
 	}
 	if cfg.PortalSettings.StatusReportIntervalSecs == 0 {
-		cfg.PortalSettings.StatusReportIntervalSecs = 60
+		cfg.PortalSettings.StatusReportIntervalSecs = 900
 	}
 	if cfg.PortalSettings.ScreenshotPollIntervalSecs == 0 {
-		cfg.PortalSettings.ScreenshotPollIntervalSecs = 30
+		cfg.PortalSettings.ScreenshotPollIntervalSecs = 900
 	}
 
 	return &cfg, nil

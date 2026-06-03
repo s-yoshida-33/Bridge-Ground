@@ -34,7 +34,7 @@ func NewManager(cfg *config.Config, apps *server.AppRegistry, saveConfig func(*c
 	}
 }
 
-// Start begins the registration and periodic status-reporting loop.
+// Start begins the registration, approval-polling, and heartbeat loop.
 // Returns immediately if workerBaseUrl or registrationToken are not configured.
 func (m *Manager) Start() {
 	ps := &m.cfg.PortalSettings
@@ -48,31 +48,23 @@ func (m *Manager) Start() {
 
 	interval := ps.StatusReportIntervalSecs
 	if interval <= 0 {
-		interval = 60
+		interval = 900
 	}
-	mainTicker := time.NewTicker(time.Duration(interval) * time.Second)
-	defer mainTicker.Stop()
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
 
-	ssInterval := ps.ScreenshotPollIntervalSecs
-	if ssInterval <= 0 {
-		ssInterval = 30
-	}
-	ssTicker := time.NewTicker(time.Duration(ssInterval) * time.Second)
-	defer ssTicker.Stop()
+	// Approval-polling runs independently so newly registered devices pick up
+	// credentials as soon as the admin approves them.
+	go m.approvalPollLoop()
 
-	go func() {
-		for range ssTicker.C {
-			m.checkAndUploadScreenshots()
-		}
-	}()
-
-	for range mainTicker.C {
+	for range ticker.C {
 		m.registerNewApps()
-		m.reportAllStatus()
+		m.sendHeartbeat()
 		m.sendAllLogs()
 	}
 }
 
+// registerSelf registers Bridge-Ground itself if not already registered.
 func (m *Manager) registerSelf() {
 	hostname, _ := os.Hostname()
 
@@ -108,6 +100,8 @@ func (m *Manager) registerSelf() {
 	logging.Info("PORTAL", fmt.Sprintf("Registered self as Bridge-Ground (%s), pendingId=%s", hostname, resp.PendingID))
 }
 
+// registerNewApps registers any apps that the AppRegistry reports but that are
+// not yet in the portal config.
 func (m *Manager) registerNewApps() {
 	for _, app := range m.apps.List() {
 		m.mu.Lock()
@@ -148,33 +142,103 @@ func (m *Manager) registerNewApps() {
 	}
 }
 
-func (m *Manager) reportAllStatus() {
-	metrics    := CollectMetrics()
-	uptimeSecs := int(time.Since(m.startTime).Seconds())
-	appList    := m.apps.List()
-	currentIP  := localIP()
-	token      := m.cfg.PortalSettings.RegistrationToken
+// approvalPollLoop polls GET /v1/device for every device that has a PendingID but no
+// DeviceID yet. It backs off to every 60 seconds once all devices are approved.
+func (m *Manager) approvalPollLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
-	m.mu.Lock()
-	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
-	copy(devices, m.cfg.PortalSettings.Devices)
-	m.mu.Unlock()
+	for range ticker.C {
+		m.mu.Lock()
+		devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+		copy(devices, m.cfg.PortalSettings.Devices)
+		m.mu.Unlock()
 
-	for _, d := range devices {
-		if d.PendingID == "" {
-			continue
+		changed := false
+		for _, d := range devices {
+			if d.PendingID == "" || d.DeviceID != "" {
+				continue
+			}
+			resp, err := m.client.PollForApproval(m.cfg.PortalSettings.RegistrationToken, d.PendingID)
+			if err != nil {
+				logging.Warn("PORTAL", fmt.Sprintf("Approval poll failed for %s (%s): %v", d.AppName, d.Hostname, err))
+				continue
+			}
+			if resp.Status != "approved" {
+				continue
+			}
+
+			m.mu.Lock()
+			entry := m.findDevice(d.AppName, d.Hostname)
+			if entry != nil {
+				entry.DeviceID    = resp.DeviceID
+				entry.DeviceToken = resp.DeviceToken
+			}
+			m.mu.Unlock()
+
+			changed = true
+			logging.Info("PORTAL", fmt.Sprintf("Approval received for %s (%s): deviceId=%s", d.AppName, d.Hostname, resp.DeviceID))
 		}
-		req := m.buildStatusRequest(d, metrics, uptimeSecs, appList, currentIP)
-		if err := m.client.ReportStatus(token, req); err != nil {
-			logging.Warn("PORTAL", fmt.Sprintf("Status report failed for %s/%s: %v", d.AppName, d.Hostname, err))
+
+		if changed {
+			if err := m.saveConfig(m.cfg); err != nil {
+				logging.Warn("PORTAL", fmt.Sprintf("Failed to save config after approval: %v", err))
+			}
 		}
 	}
 }
 
-func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, uptimeSecs int, apps []server.AppInfo, currentIP string) StatusRequest {
+// sendHeartbeat sends one batched heartbeat for all approved devices and handles
+// screenshot commands returned by the Worker.
+func (m *Manager) sendHeartbeat() {
+	m.mu.Lock()
+	bg := m.selfDevice()
+	if bg == nil || bg.DeviceID == "" || bg.DeviceToken == "" {
+		m.mu.Unlock()
+		return // not yet approved
+	}
+	bgToken  := bg.DeviceToken
+	devices  := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+	copy(devices, m.cfg.PortalSettings.Devices)
+	m.mu.Unlock()
+
+	metrics    := CollectMetrics()
+	uptimeSecs := int(time.Since(m.startTime).Seconds())
+	appList    := m.apps.List()
+	currentIP  := localIP()
+
+	var entries []DeviceStatusEntry
+	for _, d := range devices {
+		if d.DeviceID == "" {
+			continue
+		}
+		entry := m.buildStatusEntry(d, metrics, uptimeSecs, appList, currentIP)
+		entries = append(entries, entry)
+	}
+
+	if len(entries) == 0 {
+		return
+	}
+
+	heartbeatResp, err := m.client.Heartbeat(bgToken, HeartbeatRequest{Devices: entries})
+	if err != nil {
+		logging.Warn("PORTAL", fmt.Sprintf("Heartbeat failed: %v", err))
+		return
+	}
+
+	// Handle screenshot commands
+	for deviceID, cmd := range heartbeatResp.Commands {
+		if !cmd.Screenshot {
+			continue
+		}
+		go m.uploadScreenshotForDevice(bgToken, deviceID, devices)
+	}
+}
+
+func (m *Manager) buildStatusEntry(d config.PortalDevice, metrics Metrics, uptimeSecs int, apps []server.AppInfo, currentIP string) DeviceStatusEntry {
 	if d.AppName == "Bridge-Ground" {
-		return StatusRequest{
-			PendingID:   d.PendingID,
+		return DeviceStatusEntry{
+			DeviceID:    d.DeviceID,
 			Status:      "online",
 			IP:          currentIP,
 			CPU:         metrics.CPU,
@@ -184,6 +248,7 @@ func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, upt
 			Uptime:      uptimeSecs,
 		}
 	}
+
 	status := "offline"
 	var appUptimeSecs int
 	var appIP string
@@ -202,8 +267,8 @@ func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, upt
 	if appIP == "" {
 		appIP = currentIP
 	}
-	return StatusRequest{
-		PendingID:   d.PendingID,
+	return DeviceStatusEntry{
+		DeviceID:    d.DeviceID,
 		Status:      status,
 		IP:          appIP,
 		CPU:         metrics.CPU,
@@ -212,6 +277,145 @@ func (m *Manager) buildStatusRequest(d config.PortalDevice, metrics Metrics, upt
 		Storage:     metrics.Storage,
 		Uptime:      appUptimeSecs,
 	}
+}
+
+// uploadScreenshotForDevice finds the app for the given deviceID, captures a screenshot,
+// and uploads it to the portal. Called from a goroutine.
+func (m *Manager) uploadScreenshotForDevice(bgToken, deviceID string, devices []config.PortalDevice) {
+	var target *config.PortalDevice
+	for i := range devices {
+		if devices[i].DeviceID == deviceID {
+			target = &devices[i]
+			break
+		}
+	}
+	if target == nil || target.AppName == "Bridge-Ground" {
+		return
+	}
+
+	app, ok := m.findAppInfo(target.AppName, target.Hostname)
+	if !ok {
+		return
+	}
+
+	var data []byte
+	captured, captureErr := server.CaptureAppScreen(app.Name)
+	if captureErr != nil || len(captured) == 0 {
+		cached, _, _, hasCache := m.apps.GetScreenshot(app.ID)
+		if !hasCache || len(cached) == 0 {
+			logging.Warn("PORTAL", fmt.Sprintf("No screenshot available for %s: %v", target.AppName, captureErr))
+			return
+		}
+		data = cached
+	} else {
+		m.apps.StoreScreenshot(app.ID, captured, "image/jpeg")
+		data = captured
+	}
+
+	if err := m.client.UploadScreenshot(bgToken, deviceID, data); err != nil {
+		logging.Warn("PORTAL", fmt.Sprintf("Screenshot upload failed for %s: %v", target.AppName, err))
+	} else {
+		logging.Info("PORTAL", fmt.Sprintf("Screenshot uploaded for %s (%s)", target.AppName, target.Hostname))
+	}
+}
+
+// sendAllLogs collects new WARN/ERROR entries and sends them to the portal.
+func (m *Manager) sendAllLogs() {
+	m.mu.Lock()
+	bg := m.selfDevice()
+	if bg == nil || bg.DeviceID == "" || bg.DeviceToken == "" {
+		m.mu.Unlock()
+		return
+	}
+	bgToken  := bg.DeviceToken
+	bgDevID  := bg.DeviceID
+	devices  := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+	copy(devices, m.cfg.PortalSettings.Devices)
+	m.mu.Unlock()
+
+	now  := time.Now()
+	from := m.lastLogSentAt
+	if from.IsZero() {
+		from = now.Add(-24 * time.Hour)
+	}
+
+	fromDate := from.Add(-24 * time.Hour).Format("2006-01-02")
+	toDate   := now.Format("2006-01-02")
+
+	// Bridge-Ground own logs (WARN + ERROR only)
+	bgEntries := filterWarnError(filterEntriesAfter(logging.GetEntriesForRange(fromDate, toDate), from))
+	if len(bgEntries) > 0 {
+		if err := m.sendLogBatch(bgToken, bgDevID, "Bridge-Ground", bgEntries); err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Log send failed for Bridge-Ground: %v", err))
+		}
+	}
+
+	// Per-app logs (WARN + ERROR only)
+	for _, app := range m.apps.List() {
+		if app.LogDir == "" || app.LogPrefix == "" {
+			continue
+		}
+		appEntries := filterWarnError(filterEntriesAfter(logging.ReadAppLogsFromDir(app.LogDir, app.LogPrefix, fromDate, toDate), from))
+		if len(appEntries) == 0 {
+			continue
+		}
+		for _, d := range devices {
+			if d.AppName == app.Name && d.Hostname == app.Hostname && d.DeviceID != "" {
+				if err := m.sendLogBatch(bgToken, d.DeviceID, app.Name, appEntries); err != nil {
+					logging.Warn("PORTAL", fmt.Sprintf("Log send failed for %s/%s: %v", app.Name, app.Hostname, err))
+				}
+				break
+			}
+		}
+	}
+
+	m.lastLogSentAt = now
+}
+
+func (m *Manager) sendLogBatch(deviceToken, deviceID, appName string, entries []logging.LogEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	if len(entries) > maxLogBatch {
+		entries = entries[len(entries)-maxLogBatch:]
+	}
+	logEntries := make([]LogEntry, len(entries))
+	for i, e := range entries {
+		logEntries[i] = LogEntry{Timestamp: e.Timestamp, Level: e.Level, Tag: e.Tag, Message: e.Message}
+	}
+	return m.client.SendLogs(deviceToken, LogsRequest{DeviceID: deviceID, App: appName, Entries: logEntries})
+}
+
+// filterEntriesAfter returns only entries whose timestamp is strictly after `after`.
+func filterEntriesAfter(entries []logging.LogEntry, after time.Time) []logging.LogEntry {
+	if after.IsZero() || len(entries) == 0 {
+		return entries
+	}
+	afterStr := after.Format("2006-01-02 15:04:05.000")
+	var result []logging.LogEntry
+	for _, e := range entries {
+		if e.Timestamp > afterStr {
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+// filterWarnError returns only WARN and ERROR level entries.
+func filterWarnError(entries []logging.LogEntry) []logging.LogEntry {
+	var result []logging.LogEntry
+	for _, e := range entries {
+		if e.Level == "WARN" || e.Level == "ERROR" {
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+// selfDevice returns BG's own PortalDevice entry. Must be called with m.mu held.
+func (m *Manager) selfDevice() *config.PortalDevice {
+	hostname, _ := os.Hostname()
+	return m.findDevice("Bridge-Ground", hostname)
 }
 
 // findDevice returns a pointer to the matching device entry, or nil.
@@ -235,145 +439,19 @@ func (m *Manager) upsertDevice(d config.PortalDevice) {
 			if d.PendingID != "" {
 				e.PendingID = d.PendingID
 			}
+			if d.DeviceID != "" {
+				e.DeviceID = d.DeviceID
+			}
+			if d.DeviceToken != "" {
+				e.DeviceToken = d.DeviceToken
+			}
 			return
 		}
 	}
 	m.cfg.PortalSettings.Devices = append(m.cfg.PortalSettings.Devices, d)
 }
 
-// sendAllLogs collects new log entries since the last send and pushes them to the portal.
-func (m *Manager) sendAllLogs() {
-	now   := time.Now()
-	from  := m.lastLogSentAt
-	token := m.cfg.PortalSettings.RegistrationToken
-	if from.IsZero() {
-		from = now.Add(-24 * time.Hour)
-	}
-
-	// Extend fromDate one day earlier to catch log entries still being written to
-	// the previous day's file when Bridge-Ground (or an app) runs past midnight.
-	// filterEntriesAfter ensures only genuinely new entries are sent.
-	fromDate := from.Add(-24 * time.Hour).Format("2006-01-02")
-	toDate   := now.Format("2006-01-02")
-
-	m.mu.Lock()
-	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
-	copy(devices, m.cfg.PortalSettings.Devices)
-	m.mu.Unlock()
-
-	// Bridge-Ground own logs
-	bgEntries := filterEntriesAfter(logging.GetEntriesForRange(fromDate, toDate), from)
-	for _, d := range devices {
-		if d.AppName != "Bridge-Ground" || d.PendingID == "" {
-			continue
-		}
-		if err := m.sendLogBatch(token, d.PendingID, "Bridge-Ground", bgEntries); err != nil {
-			logging.Warn("PORTAL", fmt.Sprintf("Log send failed for Bridge-Ground: %v", err))
-		}
-		break
-	}
-
-	// Per-app logs
-	for _, app := range m.apps.List() {
-		if app.LogDir == "" || app.LogPrefix == "" {
-			continue
-		}
-		appEntries := filterEntriesAfter(logging.ReadAppLogsFromDir(app.LogDir, app.LogPrefix, fromDate, toDate), from)
-		if len(appEntries) == 0 {
-			continue
-		}
-		for _, d := range devices {
-			if d.AppName == app.Name && d.Hostname == app.Hostname && d.PendingID != "" {
-				if err := m.sendLogBatch(token, d.PendingID, app.Name, appEntries); err != nil {
-					logging.Warn("PORTAL", fmt.Sprintf("Log send failed for %s/%s: %v", app.Name, app.Hostname, err))
-				}
-				break
-			}
-		}
-	}
-
-	m.lastLogSentAt = now
-}
-
-func (m *Manager) sendLogBatch(token, pendingID, appName string, entries []logging.LogEntry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	if len(entries) > maxLogBatch {
-		entries = entries[len(entries)-maxLogBatch:]
-	}
-	logEntries := make([]LogEntry, len(entries))
-	for i, e := range entries {
-		logEntries[i] = LogEntry{Timestamp: e.Timestamp, Level: e.Level, Tag: e.Tag, Message: e.Message}
-	}
-	return m.client.SendLogs(token, LogsRequest{PendingID: pendingID, App: appName, Entries: logEntries})
-}
-
-// filterEntriesAfter returns only entries whose timestamp is strictly after `after`.
-func filterEntriesAfter(entries []logging.LogEntry, after time.Time) []logging.LogEntry {
-	if after.IsZero() || len(entries) == 0 {
-		return entries
-	}
-	afterStr := after.Format("2006-01-02 15:04:05.000")
-	var result []logging.LogEntry
-	for _, e := range entries {
-		if e.Timestamp > afterStr {
-			result = append(result, e)
-		}
-	}
-	return result
-}
-
-// checkAndUploadScreenshots polls the Worker for pending screenshot requests and uploads
-// any available screenshots from the local AppRegistry.
-func (m *Manager) checkAndUploadScreenshots() {
-	token := m.cfg.PortalSettings.RegistrationToken
-
-	m.mu.Lock()
-	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
-	copy(devices, m.cfg.PortalSettings.Devices)
-	m.mu.Unlock()
-
-	for _, d := range devices {
-		if d.AppName == "Bridge-Ground" || d.PendingID == "" {
-			continue
-		}
-		pending, err := m.client.CheckScreenshotPending(token, d.PendingID)
-		if err != nil {
-			logging.Warn("PORTAL", fmt.Sprintf("Screenshot pending check failed for %s: %v", d.AppName, err))
-			continue
-		}
-		if !pending {
-			continue
-		}
-
-		app, ok := m.findAppInfo(d.AppName, d.Hostname)
-		if !ok {
-			continue
-		}
-		// Always attempt a fresh live capture; fall back to cache only if capture fails.
-		var data []byte
-		captured, captureErr := server.CaptureAppScreen(app.Name)
-		if captureErr != nil || len(captured) == 0 {
-			cached, _, _, hasCache := m.apps.GetScreenshot(app.ID)
-			if !hasCache || len(cached) == 0 {
-				logging.Warn("PORTAL", fmt.Sprintf("No screenshot available for %s: %v", d.AppName, captureErr))
-				continue
-			}
-			data = cached
-		} else {
-			m.apps.StoreScreenshot(app.ID, captured, "image/jpeg")
-			data = captured
-		}
-		if err := m.client.UploadScreenshot(token, d.PendingID, data); err != nil {
-			logging.Warn("PORTAL", fmt.Sprintf("Screenshot upload failed for %s: %v", d.AppName, err))
-		} else {
-			logging.Info("PORTAL", fmt.Sprintf("Screenshot uploaded for %s (%s)", d.AppName, d.Hostname))
-		}
-	}
-}
-
-// findAppInfo returns the AppInfo whose (Name, Hostname) matches the given pair.
+// findAppInfo returns the AppInfo whose (Name, Hostname) matches.
 func (m *Manager) findAppInfo(appName, hostname string) (server.AppInfo, bool) {
 	for _, app := range m.apps.List() {
 		if app.Name == appName && app.Hostname == hostname {

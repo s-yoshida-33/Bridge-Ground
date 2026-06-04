@@ -57,6 +57,10 @@ func (m *Manager) Start() {
 	// credentials as soon as the admin approves them.
 	go m.approvalPollLoop()
 
+	// Run immediately on start so already-approved devices report online right away.
+	m.registerNewApps()
+	m.sendHeartbeat()
+
 	for range ticker.C {
 		m.registerNewApps()
 		m.sendHeartbeat()
@@ -184,6 +188,7 @@ func (m *Manager) approvalPollLoop() {
 			if err := m.saveConfig(m.cfg); err != nil {
 				logging.Warn("PORTAL", fmt.Sprintf("Failed to save config after approval: %v", err))
 			}
+			go m.sendHeartbeat()
 		}
 	}
 }

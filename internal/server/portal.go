@@ -17,10 +17,11 @@ type portalDeviceResponse struct {
 
 // portalSettingsResponse is the masked version of config.PortalSettings for GET /api/config.
 type portalSettingsResponse struct {
-	WorkerBaseURL            string                 `json:"workerBaseUrl"`
-	RegistrationToken        string                 `json:"registrationToken"`
-	StatusReportIntervalSecs int                    `json:"statusReportIntervalSecs"`
-	Devices                  []portalDeviceResponse `json:"devices"`
+	WorkerBaseURL              string                 `json:"workerBaseUrl"`
+	RegistrationToken          string                 `json:"registrationToken"`
+	StatusReportIntervalSecs   int                    `json:"statusReportIntervalSecs"`
+	ScreenshotPollIntervalSecs int                    `json:"screenshotPollIntervalSecs"`
+	Devices                    []portalDeviceResponse `json:"devices"`
 }
 
 // maskedPortalSettings converts PortalSettings to a response that omits device token values.
@@ -36,10 +37,11 @@ func maskedPortalSettings(ps config.PortalSettings) portalSettingsResponse {
 		}
 	}
 	return portalSettingsResponse{
-		WorkerBaseURL:            ps.WorkerBaseURL,
-		RegistrationToken:        ps.RegistrationToken,
-		StatusReportIntervalSecs: ps.StatusReportIntervalSecs,
-		Devices:                  devices,
+		WorkerBaseURL:              ps.WorkerBaseURL,
+		RegistrationToken:          ps.RegistrationToken,
+		StatusReportIntervalSecs:   ps.StatusReportIntervalSecs,
+		ScreenshotPollIntervalSecs: ps.ScreenshotPollIntervalSecs,
+		Devices:                    devices,
 	}
 }
 

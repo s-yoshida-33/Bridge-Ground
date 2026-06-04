@@ -161,7 +161,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const regTokenInput  = document.getElementById('portal-reg-token');
         workerUrlInput.value = ps.workerBaseUrl || '';
         regTokenInput.value  = ps.registrationToken || '';
-        document.getElementById('portal-interval').value = ps.statusReportIntervalSecs || 60;
+        document.getElementById('portal-interval').value = ps.statusReportIntervalSecs || 900;
+        document.getElementById('portal-screenshot-interval').value = ps.screenshotPollIntervalSecs || 900;
 
         const devices = ps.devices || [];
         portalDeviceStates = devices.map(normalizePortalDevice);
@@ -427,9 +428,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             },
             portalSettings: {
-                workerBaseUrl:            newWorkerUrl,
-                registrationToken:        newRegToken,
-                statusReportIntervalSecs: parseInt(document.getElementById('portal-interval').value) || 60,
+                workerBaseUrl:              newWorkerUrl,
+                registrationToken:          newRegToken,
+                statusReportIntervalSecs:   parseInt(document.getElementById('portal-interval').value) || 900,
+                screenshotPollIntervalSecs: parseInt(document.getElementById('portal-screenshot-interval').value) || 900,
                 devices: portalDevicesOut
             }
         };

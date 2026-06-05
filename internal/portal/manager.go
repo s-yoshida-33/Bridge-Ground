@@ -227,6 +227,9 @@ func (m *Manager) subscribeApprovedDevices() {
 
 // handleScreenshotSignal is called by rtdbListener when a screenshot signal arrives.
 func (m *Manager) handleScreenshotSignal(deviceID string) {
+	// Delete the RTDB signal immediately so it does not re-trigger on reconnect.
+	m.rtdb.Delete(deviceID)
+
 	m.mu.Lock()
 	bg := m.selfDevice()
 	if bg == nil || bg.DeviceToken == "" {

@@ -33,6 +33,22 @@ func (l *rtdbListener) Subscribe(deviceID string) {
 	go l.loop(deviceID)
 }
 
+// Delete removes the signal node so it does not re-trigger on the next reconnect.
+func (l *rtdbListener) Delete(deviceID string) {
+	url := fmt.Sprintf("%s/screenshot-requests/%s.json",
+		strings.TrimRight(l.databaseURL, "/"), deviceID)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		logging.Warn("RTDB", fmt.Sprintf("[%s] Failed to delete signal: %v", deviceID, err))
+		return
+	}
+	resp.Body.Close()
+}
+
 // Close signals all goroutines started by Subscribe to stop.
 func (l *rtdbListener) Close() {
 	close(l.stop)
@@ -112,17 +128,29 @@ func (l *rtdbListener) connect(url, deviceID string) error {
 	return scanner.Err()
 }
 
+const signalMaxAgeSecs = 300 // ignore signals older than 5 minutes
+
 // handlePut is called for every RTDB "put" event on the device's signal path.
-// A null payload means the node was deleted — we ignore those.
+// Null payload (node deleted) and stale signals are silently ignored.
 func (l *rtdbListener) handlePut(deviceID, rawData string) {
 	var msg struct {
-		Data interface{} `json:"data"`
+		Data *struct {
+			At int64 `json:"at"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(rawData), &msg); err != nil {
 		return
 	}
 	if msg.Data == nil {
-		return // node deleted, not a new request
+		return // node deleted — not a new request
+	}
+	// Ignore stale signals (e.g. left over from before BG restart)
+	if msg.Data.At > 0 {
+		ageMs := time.Now().UnixMilli() - msg.Data.At
+		if ageMs > int64(signalMaxAgeSecs)*1000 {
+			logging.Info("RTDB", fmt.Sprintf("[%s] Stale signal ignored (age %.0fs)", deviceID, float64(ageMs)/1000))
+			return
+		}
 	}
 	logging.Info("RTDB", fmt.Sprintf("[%s] Screenshot signal received", deviceID))
 	l.onSignal(deviceID)

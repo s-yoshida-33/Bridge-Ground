@@ -15,25 +15,26 @@ const maxLogBatch = 200
 
 // Manager handles Portal CMS device registration and periodic status reporting.
 type Manager struct {
-	mu            sync.Mutex
-	cfg           *config.Config
-	apps          *server.AppRegistry
-	saveConfig    func(*config.Config) error
-	client        *Client
-	startTime     time.Time
-	lastLogSentAt time.Time
-	rtdb          *rtdbListener
-	rtdbWatched   map[string]struct{} // deviceIDs already subscribed
+	mu                   sync.Mutex
+	cfg                  *config.Config
+	apps                 *server.AppRegistry
+	saveConfig           func(*config.Config) error
+	client               *Client
+	startTime            time.Time
+	rtdb                 *rtdbClient
+	rtdbScreenshotWatched map[string]struct{} // deviceIDs already subscribed for screenshots
+	rtdbLogWatched        map[string]struct{} // deviceIDs already subscribed for logs
 }
 
 // NewManager creates a portal Manager.
 func NewManager(cfg *config.Config, apps *server.AppRegistry, saveConfig func(*config.Config) error) *Manager {
 	return &Manager{
-		cfg:         cfg,
-		apps:        apps,
-		saveConfig:  saveConfig,
-		startTime:   time.Now(),
-		rtdbWatched: make(map[string]struct{}),
+		cfg:                   cfg,
+		apps:                  apps,
+		saveConfig:            saveConfig,
+		startTime:             time.Now(),
+		rtdbScreenshotWatched: make(map[string]struct{}),
+		rtdbLogWatched:        make(map[string]struct{}),
 	}
 }
 
@@ -48,7 +49,7 @@ func (m *Manager) Start() {
 	m.client = NewClient(ps.WorkerBaseURL)
 
 	if ps.FirebaseDatabaseURL != "" {
-		m.rtdb = newRTDBListener(ps.FirebaseDatabaseURL, m.handleScreenshotSignal)
+		m.rtdb = newRTDBClient(ps.FirebaseDatabaseURL)
 	}
 
 	m.registerSelf()
@@ -64,7 +65,7 @@ func (m *Manager) Start() {
 	// credentials as soon as the admin approves them.
 	go m.approvalPollLoop()
 
-	// Subscribe to RTDB screenshot signals for already-approved devices.
+	// Subscribe to RTDB signals for already-approved devices.
 	m.subscribeApprovedDevices()
 
 	// Run immediately on start so already-approved devices report online right away.
@@ -74,7 +75,6 @@ func (m *Manager) Start() {
 	for range ticker.C {
 		m.registerNewApps()
 		m.sendHeartbeat()
-		m.sendAllLogs()
 	}
 }
 
@@ -213,22 +213,30 @@ func (m *Manager) subscribeApprovedDevices() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, d := range m.cfg.PortalSettings.Devices {
-		if d.DeviceID == "" || d.AppName == "Bridge-Ground" {
-			continue // Bridge-Ground itself is never a screenshot target
-		}
-		if _, already := m.rtdbWatched[d.DeviceID]; already {
+		if d.DeviceID == "" {
 			continue
 		}
-		m.rtdb.Subscribe(d.DeviceID)
-		m.rtdbWatched[d.DeviceID] = struct{}{}
-		logging.Info("RTDB", fmt.Sprintf("Subscribed to screenshot signals for %s (%s)", d.AppName, d.DeviceID))
+		// Screenshot requests: only for non-BG devices (BG itself is never a screenshot target).
+		if d.AppName != "Bridge-Ground" {
+			if _, already := m.rtdbScreenshotWatched[d.DeviceID]; !already {
+				m.rtdb.Subscribe("screenshot-requests", d.DeviceID, m.handleScreenshotSignal)
+				m.rtdbScreenshotWatched[d.DeviceID] = struct{}{}
+				logging.Info("RTDB", fmt.Sprintf("Subscribed to screenshot signals for %s (%s)", d.AppName, d.DeviceID))
+			}
+		}
+		// Log requests: all devices including BG itself.
+		if _, already := m.rtdbLogWatched[d.DeviceID]; !already {
+			m.rtdb.Subscribe("log-requests", d.DeviceID, m.handleLogSignal)
+			m.rtdbLogWatched[d.DeviceID] = struct{}{}
+			logging.Info("RTDB", fmt.Sprintf("Subscribed to log signals for %s (%s)", d.AppName, d.DeviceID))
+		}
 	}
 }
 
-// handleScreenshotSignal is called by rtdbListener when a screenshot signal arrives.
+// handleScreenshotSignal is called by rtdbClient when a screenshot signal arrives.
 func (m *Manager) handleScreenshotSignal(deviceID string) {
 	// Delete the RTDB signal immediately so it does not re-trigger on reconnect.
-	m.rtdb.Delete(deviceID)
+	m.rtdb.Delete("screenshot-requests", deviceID)
 
 	m.mu.Lock()
 	bg := m.selfDevice()
@@ -242,6 +250,69 @@ func (m *Manager) handleScreenshotSignal(deviceID string) {
 	m.mu.Unlock()
 
 	go m.uploadScreenshotForDevice(bgToken, deviceID, devices)
+}
+
+// handleLogSignal is called by rtdbClient when a log request signal arrives.
+func (m *Manager) handleLogSignal(deviceID string) {
+	m.rtdb.Delete("log-requests", deviceID)
+
+	m.mu.Lock()
+	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+	copy(devices, m.cfg.PortalSettings.Devices)
+	m.mu.Unlock()
+
+	go m.uploadLogsForDevice(deviceID, devices)
+}
+
+// uploadLogsForDevice reads recent log entries and writes them to RTDB logs/{deviceID}.
+func (m *Manager) uploadLogsForDevice(deviceID string, devices []config.PortalDevice) {
+	var target *config.PortalDevice
+	for i := range devices {
+		if devices[i].DeviceID == deviceID {
+			target = &devices[i]
+			break
+		}
+	}
+	if target == nil {
+		return
+	}
+
+	now      := time.Now()
+	fromDate := now.Add(-24 * time.Hour).Format("2006-01-02")
+	toDate   := now.Format("2006-01-02")
+
+	var entries []logging.LogEntry
+	if target.AppName == "Bridge-Ground" {
+		entries = logging.GetEntriesForRange(fromDate, toDate)
+	} else {
+		app, ok := m.findAppInfo(target.AppName, target.Hostname)
+		if !ok || app.LogDir == "" || app.LogPrefix == "" {
+			// Write empty result so the portal knows the request was handled.
+			_ = m.rtdb.Put("logs", deviceID, map[string]interface{}{"entries": []interface{}{}, "at": now.UnixMilli()})
+			return
+		}
+		entries = logging.ReadAppLogsFromDir(app.LogDir, app.LogPrefix, fromDate, toDate)
+	}
+
+	if len(entries) > maxLogBatch {
+		entries = entries[len(entries)-maxLogBatch:]
+	}
+
+	logEntries := make([]LogEntry, len(entries))
+	for i, e := range entries {
+		logEntries[i] = LogEntry{Timestamp: e.Timestamp, Level: e.Level, Tag: e.Tag, Message: e.Message}
+	}
+
+	payload := map[string]interface{}{
+		"entries": logEntries,
+		"at":      now.UnixMilli(),
+	}
+
+	if err := m.rtdb.Put("logs", deviceID, payload); err != nil {
+		logging.Warn("PORTAL", fmt.Sprintf("Log upload failed for %s: %v", target.AppName, err))
+	} else {
+		logging.Info("PORTAL", fmt.Sprintf("Logs uploaded for %s (%s): %d entries", target.AppName, target.Hostname, len(entries)))
+	}
 }
 
 // sendHeartbeat sends one batched heartbeat for all approved devices and handles
@@ -373,99 +444,6 @@ func (m *Manager) uploadScreenshotForDevice(bgToken, deviceID string, devices []
 	} else {
 		logging.Info("PORTAL", fmt.Sprintf("Screenshot uploaded for %s (%s)", target.AppName, target.Hostname))
 	}
-}
-
-// sendAllLogs collects new WARN/ERROR entries and sends them to the portal.
-func (m *Manager) sendAllLogs() {
-	m.mu.Lock()
-	bg := m.selfDevice()
-	if bg == nil || bg.DeviceID == "" || bg.DeviceToken == "" {
-		m.mu.Unlock()
-		return
-	}
-	bgToken  := bg.DeviceToken
-	bgDevID  := bg.DeviceID
-	devices  := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
-	copy(devices, m.cfg.PortalSettings.Devices)
-	m.mu.Unlock()
-
-	now  := time.Now()
-	from := m.lastLogSentAt
-	if from.IsZero() {
-		from = now.Add(-24 * time.Hour)
-	}
-
-	fromDate := from.Add(-24 * time.Hour).Format("2006-01-02")
-	toDate   := now.Format("2006-01-02")
-
-	// Bridge-Ground own logs (WARN + ERROR only)
-	bgEntries := filterWarnError(filterEntriesAfter(logging.GetEntriesForRange(fromDate, toDate), from))
-	if len(bgEntries) > 0 {
-		if err := m.sendLogBatch(bgToken, bgDevID, "Bridge-Ground", bgEntries); err != nil {
-			logging.Warn("PORTAL", fmt.Sprintf("Log send failed for Bridge-Ground: %v", err))
-		}
-	}
-
-	// Per-app logs (WARN + ERROR only)
-	for _, app := range m.apps.List() {
-		if app.LogDir == "" || app.LogPrefix == "" {
-			continue
-		}
-		appEntries := filterWarnError(filterEntriesAfter(logging.ReadAppLogsFromDir(app.LogDir, app.LogPrefix, fromDate, toDate), from))
-		if len(appEntries) == 0 {
-			continue
-		}
-		for _, d := range devices {
-			if d.AppName == app.Name && d.Hostname == app.Hostname && d.DeviceID != "" {
-				if err := m.sendLogBatch(bgToken, d.DeviceID, app.Name, appEntries); err != nil {
-					logging.Warn("PORTAL", fmt.Sprintf("Log send failed for %s/%s: %v", app.Name, app.Hostname, err))
-				}
-				break
-			}
-		}
-	}
-
-	m.lastLogSentAt = now
-}
-
-func (m *Manager) sendLogBatch(deviceToken, deviceID, appName string, entries []logging.LogEntry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	if len(entries) > maxLogBatch {
-		entries = entries[len(entries)-maxLogBatch:]
-	}
-	logEntries := make([]LogEntry, len(entries))
-	for i, e := range entries {
-		logEntries[i] = LogEntry{Timestamp: e.Timestamp, Level: e.Level, Tag: e.Tag, Message: e.Message}
-	}
-	return m.client.SendLogs(deviceToken, LogsRequest{DeviceID: deviceID, App: appName, Entries: logEntries})
-}
-
-// filterEntriesAfter returns only entries whose timestamp is strictly after `after`.
-func filterEntriesAfter(entries []logging.LogEntry, after time.Time) []logging.LogEntry {
-	if after.IsZero() || len(entries) == 0 {
-		return entries
-	}
-	afterStr := after.Format("2006-01-02 15:04:05.000")
-	var result []logging.LogEntry
-	for _, e := range entries {
-		if e.Timestamp > afterStr {
-			result = append(result, e)
-		}
-	}
-	return result
-}
-
-// filterWarnError returns only WARN and ERROR level entries.
-func filterWarnError(entries []logging.LogEntry) []logging.LogEntry {
-	var result []logging.LogEntry
-	for _, e := range entries {
-		if e.Level == "WARN" || e.Level == "ERROR" {
-			result = append(result, e)
-		}
-	}
-	return result
 }
 
 // selfDevice returns BG's own PortalDevice entry. Must be called with m.mu held.

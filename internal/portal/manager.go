@@ -213,8 +213,8 @@ func (m *Manager) subscribeApprovedDevices() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, d := range m.cfg.PortalSettings.Devices {
-		if d.DeviceID == "" {
-			continue
+		if d.DeviceID == "" || d.AppName == "Bridge-Ground" {
+			continue // Bridge-Ground itself is never a screenshot target
 		}
 		if _, already := m.rtdbWatched[d.DeviceID]; already {
 			continue

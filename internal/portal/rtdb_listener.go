@@ -27,8 +27,8 @@ func newRTDBClient(databaseURL string) *rtdbClient {
 
 // Subscribe watches /{subpath}/{id}.json via SSE and calls onSignal when a
 // non-null, non-stale value arrives. Automatically reconnects on error.
-// The second argument passed to onSignal is an optional extra string from the
-// signal payload (e.g. the "date" field for log requests; empty string otherwise).
+// extra is a "type:date" encoded string from the signal payload (e.g. "log:2026-06-05"
+// or "screenshot:"); empty string if the payload carried no type field.
 func (c *rtdbClient) Subscribe(subpath, id string, onSignal func(id, extra string)) {
 	go c.loop(subpath, id, onSignal)
 }
@@ -140,10 +140,13 @@ func (c *rtdbClient) connect(url, id string, onSignal func(string, string)) erro
 
 const signalMaxAgeSecs = 300
 
+// handleSignalPut decodes a Firebase RTDB SSE put payload and invokes onSignal.
+// extra is encoded as "type:date" (e.g. "log:2026-06-05" or "screenshot:").
 func handleSignalPut(id, rawData string, onSignal func(string, string)) {
 	var msg struct {
 		Data *struct {
 			At   int64  `json:"at"`
+			Type string `json:"type"`
 			Date string `json:"date"`
 		} `json:"data"`
 	}
@@ -160,5 +163,5 @@ func handleSignalPut(id, rawData string, onSignal func(string, string)) {
 			return
 		}
 	}
-	onSignal(id, msg.Data.Date)
+	onSignal(id, msg.Data.Type+":"+msg.Data.Date)
 }

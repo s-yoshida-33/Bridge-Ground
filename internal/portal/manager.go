@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -15,26 +16,24 @@ const maxLogBatch = 200
 
 // Manager handles Portal CMS device registration and periodic status reporting.
 type Manager struct {
-	mu                   sync.Mutex
-	cfg                  *config.Config
-	apps                 *server.AppRegistry
-	saveConfig           func(*config.Config) error
-	client               *Client
-	startTime            time.Time
-	rtdb                 *rtdbClient
-	rtdbScreenshotWatched map[string]struct{} // deviceIDs already subscribed for screenshots
-	rtdbLogWatched        map[string]struct{} // deviceIDs already subscribed for logs
+	mu          sync.Mutex
+	cfg         *config.Config
+	apps        *server.AppRegistry
+	saveConfig  func(*config.Config) error
+	client      *Client
+	startTime   time.Time
+	rtdb        *rtdbClient
+	rtdbWatched map[string]struct{} // deviceIDs already subscribed to signals
 }
 
 // NewManager creates a portal Manager.
 func NewManager(cfg *config.Config, apps *server.AppRegistry, saveConfig func(*config.Config) error) *Manager {
 	return &Manager{
-		cfg:                   cfg,
-		apps:                  apps,
-		saveConfig:            saveConfig,
-		startTime:             time.Now(),
-		rtdbScreenshotWatched: make(map[string]struct{}),
-		rtdbLogWatched:        make(map[string]struct{}),
+		cfg:         cfg,
+		apps:        apps,
+		saveConfig:  saveConfig,
+		startTime:   time.Now(),
+		rtdbWatched: make(map[string]struct{}),
 	}
 }
 
@@ -204,8 +203,10 @@ func (m *Manager) approvalPollLoop() {
 	}
 }
 
-// subscribeApprovedDevices starts RTDB SSE subscriptions for any approved device
-// that hasn't been subscribed yet. Safe to call multiple times (idempotent).
+// subscribeApprovedDevices opens one RTDB SSE connection per approved device on
+// the unified "signals/{deviceID}" path. A single connection carries both screenshot
+// and log signals, keeping the total connection count at N_devices + 1 (Portal).
+// Safe to call multiple times (idempotent).
 func (m *Manager) subscribeApprovedDevices() {
 	if m.rtdb == nil {
 		return
@@ -216,53 +217,51 @@ func (m *Manager) subscribeApprovedDevices() {
 		if d.DeviceID == "" {
 			continue
 		}
-		// Screenshot requests: only for non-BG devices (BG itself is never a screenshot target).
-		if d.AppName != "Bridge-Ground" {
-			if _, already := m.rtdbScreenshotWatched[d.DeviceID]; !already {
-				m.rtdb.Subscribe("screenshot-requests", d.DeviceID, func(id, _ string) { m.handleScreenshotSignal(id) })
-				m.rtdbScreenshotWatched[d.DeviceID] = struct{}{}
-				logging.Info("RTDB", fmt.Sprintf("Subscribed to screenshot signals for %s (%s)", d.AppName, d.DeviceID))
-			}
+		if _, already := m.rtdbWatched[d.DeviceID]; already {
+			continue
 		}
-		// Log requests: all devices including BG itself.
-		if _, already := m.rtdbLogWatched[d.DeviceID]; !already {
-			m.rtdb.Subscribe("log-requests", d.DeviceID, m.handleLogSignal)
-			m.rtdbLogWatched[d.DeviceID] = struct{}{}
-			logging.Info("RTDB", fmt.Sprintf("Subscribed to log signals for %s (%s)", d.AppName, d.DeviceID))
-		}
+		m.rtdb.Subscribe("signals", d.DeviceID, m.handleSignal)
+		m.rtdbWatched[d.DeviceID] = struct{}{}
+		logging.Info("RTDB", fmt.Sprintf("Subscribed to signals for %s (%s)", d.AppName, d.DeviceID))
 	}
 }
 
-// handleScreenshotSignal is called by rtdbClient when a screenshot signal arrives.
-func (m *Manager) handleScreenshotSignal(deviceID string) {
-	// Delete the RTDB signal immediately so it does not re-trigger on reconnect.
-	m.rtdb.Delete("screenshot-requests", deviceID)
+// handleSignal routes an incoming RTDB signal to the appropriate handler.
+// extra is encoded as "type:date" by handleSignalPut (e.g. "log:2026-06-05" or "screenshot:").
+func (m *Manager) handleSignal(deviceID, extra string) {
+	colonIdx := strings.IndexByte(extra, ':')
+	var signalType, date string
+	if colonIdx >= 0 {
+		signalType = extra[:colonIdx]
+		date       = extra[colonIdx+1:]
+	} else {
+		signalType = extra
+	}
 
-	m.mu.Lock()
-	bg := m.selfDevice()
-	if bg == nil || bg.DeviceToken == "" {
+	switch signalType {
+	case "screenshot":
+		m.rtdb.Delete("signals", deviceID)
+		m.mu.Lock()
+		bg := m.selfDevice()
+		if bg == nil || bg.DeviceToken == "" || bg.DeviceID == deviceID {
+			// Ignore: BG itself is never a screenshot target.
+			m.mu.Unlock()
+			return
+		}
+		bgToken := bg.DeviceToken
+		devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+		copy(devices, m.cfg.PortalSettings.Devices)
 		m.mu.Unlock()
-		return
+		go m.uploadScreenshotForDevice(bgToken, deviceID, devices)
+
+	case "log":
+		m.rtdb.Delete("signals", deviceID)
+		m.mu.Lock()
+		devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+		copy(devices, m.cfg.PortalSettings.Devices)
+		m.mu.Unlock()
+		go m.uploadLogsForDevice(deviceID, date, devices)
 	}
-	bgToken := bg.DeviceToken
-	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
-	copy(devices, m.cfg.PortalSettings.Devices)
-	m.mu.Unlock()
-
-	go m.uploadScreenshotForDevice(bgToken, deviceID, devices)
-}
-
-// handleLogSignal is called by rtdbClient when a log request signal arrives.
-// date is an optional YYYY-MM-DD string from the signal payload (empty = today).
-func (m *Manager) handleLogSignal(deviceID, date string) {
-	m.rtdb.Delete("log-requests", deviceID)
-
-	m.mu.Lock()
-	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
-	copy(devices, m.cfg.PortalSettings.Devices)
-	m.mu.Unlock()
-
-	go m.uploadLogsForDevice(deviceID, date, devices)
 }
 
 // uploadLogsForDevice reads log entries for the given date (YYYY-MM-DD; empty = today)

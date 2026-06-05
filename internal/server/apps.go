@@ -110,8 +110,13 @@ func (r *AppRegistry) Register(name, version, mallID, hostname, startedAt, logDi
 		if a.Name == name && a.Hostname == hostname {
 			a.Version = version
 			a.MallID = mallID
+			// Check offline status before updating LastSeen so the comparison is meaningful.
+			// Only update StartedAt if the app was previously offline (genuine restart).
+			// If the app is still online and re-registers (e.g. periodic keep-alive),
+			// preserve the original StartedAt so uptime does not reset.
+			wasOffline := time.Now().Add(-90 * time.Second).After(a.LastSeen)
 			a.LastSeen = time.Now()
-			if parsedStartedAt != nil {
+			if parsedStartedAt != nil && (a.StartedAt == nil || wasOffline) {
 				a.StartedAt = parsedStartedAt
 			}
 			if logDir != "" {

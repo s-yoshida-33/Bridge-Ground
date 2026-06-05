@@ -240,20 +240,35 @@ func (m *Manager) approvalPollLoop() {
 				logging.Warn("PORTAL", fmt.Sprintf("Approval poll failed for %s (%s): %v", d.AppName, d.Hostname, err))
 				continue
 			}
-			if resp.Status != "approved" {
-				continue
-			}
 
-			m.mu.Lock()
-			entry := m.findDevice(d.AppName)
-			if entry != nil {
-				entry.DeviceID    = resp.DeviceID
-				entry.DeviceToken = resp.DeviceToken
-			}
-			m.mu.Unlock()
+			switch resp.Status {
+			case "approved":
+				m.mu.Lock()
+				entry := m.findDevice(d.AppName)
+				if entry != nil {
+					entry.DeviceID    = resp.DeviceID
+					entry.DeviceToken = resp.DeviceToken
+				}
+				m.mu.Unlock()
 
-			changed = true
-			logging.Info("PORTAL", fmt.Sprintf("Approval received for %s (%s): deviceId=%s", d.AppName, d.Hostname, resp.DeviceID))
+				changed = true
+				logging.Info("PORTAL", fmt.Sprintf("Approval received for %s (%s): deviceId=%s", d.AppName, d.Hostname, resp.DeviceID))
+
+			case "pending":
+				// still waiting, do nothing
+
+			default:
+				// Stale, rejected, or no longer found in Portal — clear pendingID so
+				// registerNewApps() will submit a fresh registration request.
+				m.mu.Lock()
+				entry := m.findDevice(d.AppName)
+				if entry != nil && entry.PendingID == d.PendingID && entry.DeviceID == "" {
+					entry.PendingID = ""
+					changed = true
+				}
+				m.mu.Unlock()
+				logging.Info("PORTAL", fmt.Sprintf("Cleared stale pendingID for %s (status=%q)", d.AppName, resp.Status))
+			}
 		}
 
 		if changed {

@@ -163,6 +163,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         regTokenInput.value  = ps.registrationToken || '';
         document.getElementById('portal-interval').value = ps.statusReportIntervalSecs || 900;
         document.getElementById('portal-screenshot-interval').value = ps.screenshotPollIntervalSecs || 900;
+        document.getElementById('portal-firebase-db-url').value = ps.firebaseDatabaseUrl || '';
 
         const devices = ps.devices || [];
         portalDeviceStates = devices.map(normalizePortalDevice);
@@ -432,6 +433,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 registrationToken:          newRegToken,
                 statusReportIntervalSecs:   parseInt(document.getElementById('portal-interval').value) || 900,
                 screenshotPollIntervalSecs: parseInt(document.getElementById('portal-screenshot-interval').value) || 900,
+                firebaseDatabaseUrl:        document.getElementById('portal-firebase-db-url').value.trim(),
                 devices: portalDevicesOut
             }
         };

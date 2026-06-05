@@ -53,11 +53,12 @@ type ServerSettings struct {
 
 // PortalSettings holds Portal CMS integration configuration.
 type PortalSettings struct {
-	WorkerBaseURL            string         `json:"workerBaseUrl"`
-	RegistrationToken        string         `json:"registrationToken"`
-	StatusReportIntervalSecs  int            `json:"statusReportIntervalSecs"`
-	ScreenshotPollIntervalSecs int           `json:"screenshotPollIntervalSecs"`
-	Devices                  []PortalDevice `json:"devices"`
+	WorkerBaseURL              string         `json:"workerBaseUrl"`
+	RegistrationToken          string         `json:"registrationToken"`
+	StatusReportIntervalSecs   int            `json:"statusReportIntervalSecs"`
+	ScreenshotPollIntervalSecs int            `json:"screenshotPollIntervalSecs"`
+	FirebaseDatabaseURL        string         `json:"firebaseDatabaseUrl"`
+	Devices                    []PortalDevice `json:"devices"`
 }
 
 // PortalDevice stores per-device Portal CMS credentials.

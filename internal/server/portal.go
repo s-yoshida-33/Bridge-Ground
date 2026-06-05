@@ -21,6 +21,7 @@ type portalSettingsResponse struct {
 	RegistrationToken          string                 `json:"registrationToken"`
 	StatusReportIntervalSecs   int                    `json:"statusReportIntervalSecs"`
 	ScreenshotPollIntervalSecs int                    `json:"screenshotPollIntervalSecs"`
+	FirebaseDatabaseURL        string                 `json:"firebaseDatabaseUrl"`
 	Devices                    []portalDeviceResponse `json:"devices"`
 }
 
@@ -41,6 +42,7 @@ func maskedPortalSettings(ps config.PortalSettings) portalSettingsResponse {
 		RegistrationToken:          ps.RegistrationToken,
 		StatusReportIntervalSecs:   ps.StatusReportIntervalSecs,
 		ScreenshotPollIntervalSecs: ps.ScreenshotPollIntervalSecs,
+		FirebaseDatabaseURL:        ps.FirebaseDatabaseURL,
 		Devices:                    devices,
 	}
 }

@@ -22,15 +22,18 @@ type Manager struct {
 	client        *Client
 	startTime     time.Time
 	lastLogSentAt time.Time
+	rtdb          *rtdbListener
+	rtdbWatched   map[string]struct{} // deviceIDs already subscribed
 }
 
 // NewManager creates a portal Manager.
 func NewManager(cfg *config.Config, apps *server.AppRegistry, saveConfig func(*config.Config) error) *Manager {
 	return &Manager{
-		cfg:        cfg,
-		apps:       apps,
-		saveConfig: saveConfig,
-		startTime:  time.Now(),
+		cfg:         cfg,
+		apps:        apps,
+		saveConfig:  saveConfig,
+		startTime:   time.Now(),
+		rtdbWatched: make(map[string]struct{}),
 	}
 }
 
@@ -44,6 +47,10 @@ func (m *Manager) Start() {
 	}
 	m.client = NewClient(ps.WorkerBaseURL)
 
+	if ps.FirebaseDatabaseURL != "" {
+		m.rtdb = newRTDBListener(ps.FirebaseDatabaseURL, m.handleScreenshotSignal)
+	}
+
 	m.registerSelf()
 
 	interval := ps.StatusReportIntervalSecs
@@ -56,6 +63,9 @@ func (m *Manager) Start() {
 	// Approval-polling runs independently so newly registered devices pick up
 	// credentials as soon as the admin approves them.
 	go m.approvalPollLoop()
+
+	// Subscribe to RTDB screenshot signals for already-approved devices.
+	m.subscribeApprovedDevices()
 
 	// Run immediately on start so already-approved devices report online right away.
 	m.registerNewApps()
@@ -189,8 +199,46 @@ func (m *Manager) approvalPollLoop() {
 				logging.Warn("PORTAL", fmt.Sprintf("Failed to save config after approval: %v", err))
 			}
 			go m.sendHeartbeat()
+			m.subscribeApprovedDevices()
 		}
 	}
+}
+
+// subscribeApprovedDevices starts RTDB SSE subscriptions for any approved device
+// that hasn't been subscribed yet. Safe to call multiple times (idempotent).
+func (m *Manager) subscribeApprovedDevices() {
+	if m.rtdb == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, d := range m.cfg.PortalSettings.Devices {
+		if d.DeviceID == "" {
+			continue
+		}
+		if _, already := m.rtdbWatched[d.DeviceID]; already {
+			continue
+		}
+		m.rtdb.Subscribe(d.DeviceID)
+		m.rtdbWatched[d.DeviceID] = struct{}{}
+		logging.Info("RTDB", fmt.Sprintf("Subscribed to screenshot signals for %s (%s)", d.AppName, d.DeviceID))
+	}
+}
+
+// handleScreenshotSignal is called by rtdbListener when a screenshot signal arrives.
+func (m *Manager) handleScreenshotSignal(deviceID string) {
+	m.mu.Lock()
+	bg := m.selfDevice()
+	if bg == nil || bg.DeviceToken == "" {
+		m.mu.Unlock()
+		return
+	}
+	bgToken := bg.DeviceToken
+	devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+	copy(devices, m.cfg.PortalSettings.Devices)
+	m.mu.Unlock()
+
+	go m.uploadScreenshotForDevice(bgToken, deviceID, devices)
 }
 
 // sendHeartbeat sends one batched heartbeat for all approved devices and handles

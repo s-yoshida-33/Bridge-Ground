@@ -51,6 +51,17 @@ func (m *Manager) Start() {
 		m.rtdb = newRTDBClient(ps.FirebaseDatabaseURL)
 	}
 
+	// Remove duplicate app entries that may have accumulated from hostname changes.
+	m.mu.Lock()
+	if m.deduplicateDevices() {
+		if err := m.saveConfig(m.cfg); err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Failed to save config after deduplication: %v", err))
+		} else {
+			logging.Info("PORTAL", "Removed duplicate device entries from config")
+		}
+	}
+	m.mu.Unlock()
+
 	m.registerSelf()
 
 	interval := ps.StatusReportIntervalSecs
@@ -77,17 +88,58 @@ func (m *Manager) Start() {
 	}
 }
 
+// deduplicateDevices removes duplicate entries for the same app name, keeping
+// the entry with the most complete credentials (deviceId > pendingId > neither).
+// Must be called with m.mu held. Returns true if any entries were removed.
+func (m *Manager) deduplicateDevices() bool {
+	best := make(map[string]config.PortalDevice)
+	order := make([]string, 0, len(m.cfg.PortalSettings.Devices))
+
+	for _, d := range m.cfg.PortalSettings.Devices {
+		existing, found := best[d.AppName]
+		if !found {
+			best[d.AppName] = d
+			order = append(order, d.AppName)
+		} else if d.DeviceID != "" && existing.DeviceID == "" {
+			// Prefer the fully-approved entry.
+			best[d.AppName] = d
+		}
+	}
+
+	if len(best) == len(m.cfg.PortalSettings.Devices) {
+		return false // no duplicates
+	}
+
+	deduped := make([]config.PortalDevice, 0, len(best))
+	for _, name := range order {
+		deduped = append(deduped, best[name])
+	}
+	m.cfg.PortalSettings.Devices = deduped
+	return true
+}
+
 // registerSelf registers Bridge-Ground itself if not already registered.
+// If BG is already registered but its hostname changed, the config is updated in place.
 func (m *Manager) registerSelf() {
 	hostname, _ := os.Hostname()
 
 	m.mu.Lock()
-	existing := m.findDevice("Bridge-Ground", hostname)
-	m.mu.Unlock()
-
+	existing := m.findDevice("Bridge-Ground")
 	if existing != nil {
+		hostnameChanged := existing.Hostname != hostname
+		if hostnameChanged {
+			existing.Hostname = hostname
+		}
+		m.mu.Unlock()
+		if hostnameChanged {
+			if err := m.saveConfig(m.cfg); err != nil {
+				logging.Warn("PORTAL", fmt.Sprintf("Failed to save config after hostname update for Bridge-Ground: %v", err))
+			}
+			logging.Info("PORTAL", fmt.Sprintf("Updated Bridge-Ground hostname to %s", hostname))
+		}
 		return
 	}
+	m.mu.Unlock()
 
 	resp, err := m.client.Register(m.cfg.PortalSettings.RegistrationToken, RegisterRequest{
 		AppName:  "Bridge-Ground",
@@ -114,16 +166,27 @@ func (m *Manager) registerSelf() {
 }
 
 // registerNewApps registers any apps that the AppRegistry reports but that are
-// not yet in the portal config.
+// not yet in the portal config. If an app is already registered but its hostname
+// changed, the config entry is updated in place (no re-registration).
 func (m *Manager) registerNewApps() {
 	for _, app := range m.apps.List() {
 		m.mu.Lock()
-		existing := m.findDevice(app.Name, app.Hostname)
-		m.mu.Unlock()
-
+		existing := m.findDevice(app.Name)
 		if existing != nil {
+			hostnameChanged := existing.Hostname != app.Hostname
+			if hostnameChanged {
+				existing.Hostname = app.Hostname
+			}
+			m.mu.Unlock()
+			if hostnameChanged {
+				if err := m.saveConfig(m.cfg); err != nil {
+					logging.Warn("PORTAL", fmt.Sprintf("Failed to save config after hostname update for %s: %v", app.Name, err))
+				}
+				logging.Info("PORTAL", fmt.Sprintf("Updated hostname for %s to %s", app.Name, app.Hostname))
+			}
 			continue
 		}
+		m.mu.Unlock()
 
 		ip := app.IP
 		if ip == "" {
@@ -156,7 +219,7 @@ func (m *Manager) registerNewApps() {
 }
 
 // approvalPollLoop polls GET /v1/device for every device that has a PendingID but no
-// DeviceID yet. It backs off to every 60 seconds once all devices are approved.
+// DeviceID yet.
 func (m *Manager) approvalPollLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -182,7 +245,7 @@ func (m *Manager) approvalPollLoop() {
 			}
 
 			m.mu.Lock()
-			entry := m.findDevice(d.AppName, d.Hostname)
+			entry := m.findDevice(d.AppName)
 			if entry != nil {
 				entry.DeviceID    = resp.DeviceID
 				entry.DeviceToken = resp.DeviceToken
@@ -278,7 +341,7 @@ func (m *Manager) uploadLogsForDevice(deviceID, date string, devices []config.Po
 		return
 	}
 
-	now := time.Now()
+	now      := time.Now()
 	fromDate := date
 	toDate   := date
 	if fromDate == "" {
@@ -290,7 +353,7 @@ func (m *Manager) uploadLogsForDevice(deviceID, date string, devices []config.Po
 	if target.AppName == "Bridge-Ground" {
 		entries = logging.GetEntriesForRange(fromDate, toDate)
 	} else {
-		app, ok := m.findAppInfo(target.AppName, target.Hostname)
+		app, ok := m.findAppInfo(target.AppName)
 		if !ok || app.LogDir == "" || app.LogPrefix == "" {
 			// Write empty result so the portal knows the request was handled.
 			_ = m.rtdb.Put("logs", deviceID, map[string]interface{}{"entries": []interface{}{}, "at": now.UnixMilli()})
@@ -385,7 +448,7 @@ func (m *Manager) buildStatusEntry(d config.PortalDevice, metrics Metrics, uptim
 	var appUptimeSecs int
 	var appIP string
 	for _, app := range apps {
-		if app.Name == d.AppName && app.Hostname == d.Hostname {
+		if app.Name == d.AppName {
 			if app.Online {
 				status = "online"
 			}
@@ -425,7 +488,7 @@ func (m *Manager) uploadScreenshotForDevice(bgToken, deviceID string, devices []
 		return
 	}
 
-	app, ok := m.findAppInfo(target.AppName, target.Hostname)
+	app, ok := m.findAppInfo(target.AppName)
 	if !ok {
 		return
 	}
@@ -453,28 +516,31 @@ func (m *Manager) uploadScreenshotForDevice(bgToken, deviceID string, devices []
 
 // selfDevice returns BG's own PortalDevice entry. Must be called with m.mu held.
 func (m *Manager) selfDevice() *config.PortalDevice {
-	hostname, _ := os.Hostname()
-	return m.findDevice("Bridge-Ground", hostname)
+	return m.findDevice("Bridge-Ground")
 }
 
-// findDevice returns a pointer to the matching device entry, or nil.
+// findDevice returns a pointer to the device entry matching appName, or nil.
+// Matching is by app name only — hostname changes do not create new entries.
 // Must be called with m.mu held.
-func (m *Manager) findDevice(appName, hostname string) *config.PortalDevice {
+func (m *Manager) findDevice(appName string) *config.PortalDevice {
 	for i := range m.cfg.PortalSettings.Devices {
 		d := &m.cfg.PortalSettings.Devices[i]
-		if d.AppName == appName && d.Hostname == hostname {
+		if d.AppName == appName {
 			return d
 		}
 	}
 	return nil
 }
 
-// upsertDevice adds or updates a device entry.
+// upsertDevice adds a new device entry or updates the existing one for the same app name.
 // Must be called with m.mu held.
 func (m *Manager) upsertDevice(d config.PortalDevice) {
 	for i := range m.cfg.PortalSettings.Devices {
 		e := &m.cfg.PortalSettings.Devices[i]
-		if e.AppName == d.AppName && e.Hostname == d.Hostname {
+		if e.AppName == d.AppName {
+			if d.Hostname != "" {
+				e.Hostname = d.Hostname
+			}
 			if d.PendingID != "" {
 				e.PendingID = d.PendingID
 			}
@@ -490,10 +556,10 @@ func (m *Manager) upsertDevice(d config.PortalDevice) {
 	m.cfg.PortalSettings.Devices = append(m.cfg.PortalSettings.Devices, d)
 }
 
-// findAppInfo returns the AppInfo whose (Name, Hostname) matches.
-func (m *Manager) findAppInfo(appName, hostname string) (server.AppInfo, bool) {
+// findAppInfo returns the AppInfo whose Name matches appName.
+func (m *Manager) findAppInfo(appName string) (server.AppInfo, bool) {
 	for _, app := range m.apps.List() {
-		if app.Name == appName && app.Hostname == hostname {
+		if app.Name == appName {
 			return app, true
 		}
 	}

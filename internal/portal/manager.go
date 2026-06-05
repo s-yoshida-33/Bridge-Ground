@@ -219,7 +219,7 @@ func (m *Manager) subscribeApprovedDevices() {
 		// Screenshot requests: only for non-BG devices (BG itself is never a screenshot target).
 		if d.AppName != "Bridge-Ground" {
 			if _, already := m.rtdbScreenshotWatched[d.DeviceID]; !already {
-				m.rtdb.Subscribe("screenshot-requests", d.DeviceID, m.handleScreenshotSignal)
+				m.rtdb.Subscribe("screenshot-requests", d.DeviceID, func(id, _ string) { m.handleScreenshotSignal(id) })
 				m.rtdbScreenshotWatched[d.DeviceID] = struct{}{}
 				logging.Info("RTDB", fmt.Sprintf("Subscribed to screenshot signals for %s (%s)", d.AppName, d.DeviceID))
 			}
@@ -253,7 +253,8 @@ func (m *Manager) handleScreenshotSignal(deviceID string) {
 }
 
 // handleLogSignal is called by rtdbClient when a log request signal arrives.
-func (m *Manager) handleLogSignal(deviceID string) {
+// date is an optional YYYY-MM-DD string from the signal payload (empty = today).
+func (m *Manager) handleLogSignal(deviceID, date string) {
 	m.rtdb.Delete("log-requests", deviceID)
 
 	m.mu.Lock()
@@ -261,11 +262,12 @@ func (m *Manager) handleLogSignal(deviceID string) {
 	copy(devices, m.cfg.PortalSettings.Devices)
 	m.mu.Unlock()
 
-	go m.uploadLogsForDevice(deviceID, devices)
+	go m.uploadLogsForDevice(deviceID, date, devices)
 }
 
-// uploadLogsForDevice reads recent log entries and writes them to RTDB logs/{deviceID}.
-func (m *Manager) uploadLogsForDevice(deviceID string, devices []config.PortalDevice) {
+// uploadLogsForDevice reads log entries for the given date (YYYY-MM-DD; empty = today)
+// and writes them to RTDB logs/{deviceID}.
+func (m *Manager) uploadLogsForDevice(deviceID, date string, devices []config.PortalDevice) {
 	var target *config.PortalDevice
 	for i := range devices {
 		if devices[i].DeviceID == deviceID {
@@ -277,9 +279,13 @@ func (m *Manager) uploadLogsForDevice(deviceID string, devices []config.PortalDe
 		return
 	}
 
-	now      := time.Now()
-	fromDate := now.Add(-24 * time.Hour).Format("2006-01-02")
-	toDate   := now.Format("2006-01-02")
+	now := time.Now()
+	fromDate := date
+	toDate   := date
+	if fromDate == "" {
+		fromDate = now.Format("2006-01-02")
+		toDate   = fromDate
+	}
 
 	var entries []logging.LogEntry
 	if target.AppName == "Bridge-Ground" {

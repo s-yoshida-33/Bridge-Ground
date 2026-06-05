@@ -27,7 +27,9 @@ func newRTDBClient(databaseURL string) *rtdbClient {
 
 // Subscribe watches /{subpath}/{id}.json via SSE and calls onSignal when a
 // non-null, non-stale value arrives. Automatically reconnects on error.
-func (c *rtdbClient) Subscribe(subpath, id string, onSignal func(id string)) {
+// The second argument passed to onSignal is an optional extra string from the
+// signal payload (e.g. the "date" field for log requests; empty string otherwise).
+func (c *rtdbClient) Subscribe(subpath, id string, onSignal func(id, extra string)) {
 	go c.loop(subpath, id, onSignal)
 }
 
@@ -73,7 +75,7 @@ func (c *rtdbClient) Close() {
 
 // ── internal ──────────────────────────────────────────────────────────────────
 
-func (c *rtdbClient) loop(subpath, id string, onSignal func(string)) {
+func (c *rtdbClient) loop(subpath, id string, onSignal func(string, string)) {
 	url := fmt.Sprintf("%s/%s/%s.json", c.databaseURL, subpath, id)
 	backoff := 5 * time.Second
 	for {
@@ -93,7 +95,7 @@ func (c *rtdbClient) loop(subpath, id string, onSignal func(string)) {
 	}
 }
 
-func (c *rtdbClient) connect(url, id string, onSignal func(string)) error {
+func (c *rtdbClient) connect(url, id string, onSignal func(string, string)) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
@@ -138,10 +140,11 @@ func (c *rtdbClient) connect(url, id string, onSignal func(string)) error {
 
 const signalMaxAgeSecs = 300
 
-func handleSignalPut(id, rawData string, onSignal func(string)) {
+func handleSignalPut(id, rawData string, onSignal func(string, string)) {
 	var msg struct {
 		Data *struct {
-			At int64 `json:"at"`
+			At   int64  `json:"at"`
+			Date string `json:"date"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(rawData), &msg); err != nil {
@@ -157,5 +160,5 @@ func handleSignalPut(id, rawData string, onSignal func(string)) {
 			return
 		}
 	}
-	onSignal(id)
+	onSignal(id, msg.Data.Date)
 }

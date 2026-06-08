@@ -3,13 +3,13 @@
         "FileVersion": {
             "Major": 4,
             "Minor": 0,
-            "Patch": 2,
+            "Patch": 3,
             "Build": 0
         },
         "ProductVersion": {
             "Major": 4,
             "Minor": 0,
-            "Patch": 2,
+            "Patch": 3,
             "Build": 0
         },
         "FileFlagsMask": "3f",
@@ -22,14 +22,14 @@
         "Comments": "",
         "CompanyName": "Toei Techno International Inc.",
         "FileDescription": "Bridge Ground",
-        "FileVersion": "4.0.2.0",
+        "FileVersion": "4.0.3.0",
         "InternalName": "Bridge Ground",
         "LegalCopyright": "Copyright (c) 2025 Toei Techno International Inc.",
         "LegalTrademarks": "",
         "OriginalFilename": "Bridge Ground.exe",
         "PrivateBuild": "",
         "ProductName": "Bridge Ground",
-        "ProductVersion": "4.0.2.0",
+        "ProductVersion": "4.0.3.0",
         "SpecialBuild": ""
     },
     "VarFileInfo": {

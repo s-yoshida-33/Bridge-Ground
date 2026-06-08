@@ -34,11 +34,11 @@ $c = $c -replace '"ProductVersion": "\d+\.\d+\.\d+\.\d+"', ('"ProductVersion": "
 $c | Set-Content $f
 Write-Host "  [OK] $f"
 
-# package.bat
-$f = 'package.bat'
-(Get-Content $f) -replace 'set "VERSION=[^"]+"', ('set "VERSION=' + $Version + '"') |
+# package.ps1
+$f = 'package.ps1'
+(Get-Content $f) -replace '\$Version\s*=\s*"[^"]+"', ('$Version     = "' + $Version + '"') |
     Set-Content $f
 Write-Host "  [OK] $f"
 
 Write-Host ""
-Write-Host "Done. Build with: package.bat"
+Write-Host "Done. Build with: package.bat (or package.ps1)"

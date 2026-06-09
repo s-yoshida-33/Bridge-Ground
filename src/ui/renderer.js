@@ -161,8 +161,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const regTokenInput  = document.getElementById('portal-reg-token');
         workerUrlInput.value = ps.workerBaseUrl || '';
         regTokenInput.value  = ps.registrationToken || '';
-        document.getElementById('portal-interval').value = ps.statusReportIntervalSecs || 900;
-        document.getElementById('portal-screenshot-interval').value = ps.screenshotPollIntervalSecs || 900;
+        document.getElementById('portal-interval').value = ps.statusReportIntervalSecs || 3600;
         document.getElementById('portal-firebase-db-url').value = ps.firebaseDatabaseUrl || '';
 
         const devices = ps.devices || [];
@@ -431,8 +430,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             portalSettings: {
                 workerBaseUrl:              newWorkerUrl,
                 registrationToken:          newRegToken,
-                statusReportIntervalSecs:   parseInt(document.getElementById('portal-interval').value) || 900,
-                screenshotPollIntervalSecs: parseInt(document.getElementById('portal-screenshot-interval').value) || 900,
+                statusReportIntervalSecs:   parseInt(document.getElementById('portal-interval').value) || 3600,
                 firebaseDatabaseUrl:        document.getElementById('portal-firebase-db-url').value.trim(),
                 devices: portalDevicesOut
             }

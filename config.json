@@ -30,7 +30,7 @@
   "portalSettings": {
     "workerBaseUrl": "",
     "registrationToken": "",
-    "statusReportIntervalSecs": 60,
+    "statusReportIntervalSecs": 3600,
     "devices": []
   }
 }

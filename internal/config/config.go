@@ -53,12 +53,11 @@ type ServerSettings struct {
 
 // PortalSettings holds Portal CMS integration configuration.
 type PortalSettings struct {
-	WorkerBaseURL              string         `json:"workerBaseUrl"`
-	RegistrationToken          string         `json:"registrationToken"`
-	StatusReportIntervalSecs   int            `json:"statusReportIntervalSecs"`
-	ScreenshotPollIntervalSecs int            `json:"screenshotPollIntervalSecs"`
-	FirebaseDatabaseURL        string         `json:"firebaseDatabaseUrl"`
-	Devices                    []PortalDevice `json:"devices"`
+	WorkerBaseURL            string         `json:"workerBaseUrl"`
+	RegistrationToken        string         `json:"registrationToken"`
+	StatusReportIntervalSecs int            `json:"statusReportIntervalSecs"`
+	FirebaseDatabaseURL      string         `json:"firebaseDatabaseUrl"`
+	Devices                  []PortalDevice `json:"devices"`
 }
 
 // PortalDevice stores per-device Portal CMS credentials.
@@ -134,7 +133,7 @@ func LoadConfig() (*Config, error) {
 				RunOnStartup: false,
 			},
 			PortalSettings: PortalSettings{
-				StatusReportIntervalSecs: 900,
+				StatusReportIntervalSecs: 3600,
 				Devices:                  []PortalDevice{},
 			},
 		}, nil
@@ -167,10 +166,7 @@ func LoadConfig() (*Config, error) {
 		cfg.PortalSettings.Devices = []PortalDevice{}
 	}
 	if cfg.PortalSettings.StatusReportIntervalSecs == 0 {
-		cfg.PortalSettings.StatusReportIntervalSecs = 900
-	}
-	if cfg.PortalSettings.ScreenshotPollIntervalSecs == 0 {
-		cfg.PortalSettings.ScreenshotPollIntervalSecs = 900
+		cfg.PortalSettings.StatusReportIntervalSecs = 3600
 	}
 
 	return &cfg, nil

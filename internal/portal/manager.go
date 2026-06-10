@@ -458,12 +458,14 @@ func (m *Manager) buildStatusEntry(d config.PortalDevice, metrics Metrics, uptim
 			Temperature: metrics.Temperature,
 			Storage:     metrics.Storage,
 			Uptime:      uptimeSecs,
+			Version:     config.Version,
 		}
 	}
 
 	status := "offline"
 	var appUptimeSecs int
 	var appIP string
+	var appVersion string
 	if app, ok := m.findAppInfo(d.AppName, d.Hostname); ok {
 		if app.Online {
 			status = "online"
@@ -472,6 +474,7 @@ func (m *Manager) buildStatusEntry(d config.PortalDevice, metrics Metrics, uptim
 			appUptimeSecs = int(time.Since(*app.StartedAt).Seconds())
 		}
 		appIP = app.IP
+		appVersion = app.Version
 	}
 	if appIP == "" {
 		appIP = currentIP
@@ -485,6 +488,7 @@ func (m *Manager) buildStatusEntry(d config.PortalDevice, metrics Metrics, uptim
 		Temperature: metrics.Temperature,
 		Storage:     metrics.Storage,
 		Uptime:      appUptimeSecs,
+		Version:     appVersion,
 	}
 }
 

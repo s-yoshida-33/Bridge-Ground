@@ -55,6 +55,7 @@ type DeviceStatusEntry struct {
 	Temperature float64 `json:"temperature,omitempty"`
 	Storage     float64 `json:"storage,omitempty"`
 	Uptime      int     `json:"uptime,omitempty"`
+	Version     string  `json:"version,omitempty"`
 }
 
 // HeartbeatRequest is the body for POST /v1/heartbeat.

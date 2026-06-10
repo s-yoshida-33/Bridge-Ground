@@ -575,13 +575,25 @@ func (m *Manager) upsertDevice(d config.PortalDevice) {
 }
 
 // findAppInfo returns the AppInfo matching appName and hostname.
+// If no exact (name+hostname) match is found, falls back to name-only so that
+// a stale hostname in config.json does not permanently break screenshot/log capture.
 func (m *Manager) findAppInfo(appName, hostname string) (server.AppInfo, bool) {
+	var fallback server.AppInfo
+	hasFallback := false
 	for _, app := range m.apps.List() {
-		if app.Name == appName && app.Hostname == hostname {
-			return app, true
+		if app.Name != appName {
+			continue
 		}
+		if app.Hostname == hostname {
+			return app, true // exact match
+		}
+		fallback = app
+		hasFallback = true
 	}
-	return server.AppInfo{}, false
+	if hasFallback {
+		logging.Warn("PORTAL", fmt.Sprintf("findAppInfo: hostname mismatch for %s (config=%q, live=%q), using live entry", appName, hostname, fallback.Hostname))
+	}
+	return fallback, hasFallback
 }
 
 // localIP returns this machine's preferred outbound IP address.

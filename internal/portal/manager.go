@@ -417,7 +417,6 @@ func (m *Manager) sendHeartbeat() {
 
 	metrics    := CollectMetrics()
 	uptimeSecs := int(time.Since(m.startTime).Seconds())
-	appList    := m.apps.List()
 	currentIP  := localIP()
 
 	var entries []DeviceStatusEntry
@@ -425,7 +424,7 @@ func (m *Manager) sendHeartbeat() {
 		if d.DeviceID == "" {
 			continue
 		}
-		entry := m.buildStatusEntry(d, metrics, uptimeSecs, appList, currentIP)
+		entry := m.buildStatusEntry(d, metrics, uptimeSecs, currentIP)
 		entries = append(entries, entry)
 	}
 
@@ -448,7 +447,7 @@ func (m *Manager) sendHeartbeat() {
 	}
 }
 
-func (m *Manager) buildStatusEntry(d config.PortalDevice, metrics Metrics, uptimeSecs int, apps []server.AppInfo, currentIP string) DeviceStatusEntry {
+func (m *Manager) buildStatusEntry(d config.PortalDevice, metrics Metrics, uptimeSecs int, currentIP string) DeviceStatusEntry {
 	if d.AppName == "Bridge-Ground" {
 		return DeviceStatusEntry{
 			DeviceID:    d.DeviceID,
@@ -465,17 +464,14 @@ func (m *Manager) buildStatusEntry(d config.PortalDevice, metrics Metrics, uptim
 	status := "offline"
 	var appUptimeSecs int
 	var appIP string
-	for _, app := range apps {
-		if app.Name == d.AppName && app.Hostname == d.Hostname {
-			if app.Online {
-				status = "online"
-			}
-			if app.StartedAt != nil {
-				appUptimeSecs = int(time.Since(*app.StartedAt).Seconds())
-			}
-			appIP = app.IP
-			break
+	if app, ok := m.findAppInfo(d.AppName, d.Hostname); ok {
+		if app.Online {
+			status = "online"
 		}
+		if app.StartedAt != nil {
+			appUptimeSecs = int(time.Since(*app.StartedAt).Seconds())
+		}
+		appIP = app.IP
 	}
 	if appIP == "" {
 		appIP = currentIP
@@ -574,26 +570,65 @@ func (m *Manager) upsertDevice(d config.PortalDevice) {
 	m.cfg.PortalSettings.Devices = append(m.cfg.PortalSettings.Devices, d)
 }
 
-// findAppInfo returns the AppInfo matching appName and hostname.
-// If no exact (name+hostname) match is found, falls back to name-only so that
-// a stale hostname in config.json does not permanently break screenshot/log capture.
+// findAppInfo returns the AppInfo for appName, preferring an online exact
+// (name+hostname) match. If the exact match is offline but an online entry
+// with the same name exists (hostname changed), the online entry is returned
+// so that a stale hostname in config.json does not permanently break capture.
+// Falls back to any entry with a matching name when nothing better exists.
 func (m *Manager) findAppInfo(appName, hostname string) (server.AppInfo, bool) {
-	var fallback server.AppInfo
-	hasFallback := false
+	var exact, onlineFallback, anyFallback server.AppInfo
+	hasExact, hasOnlineFallback, hasAnyFallback := false, false, false
+
 	for _, app := range m.apps.List() {
 		if app.Name != appName {
 			continue
 		}
 		if app.Hostname == hostname {
-			return app, true // exact match
+			// Keep the most-recently-seen exact match.
+			if !hasExact || app.LastSeen.After(exact.LastSeen) {
+				exact = app
+				hasExact = true
+			}
+		} else {
+			// Different hostname — track the freshest online and overall entries.
+			if app.Online && (!hasOnlineFallback || app.LastSeen.After(onlineFallback.LastSeen)) {
+				onlineFallback = app
+				hasOnlineFallback = true
+			}
+			if !hasAnyFallback || app.LastSeen.After(anyFallback.LastSeen) {
+				anyFallback = app
+				hasAnyFallback = true
+			}
 		}
-		fallback = app
-		hasFallback = true
 	}
-	if hasFallback {
-		logging.Warn("PORTAL", fmt.Sprintf("findAppInfo: hostname mismatch for %s (config=%q, live=%q), using live entry", appName, hostname, fallback.Hostname))
+
+	// Online exact match — ideal.
+	if hasExact && exact.Online {
+		return exact, true
 	}
-	return fallback, hasFallback
+	// Exact match is stale but there is a fresher online entry → hostname drifted.
+	if hasOnlineFallback {
+		if hasExact {
+			logging.Warn("PORTAL", fmt.Sprintf(
+				"findAppInfo: stale entry for %s (config hostname=%q offline), using online entry hostname=%q",
+				appName, hostname, onlineFallback.Hostname))
+		} else {
+			logging.Warn("PORTAL", fmt.Sprintf(
+				"findAppInfo: hostname mismatch for %s (config=%q, live=%q), using live entry",
+				appName, hostname, onlineFallback.Hostname))
+		}
+		return onlineFallback, true
+	}
+	// No online entry at all — use stale exact if available, else any stale match.
+	if hasExact {
+		return exact, true
+	}
+	if hasAnyFallback {
+		logging.Warn("PORTAL", fmt.Sprintf(
+			"findAppInfo: hostname mismatch for %s (config=%q, live=%q), using stale entry",
+			appName, hostname, anyFallback.Hostname))
+	}
+	return anyFallback, hasAnyFallback
 }
 
 // localIP returns this machine's preferred outbound IP address.

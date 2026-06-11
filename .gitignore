@@ -4,6 +4,7 @@ dist/
 build/
 .DS_Store
 *.log
+tmp/
 
 # Distribution packages
 BridgeGround_v*/

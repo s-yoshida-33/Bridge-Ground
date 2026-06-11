@@ -437,6 +437,7 @@ func (m *Manager) sendHeartbeat() {
 		logging.Warn("PORTAL", fmt.Sprintf("Heartbeat failed: %v", err))
 		return
 	}
+	logging.Info("PORTAL", fmt.Sprintf("Heartbeat sent: %d device(s)", len(entries)))
 
 	// Handle screenshot commands
 	for deviceID, cmd := range heartbeatResp.Commands {

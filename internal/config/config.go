@@ -62,12 +62,13 @@ type PortalSettings struct {
 
 // PortalDevice stores per-device Portal CMS credentials.
 type PortalDevice struct {
-	AppName     string `json:"appName"`
-	Hostname    string `json:"hostname"`
-	PendingID   string `json:"pendingId,omitempty"`
-	DeviceID    string `json:"deviceId,omitempty"`
-	DeviceToken string `json:"deviceToken,omitempty"`
-	SettingsDir string `json:"settingsDir,omitempty"`
+	AppName      string   `json:"appName"`
+	Hostname     string   `json:"hostname"`
+	PendingID    string   `json:"pendingId,omitempty"`
+	DeviceID     string   `json:"deviceId,omitempty"`
+	DeviceToken  string   `json:"deviceToken,omitempty"`
+	SettingsDir  string   `json:"settingsDir,omitempty"`
+	SettingsFiles []string `json:"settingsFiles,omitempty"`
 }
 
 // configFilePath returns the canonical path for config.json.

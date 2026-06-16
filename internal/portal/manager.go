@@ -418,8 +418,10 @@ func (m *Manager) uploadLogsForDevice(deviceID, date string, devices []config.Po
 	}
 }
 
-// uploadSettingsForDevice reads *settings.json files from the device's SettingsDir
-// and uploads them to the Portal via POST /v1/settings.
+// uploadSettingsForDevice reads settings files from the device's SettingsDir and
+// uploads them to the Portal via POST /v1/settings.
+// If SettingsFiles is non-empty, only those exact filenames are read.
+// Otherwise all files ending in "settings.json" in SettingsDir are included.
 func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []config.PortalDevice) {
 	var target *config.PortalDevice
 	for i := range devices {
@@ -436,7 +438,7 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 		return
 	}
 
-	files, err := readSettingsFiles(target.SettingsDir)
+	files, err := readSettingsFiles(target.SettingsDir, target.SettingsFiles)
 	if err != nil {
 		logging.Warn("PORTAL", fmt.Sprintf("Failed to read settings files for %s: %v", target.AppName, err))
 		return
@@ -456,14 +458,33 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 	}
 }
 
-// readSettingsFiles scans dir for files whose names end in "settings.json"
-// and returns them parsed as JSON objects keyed by filename.
-func readSettingsFiles(dir string) (map[string]interface{}, error) {
+// readSettingsFiles reads settings files from dir.
+// If specificFiles is non-empty, only those filenames are read.
+// Otherwise all files whose names end in "settings.json" are included.
+func readSettingsFiles(dir string, specificFiles []string) (map[string]interface{}, error) {
+	files := make(map[string]interface{})
+
+	if len(specificFiles) > 0 {
+		for _, name := range specificFiles {
+			data, err := os.ReadFile(filepath.Join(dir, name))
+			if err != nil {
+				logging.Warn("PORTAL", fmt.Sprintf("Failed to read %s: %v", name, err))
+				continue
+			}
+			var obj interface{}
+			if err := json.Unmarshal(data, &obj); err != nil {
+				logging.Warn("PORTAL", fmt.Sprintf("Failed to parse %s: %v", name, err))
+				continue
+			}
+			files[name] = obj
+		}
+		return files, nil
+	}
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	files := make(map[string]interface{})
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue

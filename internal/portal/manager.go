@@ -4,7 +4,6 @@ import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/logging"
 	"bridge-ground/internal/server"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -458,11 +457,12 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 	}
 }
 
-// readSettingsFiles reads settings files from dir.
+// readSettingsFiles reads settings files from dir and returns their raw content as strings
+// to preserve original JSON field order.
 // If specificFiles is non-empty, only those filenames are read.
 // Otherwise all files whose names end in "settings.json" are included.
-func readSettingsFiles(dir string, specificFiles []string) (map[string]interface{}, error) {
-	files := make(map[string]interface{})
+func readSettingsFiles(dir string, specificFiles []string) (map[string]string, error) {
+	files := make(map[string]string)
 
 	if len(specificFiles) > 0 {
 		for _, name := range specificFiles {
@@ -471,12 +471,7 @@ func readSettingsFiles(dir string, specificFiles []string) (map[string]interface
 				logging.Warn("PORTAL", fmt.Sprintf("Failed to read %s: %v", name, err))
 				continue
 			}
-			var obj interface{}
-			if err := json.Unmarshal(data, &obj); err != nil {
-				logging.Warn("PORTAL", fmt.Sprintf("Failed to parse %s: %v", name, err))
-				continue
-			}
-			files[name] = obj
+			files[name] = string(data)
 		}
 		return files, nil
 	}
@@ -498,12 +493,7 @@ func readSettingsFiles(dir string, specificFiles []string) (map[string]interface
 			logging.Warn("PORTAL", fmt.Sprintf("Failed to read %s: %v", name, err))
 			continue
 		}
-		var obj interface{}
-		if err := json.Unmarshal(data, &obj); err != nil {
-			logging.Warn("PORTAL", fmt.Sprintf("Failed to parse %s: %v", name, err))
-			continue
-		}
-		files[name] = obj
+		files[name] = string(data)
 	}
 	return files, nil
 }

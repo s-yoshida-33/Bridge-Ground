@@ -92,9 +92,10 @@ type LogsRequest struct {
 }
 
 // SettingsRequest is the body for POST /v1/settings.
+// Files maps filename to raw JSON file content (string) to preserve field order.
 type SettingsRequest struct {
-	DeviceID string                 `json:"deviceId"`
-	Files    map[string]interface{} `json:"files"`
+	DeviceID string            `json:"deviceId"`
+	Files    map[string]string `json:"files"`
 }
 
 // Register calls POST /v1/register with a registration token.
@@ -226,7 +227,7 @@ func (c *Client) UploadScreenshot(deviceToken, deviceID string, data []byte) err
 	return nil
 }
 
-// UploadSettings calls POST /v1/settings with parsed JSON settings files.
+// UploadSettings calls POST /v1/settings with raw settings file contents.
 func (c *Client) UploadSettings(deviceToken string, req SettingsRequest) error {
 	body, _ := json.Marshal(req)
 	httpReq, err := http.NewRequest(http.MethodPost, c.baseURL+"/v1/settings", bytes.NewReader(body))

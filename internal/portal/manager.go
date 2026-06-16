@@ -438,11 +438,7 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 	}
 
 	dir := resolveSettingsDir(target.SettingsDir)
-	files, err := readSettingsFiles(dir, target.SettingsFiles)
-	if err != nil {
-		logging.Warn("PORTAL", fmt.Sprintf("Failed to read settings files for %s: %v", target.AppName, err))
-		return
-	}
+	files := readSettingsFiles(dir, target.SettingsFiles)
 	if len(files) == 0 {
 		logging.Info("PORTAL", fmt.Sprintf("No settings files found in %s for %s", dir, target.AppName))
 		return
@@ -477,24 +473,26 @@ func resolveSettingsDir(dir string) string {
 // to preserve original JSON field order.
 // If specificFiles is non-empty, only those filenames are read.
 // Otherwise all files whose names end in "settings.json" are included.
-func readSettingsFiles(dir string, specificFiles []string) (map[string]string, error) {
+// Returns an empty map (no error) when the directory cannot be opened.
+func readSettingsFiles(dir string, specificFiles []string) map[string]string {
 	files := make(map[string]string)
 
 	if len(specificFiles) > 0 {
 		for _, name := range specificFiles {
 			data, err := os.ReadFile(filepath.Join(dir, name))
 			if err != nil {
-				logging.Warn("PORTAL", fmt.Sprintf("Failed to read %s: %v", name, err))
+				logging.Warn("PORTAL", fmt.Sprintf("Cannot read %s in %s: %v", name, dir, err))
 				continue
 			}
 			files[name] = string(data)
 		}
-		return files, nil
+		return files
 	}
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, err
+		logging.Warn("PORTAL", fmt.Sprintf("Cannot open settingsDir %s: %v", dir, err))
+		return files
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -506,12 +504,12 @@ func readSettingsFiles(dir string, specificFiles []string) (map[string]string, e
 		}
 		data, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
-			logging.Warn("PORTAL", fmt.Sprintf("Failed to read %s: %v", name, err))
+			logging.Warn("PORTAL", fmt.Sprintf("Cannot read %s in %s: %v", name, dir, err))
 			continue
 		}
 		files[name] = string(data)
 	}
-	return files, nil
+	return files
 }
 
 // sendHeartbeat sends one batched heartbeat for all approved devices and handles

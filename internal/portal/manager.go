@@ -455,18 +455,17 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 }
 
 // resolveSettingsDir resolves dir relative to the BG executable directory when
-// dir is a relative path. Absolute paths are returned unchanged.
-// This allows all machines to use "settingsDir": "." in config.json regardless
-// of where BG is installed.
+// dir is a relative path, and normalizes separators via filepath.Clean.
+// On Windows, filepath.Clean converts forward slashes to backslashes, which is
+// required for os.ReadDir / os.ReadFile to work correctly.
 func resolveSettingsDir(dir string) string {
-	if filepath.IsAbs(dir) {
+	if !filepath.IsAbs(dir) {
+		if exePath, err := os.Executable(); err == nil {
+			return filepath.Join(filepath.Dir(exePath), dir)
+		}
 		return dir
 	}
-	exePath, err := os.Executable()
-	if err != nil {
-		return dir
-	}
-	return filepath.Join(filepath.Dir(exePath), dir)
+	return filepath.Clean(dir)
 }
 
 // readSettingsFiles reads settings files from dir and returns their raw content as strings

@@ -66,6 +66,7 @@ type HeartbeatRequest struct {
 // DeviceCommand holds per-device commands returned by the Worker.
 type DeviceCommand struct {
 	Screenshot bool `json:"screenshot"`
+	Settings   bool `json:"settings"`
 }
 
 // HeartbeatResponse is the JSON response from POST /v1/heartbeat.
@@ -88,6 +89,12 @@ type LogsRequest struct {
 	DeviceID string     `json:"deviceId"`
 	App      string     `json:"app"`
 	Entries  []LogEntry `json:"entries"`
+}
+
+// SettingsRequest is the body for POST /v1/settings.
+type SettingsRequest struct {
+	DeviceID string                 `json:"deviceId"`
+	Files    map[string]interface{} `json:"files"`
 }
 
 // Register calls POST /v1/register with a registration token.
@@ -215,6 +222,32 @@ func (c *Client) UploadScreenshot(deviceToken, deviceID string, data []byte) err
 		}
 		json.NewDecoder(resp.Body).Decode(&result)
 		return fmt.Errorf("screenshot upload failed (status %d): %s", resp.StatusCode, result.Error)
+	}
+	return nil
+}
+
+// UploadSettings calls POST /v1/settings with parsed JSON settings files.
+func (c *Client) UploadSettings(deviceToken string, req SettingsRequest) error {
+	body, _ := json.Marshal(req)
+	httpReq, err := http.NewRequest(http.MethodPost, c.baseURL+"/v1/settings", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+deviceToken)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var result struct {
+			Error string `json:"error"`
+		}
+		json.NewDecoder(resp.Body).Decode(&result)
+		return fmt.Errorf("settings upload failed (status %d): %s", resp.StatusCode, result.Error)
 	}
 	return nil
 }

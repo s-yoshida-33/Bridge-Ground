@@ -4,9 +4,11 @@ import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/logging"
 	"bridge-ground/internal/server"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -318,6 +320,7 @@ func (m *Manager) handleSignal(deviceID, extra string) {
 	} else {
 		signalType = extra
 	}
+	_ = date
 
 	switch signalType {
 	case "screenshot":
@@ -342,6 +345,20 @@ func (m *Manager) handleSignal(deviceID, extra string) {
 		copy(devices, m.cfg.PortalSettings.Devices)
 		m.mu.Unlock()
 		go m.uploadLogsForDevice(deviceID, date, devices)
+
+	case "settings":
+		m.rtdb.Delete("signals", deviceID)
+		m.mu.Lock()
+		bg := m.selfDevice()
+		if bg == nil || bg.DeviceToken == "" {
+			m.mu.Unlock()
+			return
+		}
+		bgToken := bg.DeviceToken
+		devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
+		copy(devices, m.cfg.PortalSettings.Devices)
+		m.mu.Unlock()
+		go m.uploadSettingsForDevice(bgToken, deviceID, devices)
 	}
 }
 
@@ -401,8 +418,77 @@ func (m *Manager) uploadLogsForDevice(deviceID, date string, devices []config.Po
 	}
 }
 
+// uploadSettingsForDevice reads *settings.json files from the device's SettingsDir
+// and uploads them to the Portal via POST /v1/settings.
+func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []config.PortalDevice) {
+	var target *config.PortalDevice
+	for i := range devices {
+		if devices[i].DeviceID == deviceID {
+			target = &devices[i]
+			break
+		}
+	}
+	if target == nil {
+		return
+	}
+	if target.SettingsDir == "" {
+		logging.Warn("PORTAL", fmt.Sprintf("No settingsDir configured for %s (%s)", target.AppName, deviceID))
+		return
+	}
+
+	files, err := readSettingsFiles(target.SettingsDir)
+	if err != nil {
+		logging.Warn("PORTAL", fmt.Sprintf("Failed to read settings files for %s: %v", target.AppName, err))
+		return
+	}
+	if len(files) == 0 {
+		logging.Info("PORTAL", fmt.Sprintf("No settings files found in %s for %s", target.SettingsDir, target.AppName))
+		return
+	}
+
+	if err := m.client.UploadSettings(bgToken, SettingsRequest{
+		DeviceID: deviceID,
+		Files:    files,
+	}); err != nil {
+		logging.Warn("PORTAL", fmt.Sprintf("Settings upload failed for %s: %v", target.AppName, err))
+	} else {
+		logging.Info("PORTAL", fmt.Sprintf("Settings uploaded for %s (%s): %d file(s)", target.AppName, target.Hostname, len(files)))
+	}
+}
+
+// readSettingsFiles scans dir for files whose names end in "settings.json"
+// and returns them parsed as JSON objects keyed by filename.
+func readSettingsFiles(dir string) (map[string]interface{}, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	files := make(map[string]interface{})
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, "settings.json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Failed to read %s: %v", name, err))
+			continue
+		}
+		var obj interface{}
+		if err := json.Unmarshal(data, &obj); err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Failed to parse %s: %v", name, err))
+			continue
+		}
+		files[name] = obj
+	}
+	return files, nil
+}
+
 // sendHeartbeat sends one batched heartbeat for all approved devices and handles
-// screenshot commands returned by the Worker.
+// screenshot/settings commands returned by the Worker.
 func (m *Manager) sendHeartbeat() {
 	m.mu.Lock()
 	bg := m.selfDevice()
@@ -439,12 +525,14 @@ func (m *Manager) sendHeartbeat() {
 	}
 	logging.Info("PORTAL", fmt.Sprintf("Heartbeat sent: %d device(s)", len(entries)))
 
-	// Handle screenshot commands
+	// Handle per-device commands from the Worker.
 	for deviceID, cmd := range heartbeatResp.Commands {
-		if !cmd.Screenshot {
-			continue
+		if cmd.Screenshot {
+			go m.uploadScreenshotForDevice(bgToken, deviceID, devices)
 		}
-		go m.uploadScreenshotForDevice(bgToken, deviceID, devices)
+		if cmd.Settings {
+			go m.uploadSettingsForDevice(bgToken, deviceID, devices)
+		}
 	}
 }
 

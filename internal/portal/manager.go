@@ -437,13 +437,14 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 		return
 	}
 
-	files, err := readSettingsFiles(target.SettingsDir, target.SettingsFiles)
+	dir := resolveSettingsDir(target.SettingsDir)
+	files, err := readSettingsFiles(dir, target.SettingsFiles)
 	if err != nil {
 		logging.Warn("PORTAL", fmt.Sprintf("Failed to read settings files for %s: %v", target.AppName, err))
 		return
 	}
 	if len(files) == 0 {
-		logging.Info("PORTAL", fmt.Sprintf("No settings files found in %s for %s", target.SettingsDir, target.AppName))
+		logging.Info("PORTAL", fmt.Sprintf("No settings files found in %s for %s", dir, target.AppName))
 		return
 	}
 
@@ -455,6 +456,21 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 	} else {
 		logging.Info("PORTAL", fmt.Sprintf("Settings uploaded for %s (%s): %d file(s)", target.AppName, target.Hostname, len(files)))
 	}
+}
+
+// resolveSettingsDir resolves dir relative to the BG executable directory when
+// dir is a relative path. Absolute paths are returned unchanged.
+// This allows all machines to use "settingsDir": "." in config.json regardless
+// of where BG is installed.
+func resolveSettingsDir(dir string) string {
+	if filepath.IsAbs(dir) {
+		return dir
+	}
+	exePath, err := os.Executable()
+	if err != nil {
+		return dir
+	}
+	return filepath.Join(filepath.Dir(exePath), dir)
 }
 
 // readSettingsFiles reads settings files from dir and returns their raw content as strings

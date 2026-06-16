@@ -15,6 +15,24 @@ import (
 
 const maxLogBatch = 200
 
+// defaultSettingsDir holds the built-in settings directory for each known app.
+// %USERPROFILE% is expanded at runtime so the path works on any machine.
+// config.json settingsDir overrides these defaults when set.
+var defaultSettingsDir = map[string]string{
+	"Bridge-Ground":   ".",
+	"Gido":            `%USERPROFILE%\AppData\Local\com.tti.gido`,
+	"Gido-Touch":      `%USERPROFILE%\AppData\Local\com.tti.gido-touch`,
+	"Gido-Touch-Mini": `%USERPROFILE%\AppData\Local\com.tti.gido-touch-mini`,
+	"Grain-Link":      `%USERPROFILE%\AppData\Local\com.tti.grain-link`,
+}
+
+// defaultSettingsFiles holds the built-in file list for each known app.
+// An empty slice means "scan for all *settings.json files in the directory".
+// config.json settingsFiles overrides these defaults when set.
+var defaultSettingsFiles = map[string][]string{
+	"Bridge-Ground": {"config.json"},
+}
+
 // Manager handles Portal CMS device registration and periodic status reporting.
 type Manager struct {
 	mu          sync.Mutex
@@ -417,10 +435,8 @@ func (m *Manager) uploadLogsForDevice(deviceID, date string, devices []config.Po
 	}
 }
 
-// uploadSettingsForDevice reads settings files from the device's SettingsDir and
-// uploads them to the Portal via POST /v1/settings.
-// If SettingsFiles is non-empty, only those exact filenames are read.
-// Otherwise all files ending in "settings.json" in SettingsDir are included.
+// uploadSettingsForDevice reads settings files and uploads them to Portal.
+// settingsDir and settingsFiles in config.json override the built-in defaults.
 func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []config.PortalDevice) {
 	var target *config.PortalDevice
 	for i := range devices {
@@ -432,13 +448,24 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 	if target == nil {
 		return
 	}
-	if target.SettingsDir == "" {
-		logging.Warn("PORTAL", fmt.Sprintf("No settingsDir configured for %s (%s)", target.AppName, deviceID))
+
+	// Use config.json value if set, otherwise fall back to built-in default.
+	settingsDirRaw := target.SettingsDir
+	if settingsDirRaw == "" {
+		settingsDirRaw = defaultSettingsDir[target.AppName]
+	}
+	if settingsDirRaw == "" {
+		logging.Warn("PORTAL", fmt.Sprintf("No settingsDir for %s (%s) — skipping", target.AppName, deviceID))
 		return
 	}
 
-	dir := resolveSettingsDir(target.SettingsDir)
-	files := readSettingsFiles(dir, target.SettingsFiles)
+	settingsFiles := target.SettingsFiles
+	if len(settingsFiles) == 0 {
+		settingsFiles = defaultSettingsFiles[target.AppName]
+	}
+
+	dir := resolveSettingsDir(settingsDirRaw)
+	files := readSettingsFiles(dir, settingsFiles)
 	if len(files) == 0 {
 		logging.Info("PORTAL", fmt.Sprintf("No settings files found in %s for %s", dir, target.AppName))
 		return
@@ -454,11 +481,11 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 	}
 }
 
-// resolveSettingsDir resolves dir relative to the BG executable directory when
-// dir is a relative path, and normalizes separators via filepath.Clean.
-// On Windows, filepath.Clean converts forward slashes to backslashes, which is
-// required for os.ReadDir / os.ReadFile to work correctly.
+// resolveSettingsDir expands environment variables and resolves relative paths
+// against the BG executable directory.
+// Supports both %VAR% (Windows) and $VAR style variables.
 func resolveSettingsDir(dir string) string {
+	dir = expandEnvVars(dir)
 	if !filepath.IsAbs(dir) {
 		if exePath, err := os.Executable(); err == nil {
 			return filepath.Join(filepath.Dir(exePath), dir)
@@ -468,11 +495,31 @@ func resolveSettingsDir(dir string) string {
 	return filepath.Clean(dir)
 }
 
+// expandEnvVars expands both %VAR% (Windows) and $VAR style environment variables.
+func expandEnvVars(s string) string {
+	// Expand %VAR% style
+	for {
+		start := strings.Index(s, "%")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(s[start+1:], "%")
+		if end < 0 {
+			break
+		}
+		end += start + 1
+		key := s[start+1 : end]
+		s = s[:start] + os.Getenv(key) + s[end+1:]
+	}
+	// Expand $VAR style
+	return os.ExpandEnv(s)
+}
+
 // readSettingsFiles reads settings files from dir and returns their raw content as strings
 // to preserve original JSON field order.
 // If specificFiles is non-empty, only those filenames are read.
 // Otherwise all files whose names end in "settings.json" are included.
-// Returns an empty map (no error) when the directory cannot be opened.
+// Returns an empty map when the directory cannot be opened.
 func readSettingsFiles(dir string, specificFiles []string) map[string]string {
 	files := make(map[string]string)
 

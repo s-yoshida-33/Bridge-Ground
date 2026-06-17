@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-const maxLogBatch = 200
-
 // defaultSettingsDir holds the built-in settings directory for each known app.
 // %USERPROFILE% is expanded at runtime so the path works on any machine.
 // config.json settingsDir overrides these defaults when set.
@@ -412,10 +410,6 @@ func (m *Manager) uploadLogsForDevice(deviceID, date string, devices []config.Po
 			return
 		}
 		entries = logging.ReadAppLogsFromDir(app.LogDir, app.LogPrefix, fromDate, toDate)
-	}
-
-	if len(entries) > maxLogBatch {
-		entries = entries[len(entries)-maxLogBatch:]
 	}
 
 	logEntries := make([]LogEntry, len(entries))

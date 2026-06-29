@@ -7,7 +7,7 @@ import (
 )
 
 // Version is the application version
-var Version = "4.0.7"
+var Version = "4.0.8"
 
 type Config struct {
 	APISettings    APISettings    `json:"apiSettings"`

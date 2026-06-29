@@ -1,4 +1,4 @@
-$Version     = "4.0.6"
+$Version     = "4.0.7"
 $PackageName = "BridgeGround_v$Version"
 
 Set-Location $PSScriptRoot

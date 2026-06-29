@@ -6,6 +6,7 @@ import (
 	"bridge-ground/internal/logging"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -103,7 +104,13 @@ func (c *rtdbClient) connect(url, id string, onSignal func(string, string)) erro
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
 
-	resp, err := (&http.Client{}).Do(req)
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+	}
+	resp, err := (&http.Client{Transport: transport}).Do(req)
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -325,17 +326,18 @@ func (m *Manager) subscribeApprovedDevices() {
 }
 
 // handleSignal routes an incoming RTDB signal to the appropriate handler.
-// extra is encoded as "type:date" by handleSignalPut (e.g. "log:2026-06-05" or "screenshot:").
+// extra is encoded as "type:date:seq" by handleSignalPut (e.g. "log:2026-06-05:3" or "screenshot::0").
 func (m *Manager) handleSignal(deviceID, extra string) {
-	colonIdx := strings.IndexByte(extra, ':')
-	var signalType, date string
-	if colonIdx >= 0 {
-		signalType = extra[:colonIdx]
-		date       = extra[colonIdx+1:]
-	} else {
-		signalType = extra
+	parts := strings.SplitN(extra, ":", 3)
+	signalType := parts[0]
+	date := ""
+	var seq int64
+	if len(parts) > 1 {
+		date = parts[1]
 	}
-	_ = date
+	if len(parts) > 2 {
+		seq, _ = strconv.ParseInt(parts[2], 10, 64)
+	}
 
 	switch signalType {
 	case "screenshot":
@@ -359,7 +361,7 @@ func (m *Manager) handleSignal(deviceID, extra string) {
 		devices := make([]config.PortalDevice, len(m.cfg.PortalSettings.Devices))
 		copy(devices, m.cfg.PortalSettings.Devices)
 		m.mu.Unlock()
-		go m.uploadLogsForDevice(deviceID, date, devices)
+		go m.uploadLogsForDevice(deviceID, date, seq, devices)
 
 	case "settings":
 		m.rtdb.Delete("signals", deviceID)
@@ -378,8 +380,9 @@ func (m *Manager) handleSignal(deviceID, extra string) {
 }
 
 // uploadLogsForDevice reads log entries for the given date (YYYY-MM-DD; empty = today)
-// and writes them to RTDB logs/{deviceID}.
-func (m *Manager) uploadLogsForDevice(deviceID, date string, devices []config.PortalDevice) {
+// and writes them to RTDB logs/{deviceID}. seq is echoed back so Portal can correlate
+// the response to the exact request without relying on clock synchronization.
+func (m *Manager) uploadLogsForDevice(deviceID, date string, seq int64, devices []config.PortalDevice) {
 	var target *config.PortalDevice
 	for i := range devices {
 		if devices[i].DeviceID == deviceID {
@@ -406,7 +409,7 @@ func (m *Manager) uploadLogsForDevice(deviceID, date string, devices []config.Po
 		app, ok := m.findAppInfo(target.AppName, target.Hostname)
 		if !ok || app.LogDir == "" || app.LogPrefix == "" {
 			// Write empty result so the portal knows the request was handled.
-			_ = m.rtdb.Put("logs", deviceID, map[string]interface{}{"entries": []interface{}{}, "at": now.UnixMilli()})
+			_ = m.rtdb.Put("logs", deviceID, map[string]interface{}{"entries": []interface{}{}, "at": now.UnixMilli(), "seq": seq})
 			return
 		}
 		entries = logging.ReadAppLogsFromDir(app.LogDir, app.LogPrefix, fromDate, toDate)
@@ -420,6 +423,7 @@ func (m *Manager) uploadLogsForDevice(deviceID, date string, devices []config.Po
 	payload := map[string]interface{}{
 		"entries": logEntries,
 		"at":      now.UnixMilli(),
+		"seq":     seq,
 	}
 
 	if err := m.rtdb.Put("logs", deviceID, payload); err != nil {

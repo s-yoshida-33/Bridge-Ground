@@ -148,13 +148,15 @@ func (c *rtdbClient) connect(url, id string, onSignal func(string, string)) erro
 const signalMaxAgeSecs = 300
 
 // handleSignalPut decodes a Firebase RTDB SSE put payload and invokes onSignal.
-// extra is encoded as "type:date" (e.g. "log:2026-06-05" or "screenshot:").
+// extra is encoded as "type:date:seq" (e.g. "log:2026-06-05:3" or "screenshot::0").
+// seq is the monotonic sequence number written by Portal to correlate responses.
 func handleSignalPut(id, rawData string, onSignal func(string, string)) {
 	var msg struct {
 		Data *struct {
 			At   int64  `json:"at"`
 			Type string `json:"type"`
 			Date string `json:"date"`
+			Seq  int64  `json:"seq"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(rawData), &msg); err != nil {
@@ -170,5 +172,5 @@ func handleSignalPut(id, rawData string, onSignal func(string, string)) {
 			return
 		}
 	}
-	onSignal(id, msg.Data.Type+":"+msg.Data.Date)
+	onSignal(id, fmt.Sprintf("%s:%s:%d", msg.Data.Type, msg.Data.Date, msg.Data.Seq))
 }

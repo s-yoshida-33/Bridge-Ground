@@ -18,7 +18,7 @@ import (
 // %USERPROFILE% is expanded at runtime so the path works on any machine.
 // config.json settingsDir overrides these defaults when set.
 var defaultSettingsDir = map[string]string{
-	"Bridge-Ground":   ".",
+	"Bridge-Ground":   `%APPDATA%\TTI\BridgeGround`,
 	"Gido":            `%USERPROFILE%\AppData\Local\com.tti.gido`,
 	"Gido-Touch":      `%USERPROFILE%\AppData\Local\com.tti.gido-touch`,
 	"Gido-Touch-Mini": `%USERPROFILE%\AppData\Local\com.tti.gido-touch-mini`,

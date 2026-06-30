@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"time"
 )
 
@@ -20,6 +21,7 @@ type Server struct {
 	StartSyncFunc  func() (bool, string)
 	RestartFunc    func() error
 	AppVersion     string
+	BaseDir        string
 }
 
 func NewServer(cfg *config.Config, db *db.Manager) *Server {
@@ -29,6 +31,13 @@ func NewServer(cfg *config.Config, db *db.Manager) *Server {
 		Broker: NewEventBroker(),
 		Apps:   newAppRegistry(db),
 	}
+}
+
+func (s *Server) staticPath(rel string) string {
+	if s.BaseDir != "" {
+		return filepath.Join(s.BaseDir, rel)
+	}
+	return rel
 }
 
 func (s *Server) Start() {
@@ -72,11 +81,11 @@ func (s *Server) Start() {
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/x-icon")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
-		http.ServeFile(w, r, "src/assets/icon.ico")
+		http.ServeFile(w, r, s.staticPath("src/assets/icon.ico"))
 	})
 	mux.HandleFunc("/icon.svg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
-		http.ServeFile(w, r, "src/assets/icon.svg")
+		http.ServeFile(w, r, s.staticPath("src/assets/icon.svg"))
 	})
 
 	port := s.Config.ServerSettings.Port
@@ -590,10 +599,10 @@ func (s *Server) respondJSON(w http.ResponseWriter, data interface{}) {
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" || r.URL.Path == "/index.html" {
-		http.ServeFile(w, r, "src/ui/index.html")
+		http.ServeFile(w, r, s.staticPath("src/ui/index.html"))
 		return
 	}
-	fs := http.FileServer(http.Dir("./src/ui"))
+	fs := http.FileServer(http.Dir(s.staticPath("src/ui")))
 	fs.ServeHTTP(w, r)
 }
 

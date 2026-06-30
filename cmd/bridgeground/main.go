@@ -65,6 +65,9 @@ func main() {
 	// 3. Start HTTP Server (Goroutine)
 	srv = server.NewServer(globalCfg, dbMgr)
 	srv.AppVersion = config.Version
+	if exePath, err := os.Executable(); err == nil {
+		srv.BaseDir = filepath.Dir(exePath)
+	}
 	srv.SaveConfigFunc = func(newCfg config.Config) error {
 		if err := config.SaveConfig(&newCfg); err != nil {
 			return err

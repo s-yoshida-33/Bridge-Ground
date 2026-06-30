@@ -142,15 +142,15 @@ func main() {
 }
 
 func onReady() {
-	// Load icon from the exe's own directory (works regardless of working directory,
-	// including when launched from Windows autostart via the registry).
+	iconLoaded := false
 	if exePath, err := os.Executable(); err == nil {
 		iconPath := filepath.Join(filepath.Dir(exePath), "src", "assets", "icon.ico")
 		if iconData, err := os.ReadFile(iconPath); err == nil {
 			systray.SetIcon(iconData)
+			iconLoaded = true
 		}
 	}
-	if systray.GetTitle() == "" {
+	if !iconLoaded {
 		systray.SetTitle("BG")
 	}
 

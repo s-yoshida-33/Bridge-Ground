@@ -3,8 +3,6 @@ package main
 //go:generate goversioninfo -icon=../../src/assets/icon.ico
 
 import (
-	_ "embed"
-
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
 	"bridge-ground/internal/logging"
@@ -17,15 +15,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/getlantern/systray"
 	"github.com/zserge/lorca"
 )
-
-//go:embed ../../src/assets/icon.ico
-var iconData []byte
 
 // Globals
 var (
@@ -146,7 +142,18 @@ func main() {
 }
 
 func onReady() {
-	systray.SetIcon(iconData)
+	// Load icon from the exe's own directory (works regardless of working directory,
+	// including when launched from Windows autostart via the registry).
+	if exePath, err := os.Executable(); err == nil {
+		iconPath := filepath.Join(filepath.Dir(exePath), "src", "assets", "icon.ico")
+		if iconData, err := os.ReadFile(iconPath); err == nil {
+			systray.SetIcon(iconData)
+		}
+	}
+	if systray.GetTitle() == "" {
+		systray.SetTitle("BG")
+	}
+
 	systray.SetTooltip("BridgeGround Server")
 
 	mOpen := systray.AddMenuItem("設定画面を開く", "設定画面を表示します")

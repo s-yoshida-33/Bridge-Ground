@@ -2,32 +2,29 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
-
-	"golang.org/x/sys/windows/registry"
+	"syscall"
 )
 
-const (
-	runKey      = `Software\Microsoft\Windows\CurrentVersion\Run`
-	startupName = "Bridge Ground Auto Start"
-)
+const startupTaskName = "Bridge Ground Auto Start"
 
 func updateStartupRegistry(enabled bool) error {
-	key, err := registry.OpenKey(registry.CURRENT_USER, runKey, registry.SET_VALUE)
-	if err != nil {
-		return err
-	}
-	defer key.Close()
-
 	if enabled {
 		localAppData := os.Getenv("LOCALAPPDATA")
-		exePath := filepath.Join(localAppData, "Bridge Ground", "bridge-ground.exe")
-		return key.SetStringValue(startupName, exePath)
+		exePath := `"` + filepath.Join(localAppData, "Bridge Ground", "bridge-ground.exe") + `"`
+		cmd := exec.Command("schtasks", "/create",
+			"/tn", startupTaskName,
+			"/tr", exePath,
+			"/sc", "onlogon",
+			"/delay", "0001:00",
+			"/f",
+		)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		return cmd.Run()
 	}
-
-	err = key.DeleteValue(startupName)
-	if err == registry.ErrNotExist {
-		return nil
-	}
-	return err
+	cmd := exec.Command("schtasks", "/delete", "/tn", startupTaskName, "/f")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmd.Run()
+	return nil
 }

@@ -19,15 +19,15 @@ CloseApplications=yes
 Name: "desktopicon"; Description: "デスクトップにショートカットを作成する"; GroupDescription: "追加タスク:"
 
 [Files]
-Source: "dist\bridge-ground.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\src\*"; DestDir: "{app}\src"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\\bridge-ground.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\\src\\*"; DestDir: "{app}\\src"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Bridge Ground"; Filename: "{app}\bridge-ground.exe"
-Name: "{autodesktop}\Bridge Ground"; Filename: "{app}\bridge-ground.exe"; Tasks: desktopicon
+Name: "{autoprograms}\\Bridge Ground"; Filename: "{app}\\bridge-ground.exe"
+Name: "{autodesktop}\\Bridge Ground"; Filename: "{app}\\bridge-ground.exe"; Tasks: desktopicon
 
-[Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Bridge Ground Auto Start"; Flags: deletevalue uninsdeletevalue
+[UninstallRun]
+Filename: "{cmd}"; Parameters: "/c schtasks /delete /tn ""Bridge Ground Auto Start"" /f"; Flags: runhidden waituntilterminated
 
 [Run]
-Filename: "{app}\bridge-ground.exe"; Description: "Bridge Groundを起動する"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\\bridge-ground.exe"; Description: "Bridge Groundを起動する"; Flags: nowait postinstall skipifsilent

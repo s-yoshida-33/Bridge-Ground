@@ -435,6 +435,8 @@ func (m *Manager) uploadLogsForDevice(deviceID, date string, seq int64, devices 
 
 // uploadSettingsForDevice reads settings files and uploads them to Portal.
 // settingsDir and settingsFiles in config.json override the built-in defaults.
+// A settingsDir of "." is treated as empty (use the built-in default) to
+// preserve compatibility with configs created by the old package-based installer.
 func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []config.PortalDevice) {
 	var target *config.PortalDevice
 	for i := range devices {
@@ -447,9 +449,9 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 		return
 	}
 
-	// Use config.json value if set, otherwise fall back to built-in default.
+	// Use config.json value if set (and not the legacy "."), otherwise fall back to built-in default.
 	settingsDirRaw := target.SettingsDir
-	if settingsDirRaw == "" {
+	if settingsDirRaw == "" || settingsDirRaw == "." {
 		settingsDirRaw = defaultSettingsDir[target.AppName]
 	}
 	if settingsDirRaw == "" {
@@ -463,6 +465,8 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 	}
 
 	dir := resolveSettingsDir(settingsDirRaw)
+	logging.Info("PORTAL", fmt.Sprintf("Settings dir for %s: %s", target.AppName, dir))
+
 	files := readSettingsFiles(dir, settingsFiles)
 	if len(files) == 0 {
 		logging.Info("PORTAL", fmt.Sprintf("No settings files found in %s for %s", dir, target.AppName))

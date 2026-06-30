@@ -51,6 +51,15 @@ func main() {
 		logging.Info("CONFIG", "Config loaded successfully")
 	}
 
+	// Ensure Task Scheduler entry reflects the current config on every startup.
+	if globalCfg.SystemSettings.RunOnStartup {
+		if err := updateStartupRegistry(true); err != nil {
+			logging.Warn("STARTUP", fmt.Sprintf("Failed to register autostart task: %v", err))
+		} else {
+			logging.Info("STARTUP", "Autostart task registered")
+		}
+	}
+
 	// 2. Initialize Managers
 	dbMgr = db.NewManager()
 	if err := dbMgr.Connect(); err != nil {

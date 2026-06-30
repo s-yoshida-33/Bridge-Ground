@@ -1,12 +1,12 @@
 [Setup]
 AppId={{6E8A1F3C-2B4D-4A7E-9C5F-D8E1234B567A}
 AppName=Bridge Ground
-AppVersion=4.0.8
+AppVersion=4.1.0
 AppPublisher=Toei Techno International Inc.
 DefaultDirName={localappdata}\Bridge Ground
 PrivilegesRequired=lowest
 OutputDir=..\release
-OutputBaseFilename=BridgeGroundSetup-x64-4.0.8
+OutputBaseFilename=BridgeGroundSetup-x64-4.1.0
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible

@@ -3,6 +3,8 @@ package main
 //go:generate goversioninfo -icon=../../src/assets/icon.ico
 
 import (
+	_ "embed"
+
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
 	"bridge-ground/internal/logging"
@@ -21,6 +23,9 @@ import (
 	"github.com/getlantern/systray"
 	"github.com/zserge/lorca"
 )
+
+//go:embed ../../src/assets/icon.ico
+var iconData []byte
 
 // Globals
 var (
@@ -141,14 +146,7 @@ func main() {
 }
 
 func onReady() {
-	iconPath := "src/assets/icon.ico"
-	iconData, err := os.ReadFile(iconPath)
-	if err == nil {
-		systray.SetIcon(iconData)
-	} else {
-		systray.SetTitle("BG")
-	}
-
+	systray.SetIcon(iconData)
 	systray.SetTooltip("BridgeGround Server")
 
 	mOpen := systray.AddMenuItem("設定画面を開く", "設定画面を表示します")
@@ -205,7 +203,6 @@ func openUI() {
 
 	newUI.Bind("go_saveConfig", func(newCfg config.Config) error {
 		// Preserve password when UI sends empty string (masked/non-edit state).
-		// Mirrors the same guard in handleConfig POST for HTTP mode.
 		if newCfg.APISettings.Password == "" {
 			newCfg.APISettings.Password = globalCfg.APISettings.Password
 		}

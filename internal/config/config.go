@@ -62,86 +62,65 @@ type PortalSettings struct {
 
 // PortalDevice stores per-device Portal CMS credentials.
 type PortalDevice struct {
-	AppName      string   `json:"appName"`
-	Hostname     string   `json:"hostname"`
-	PendingID    string   `json:"pendingId,omitempty"`
-	DeviceID     string   `json:"deviceId,omitempty"`
-	DeviceToken  string   `json:"deviceToken,omitempty"`
-	SettingsDir  string   `json:"settingsDir,omitempty"`
+	AppName       string   `json:"appName"`
+	Hostname      string   `json:"hostname"`
+	PendingID     string   `json:"pendingId,omitempty"`
+	DeviceID      string   `json:"deviceId,omitempty"`
+	DeviceToken   string   `json:"deviceToken,omitempty"`
+	SettingsDir   string   `json:"settingsDir,omitempty"`
 	SettingsFiles []string `json:"settingsFiles,omitempty"`
 }
 
-// configFilePath returns the canonical path for config.json.
-// Using the executable's directory ensures LoadConfig and SaveConfig
-// always operate on the same file regardless of the working directory.
+// configFilePath returns the canonical path for config.json under %APPDATA%\TTI\BridgeGround\.
 func configFilePath() string {
-	if exePath, err := os.Executable(); err == nil {
-		return filepath.Join(filepath.Dir(exePath), "config.json")
-	}
-	return "config.json"
+	appData, _ := os.UserConfigDir()
+	dir := filepath.Join(appData, "TTI", "BridgeGround")
+	os.MkdirAll(dir, 0755)
+	return filepath.Join(dir, "config.json")
 }
 
-// LoadConfig reads the config from the standard location
+func defaultConfig() *Config {
+	return &Config{
+		APISettings: APISettings{
+			BaseURL: "https://api.example.com/api/",
+		},
+		SyncSettings: SyncSettings{
+			SyncIntervalMinutes: 60,
+			SyncOnStartup:       false,
+			AutoSyncEnabled:     false,
+			SyncTargets: &SyncTargets{
+				Shops:     false,
+				ShopNews:  false,
+				EventNews: false,
+				Specials:  false,
+				Sales:     false,
+				ShopApp:   false,
+				Genres:    false,
+				Floors:    false,
+			},
+		},
+		ServerSettings: ServerSettings{
+			Port: 8090,
+		},
+		SystemSettings: SystemSettings{
+			RunOnStartup: false,
+		},
+		PortalSettings: PortalSettings{
+			StatusReportIntervalSecs: 3600,
+			Devices:                  []PortalDevice{},
+		},
+	}
+}
+
+// LoadConfig reads config from %APPDATA%\TTI\BridgeGround\config.json.
+// Returns defaults if the file does not yet exist.
 func LoadConfig() (*Config, error) {
-	// Priority: {exeDir}/config.json → config.json (cwd) → default template
-	primary := configFilePath()
-	paths := []string{primary, "config.json", "src/config/api_config_default.json"}
-
-	// Deduplicate in case exeDir == cwd
-	seen := map[string]bool{}
-	var unique []string
-	for _, p := range paths {
-		if abs, err := filepath.Abs(p); err == nil {
-			if !seen[abs] {
-				seen[abs] = true
-				unique = append(unique, p)
-			}
-		}
+	path := configFilePath()
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return defaultConfig(), nil
 	}
 
-	var configPath string
-	for _, p := range unique {
-		if _, err := os.Stat(p); err == nil {
-			configPath = p
-			break
-		}
-	}
-
-	if configPath == "" {
-		// Return default if not found
-		return &Config{
-			APISettings: APISettings{
-				BaseURL: "https://api.example.com/api/", // Placeholder
-			},
-			SyncSettings: SyncSettings{
-				SyncIntervalMinutes: 60,
-				SyncOnStartup:       false,
-				AutoSyncEnabled:     false,
-				SyncTargets: &SyncTargets{
-					Shops:     false,
-					ShopNews:  false,
-					EventNews: false,
-					Specials:  false,
-					Sales:     false,
-					ShopApp:   false,
-					Genres:    false,
-					Floors:    false,
-				},
-			},
-			ServerSettings: ServerSettings{
-				Port: 8090,
-			},
-			SystemSettings: SystemSettings{
-				RunOnStartup: false,
-			},
-			PortalSettings: PortalSettings{
-				StatusReportIntervalSecs: 3600,
-				Devices:                  []PortalDevice{},
-			},
-		}, nil
-	}
-
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -151,18 +130,8 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	// Set default sync targets if not present in config
 	if cfg.SyncSettings.SyncTargets == nil {
-		cfg.SyncSettings.SyncTargets = &SyncTargets{
-			Shops:     false,
-			ShopNews:  false,
-			EventNews: false,
-			Specials:  false,
-			Sales:     false,
-			ShopApp:   false,
-			Genres:    false,
-			Floors:    false,
-		}
+		cfg.SyncSettings.SyncTargets = &SyncTargets{}
 	}
 	if cfg.PortalSettings.Devices == nil {
 		cfg.PortalSettings.Devices = []PortalDevice{}

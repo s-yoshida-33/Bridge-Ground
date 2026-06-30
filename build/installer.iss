@@ -13,6 +13,10 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 UninstallDisplayName=Bridge Ground
+CloseApplications=yes
+
+[Tasks]
+Name: "desktopicon"; Description: "デスクトップにショートカットを作成する"; GroupDescription: "追加タスク:"
 
 [Files]
 Source: "dist\bridge-ground.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -20,6 +24,7 @@ Source: "dist\src\*"; DestDir: "{app}\src"; Flags: ignoreversion recursesubdirs 
 
 [Icons]
 Name: "{autoprograms}\Bridge Ground"; Filename: "{app}\bridge-ground.exe"
+Name: "{autodesktop}\Bridge Ground"; Filename: "{app}\bridge-ground.exe"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Bridge Ground Auto Start"; Flags: deletevalue uninsdeletevalue

@@ -4,7 +4,7 @@ param(
 )
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    Write-Error "Invalid version format. Use MAJOR.MINOR.PATCH (e.g. 4.0.4)"
+    Write-Error "Invalid version format. Use MAJOR.MINOR.PATCH (e.g. 4.1.0)"
     exit 1
 }
 
@@ -34,11 +34,19 @@ $c = $c -replace '"ProductVersion": "\d+\.\d+\.\d+\.\d+"', ('"ProductVersion": "
 $c | Set-Content $f
 Write-Host "  [OK] $f"
 
-# package.ps1
-$f = 'package.ps1'
-(Get-Content $f) -replace '\$Version\s*=\s*"[^"]+"', ('$Version     = "' + $Version + '"') |
+# build/build-installer.ps1
+$f = 'build\build-installer.ps1'
+(Get-Content $f) -replace '\$Version\s*=\s*"[^"]+"', ('$Version    = "' + $Version + '"') |
     Set-Content $f
 Write-Host "  [OK] $f"
 
+# build/installer.iss
+$f = 'build\installer.iss'
+$c = Get-Content $f
+$c = $c -replace '^AppVersion=.+',          ('AppVersion=' + $Version)
+$c = $c -replace '^OutputBaseFilename=.+',  ('OutputBaseFilename=BridgeGroundSetup-x64-' + $Version)
+$c | Set-Content $f
+Write-Host "  [OK] $f"
+
 Write-Host ""
-Write-Host "Done. Build with: package.bat (or package.ps1)"
+Write-Host "Done. Build installer with: .\build\build-installer.ps1"

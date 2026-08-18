@@ -7,21 +7,11 @@ import (
 	"context"
 	"os"
 	"os/exec"
-	"strings"
 	"syscall"
-)
+	"unicode/utf8"
 
-// encodingPreamble forces both the console output codepage and PowerShell's own
-// text encoding to UTF-8 before the script body runs. Without this, on a
-// Japanese-locale (or other non-UTF-8 ACP) Windows machine, native console tools
-// (ipconfig, systeminfo, etc.) emit their output in the system's legacy codepage
-// (e.g. Shift-JIS/CP932) rather than UTF-8, which corrupts non-ASCII text once
-// captured and reinterpreted as UTF-8 (mojibake in the Portal UI). "chcp 65001"
-// changes the codepage native commands honor; the Console/$OutputEncoding
-// assignments cover PowerShell's own cmdlet-to-text output.
-const encodingPreamble = "chcp 65001 > $null\r\n" +
-	"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\r\n" +
-	"$OutputEncoding = [System.Text.Encoding]::UTF8\r\n"
+	"golang.org/x/text/encoding/japanese"
+)
 
 // runPowerShellScript writes script to a temporary .ps1 file and executes it via
 // powershell.exe with the window hidden, so it doesn't steal focus from the
@@ -39,7 +29,7 @@ func runPowerShellScript(ctx context.Context, script, outputDir string) (stdout,
 	// UTF-8 BOM so Windows PowerShell 5.1 parses the file itself as UTF-8 — without
 	// it, a BOM-less .ps1 is read using the system's legacy codepage, which would
 	// mangle any non-ASCII literals in the script source on a non-UTF-8-ACP machine.
-	content := "\xEF\xBB\xBF" + encodingPreamble + script
+	content := "\xEF\xBB\xBF" + script
 	if _, werr := tmpFile.WriteString(content); werr != nil {
 		tmpFile.Close()
 		return "", "", -1, werr
@@ -57,14 +47,33 @@ func runPowerShellScript(ctx context.Context, script, outputDir string) (stdout,
 	cmd.Stderr = &stderrBuf
 
 	runErr := cmd.Run()
-	// [Console]::OutputEncoding can itself emit a leading BOM into the redirected
-	// stream on some PowerShell versions; strip it so it doesn't show up as a
-	// stray character in the captured output.
-	stdout = strings.TrimPrefix(stdoutBuf.String(), "\uFEFF")
-	stderr = strings.TrimPrefix(stderrBuf.String(), "\uFEFF")
+	stdout = decodeConsoleOutput(stdoutBuf.String())
+	stderr = decodeConsoleOutput(stderrBuf.String())
 	if cmd.ProcessState != nil {
 		return stdout, stderr, cmd.ProcessState.ExitCode(), nil
 	}
 	// Never started (e.g. powershell.exe missing) rather than a non-zero exit.
 	return stdout, stderr, -1, runErr
+}
+
+// decodeConsoleOutput returns s as valid UTF-8. Native console tools invoked by
+// a script (ipconfig, systeminfo, etc.) emit text in the system's legacy
+// codepage — Shift-JIS/CP932 on Japanese-locale Windows — regardless of the
+// PowerShell process's own encoding settings (forcing the console codepage via
+// "chcp 65001"/[Console]::OutputEncoding was tried and found insufficient: it
+// only changed which language a native tool's own resource strings render in,
+// not the encoding of dynamic values such as localized adapter names). If s
+// isn't already valid UTF-8, it's almost certainly Shift-JIS instead, so decode
+// it as such; this is safe even for output mixing plain ASCII (English labels,
+// values) with genuine Shift-JIS bytes, since the ASCII byte range is identical
+// in both encodings.
+func decodeConsoleOutput(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	decoded, decErr := japanese.ShiftJIS.NewDecoder().String(s)
+	if decErr != nil {
+		return s
+	}
+	return decoded
 }

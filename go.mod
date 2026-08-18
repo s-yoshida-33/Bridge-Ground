@@ -6,6 +6,7 @@ require (
 	github.com/getlantern/systray v1.2.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/zserge/lorca v0.1.10
+	golang.org/x/text v0.24.0
 	modernc.org/sqlite v1.40.1
 )
 

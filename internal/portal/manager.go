@@ -4,6 +4,7 @@ import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/logging"
 	"bridge-ground/internal/server"
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -376,6 +377,18 @@ func (m *Manager) handleSignal(deviceID, extra string) {
 		copy(devices, m.cfg.PortalSettings.Devices)
 		m.mu.Unlock()
 		go m.uploadSettingsForDevice(bgToken, deviceID, devices)
+
+	case "script":
+		m.rtdb.Delete("signals", deviceID)
+		m.mu.Lock()
+		bg := m.selfDevice()
+		if bg == nil || bg.DeviceToken == "" {
+			m.mu.Unlock()
+			return
+		}
+		bgToken := bg.DeviceToken
+		m.mu.Unlock()
+		go m.runScriptForDevice(bgToken, deviceID)
 	}
 }
 
@@ -480,6 +493,51 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 		logging.Warn("PORTAL", fmt.Sprintf("Settings upload failed for %s: %v", target.AppName, err))
 	} else {
 		logging.Info("PORTAL", fmt.Sprintf("Settings uploaded for %s (%s): %d file(s)", target.AppName, target.Hostname, len(files)))
+	}
+}
+
+// scriptExecTimeout bounds how long a single Portal-issued script may run before
+// it is killed, so a hanging script can't block this goroutine forever.
+const scriptExecTimeout = 5 * time.Minute
+
+// runScriptForDevice fetches a pending script for deviceID from Portal and runs it.
+// The script always executes on this machine regardless of which logical device
+// deviceID refers to — Bridge-Ground and the floor-guide app it manages share one
+// host — so unlike uploadScreenshotForDevice/uploadSettingsForDevice there is no
+// per-app target lookup. Called from a goroutine.
+func (m *Manager) runScriptForDevice(bgToken, deviceID string) {
+	pending, err := m.client.GetPendingScript(bgToken, deviceID)
+	if err != nil {
+		logging.Warn("PORTAL", fmt.Sprintf("Script fetch failed for %s: %v", deviceID, err))
+		return
+	}
+	if pending == nil || !pending.Pending {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), scriptExecTimeout)
+	defer cancel()
+
+	start := time.Now()
+	stdout, stderr, exitCode, runErr := runPowerShellScript(ctx, pending.Script)
+	durationMs := time.Since(start).Milliseconds()
+	if runErr != nil {
+		if stderr != "" {
+			stderr += "\n"
+		}
+		stderr += runErr.Error()
+	}
+
+	if err := m.client.SendScriptResult(bgToken, deviceID, ScriptResultRequest{
+		Seq:        pending.Seq,
+		ExitCode:   exitCode,
+		Stdout:     stdout,
+		Stderr:     stderr,
+		DurationMs: durationMs,
+	}); err != nil {
+		logging.Warn("PORTAL", fmt.Sprintf("Script result upload failed for %s: %v", deviceID, err))
+	} else {
+		logging.Info("PORTAL", fmt.Sprintf("Script executed for %s (exit=%d, %dms)", deviceID, exitCode, durationMs))
 	}
 }
 

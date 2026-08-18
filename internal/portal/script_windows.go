@@ -13,7 +13,9 @@ import (
 // runPowerShellScript writes script to a temporary .ps1 file and executes it via
 // powershell.exe with the window hidden, so it doesn't steal focus from the
 // floor-guide app running on the same screen. The temp file is removed afterward.
-func runPowerShellScript(ctx context.Context, script string) (stdout, stderr string, exitCode int, err error) {
+// outputDir is exposed to the script as the BG_SCRIPT_OUTPUT_DIR environment
+// variable — a script that wants to hand back a file writes it there.
+func runPowerShellScript(ctx context.Context, script, outputDir string) (stdout, stderr string, exitCode int, err error) {
 	tmpFile, err := os.CreateTemp("", "bg-script-*.ps1")
 	if err != nil {
 		return "", "", -1, err
@@ -31,6 +33,7 @@ func runPowerShellScript(ctx context.Context, script string) (stdout, stderr str
 
 	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmpPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmd.Env = append(os.Environ(), scriptOutputDirEnvVar+"="+outputDir)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf

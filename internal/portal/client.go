@@ -98,6 +98,23 @@ type SettingsRequest struct {
 	Files    map[string]string `json:"files"`
 }
 
+// ScriptPendingResponse is the JSON response from GET /v1/script/pending.
+type ScriptPendingResponse struct {
+	Pending bool   `json:"pending"`
+	Script  string `json:"script,omitempty"`
+	Seq     int64  `json:"seq,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// ScriptResultRequest is the body for POST /v1/script/result.
+type ScriptResultRequest struct {
+	Seq        int64  `json:"seq"`
+	ExitCode   int    `json:"exitCode"`
+	Stdout     string `json:"stdout"`
+	Stderr     string `json:"stderr"`
+	DurationMs int64  `json:"durationMs"`
+}
+
 // Register calls POST /v1/register with a registration token.
 func (c *Client) Register(token string, req RegisterRequest) (*RegisterResponse, error) {
 	body, _ := json.Marshal(req)
@@ -249,6 +266,60 @@ func (c *Client) UploadSettings(deviceToken string, req SettingsRequest) error {
 		}
 		json.NewDecoder(resp.Body).Decode(&result)
 		return fmt.Errorf("settings upload failed (status %d): %s", resp.StatusCode, result.Error)
+	}
+	return nil
+}
+
+// GetPendingScript calls GET /v1/script/pending?deviceId=xxx to fetch the script body
+// Portal wants this device to run, if any.
+func (c *Client) GetPendingScript(deviceToken, deviceID string) (*ScriptPendingResponse, error) {
+	url := fmt.Sprintf("%s/v1/script/pending?deviceId=%s", c.baseURL, deviceID)
+	httpReq, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+deviceToken)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result ScriptPendingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode error (status %d): %w", resp.StatusCode, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("script pending fetch failed (status %d): %s", resp.StatusCode, result.Error)
+	}
+	return &result, nil
+}
+
+// SendScriptResult calls POST /v1/script/result?deviceId=xxx with the outcome of a
+// script BG executed.
+func (c *Client) SendScriptResult(deviceToken, deviceID string, req ScriptResultRequest) error {
+	body, _ := json.Marshal(req)
+	url := fmt.Sprintf("%s/v1/script/result?deviceId=%s", c.baseURL, deviceID)
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+deviceToken)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var result struct {
+			Error string `json:"error"`
+		}
+		json.NewDecoder(resp.Body).Decode(&result)
+		return fmt.Errorf("script result upload failed (status %d): %s", resp.StatusCode, result.Error)
 	}
 	return nil
 }

@@ -2,7 +2,7 @@ param(
     [string]$IsccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 )
 
-$Version    = "4.1.0"
+$Version    = "4.1.1"
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot   = Split-Path -Parent $ScriptDir
 $DistDir    = Join-Path $ScriptDir "dist"

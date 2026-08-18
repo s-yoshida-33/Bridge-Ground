@@ -7,8 +7,21 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 )
+
+// encodingPreamble forces both the console output codepage and PowerShell's own
+// text encoding to UTF-8 before the script body runs. Without this, on a
+// Japanese-locale (or other non-UTF-8 ACP) Windows machine, native console tools
+// (ipconfig, systeminfo, etc.) emit their output in the system's legacy codepage
+// (e.g. Shift-JIS/CP932) rather than UTF-8, which corrupts non-ASCII text once
+// captured and reinterpreted as UTF-8 (mojibake in the Portal UI). "chcp 65001"
+// changes the codepage native commands honor; the Console/$OutputEncoding
+// assignments cover PowerShell's own cmdlet-to-text output.
+const encodingPreamble = "chcp 65001 > $null\r\n" +
+	"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\r\n" +
+	"$OutputEncoding = [System.Text.Encoding]::UTF8\r\n"
 
 // runPowerShellScript writes script to a temporary .ps1 file and executes it via
 // powershell.exe with the window hidden, so it doesn't steal focus from the
@@ -23,7 +36,11 @@ func runPowerShellScript(ctx context.Context, script, outputDir string) (stdout,
 	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath)
 
-	if _, werr := tmpFile.WriteString(script); werr != nil {
+	// UTF-8 BOM so Windows PowerShell 5.1 parses the file itself as UTF-8 — without
+	// it, a BOM-less .ps1 is read using the system's legacy codepage, which would
+	// mangle any non-ASCII literals in the script source on a non-UTF-8-ACP machine.
+	content := "\xEF\xBB\xBF" + encodingPreamble + script
+	if _, werr := tmpFile.WriteString(content); werr != nil {
 		tmpFile.Close()
 		return "", "", -1, werr
 	}
@@ -40,9 +57,14 @@ func runPowerShellScript(ctx context.Context, script, outputDir string) (stdout,
 	cmd.Stderr = &stderrBuf
 
 	runErr := cmd.Run()
+	// [Console]::OutputEncoding can itself emit a leading BOM into the redirected
+	// stream on some PowerShell versions; strip it so it doesn't show up as a
+	// stray character in the captured output.
+	stdout = strings.TrimPrefix(stdoutBuf.String(), "\uFEFF")
+	stderr = strings.TrimPrefix(stderrBuf.String(), "\uFEFF")
 	if cmd.ProcessState != nil {
-		return stdoutBuf.String(), stderrBuf.String(), cmd.ProcessState.ExitCode(), nil
+		return stdout, stderr, cmd.ProcessState.ExitCode(), nil
 	}
 	// Never started (e.g. powershell.exe missing) rather than a non-zero exit.
-	return stdoutBuf.String(), stderrBuf.String(), -1, runErr
+	return stdout, stderr, -1, runErr
 }

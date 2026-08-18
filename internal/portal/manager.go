@@ -500,6 +500,21 @@ func (m *Manager) uploadSettingsForDevice(bgToken, deviceID string, devices []co
 // it is killed, so a hanging script can't block this goroutine forever.
 const scriptExecTimeout = 5 * time.Minute
 
+// scriptOutputDirRaw is the fixed directory a script's output artifacts are
+// expected to be written to (a single well-known location, not a per-run
+// temp dir, so ad hoc scripts can hardcode it). %APPDATA% is expanded at
+// runtime via resolveSettingsDir/expandEnvVars.
+const scriptOutputDirRaw = `%APPDATA%\TTI\BridgeGround\script-output`
+
+// scriptOutputDirEnvVar is the environment variable name exposing the resolved
+// scriptOutputDirRaw path to a running script, so it doesn't need to hardcode it.
+const scriptOutputDirEnvVar = "BG_SCRIPT_OUTPUT_DIR"
+
+const (
+	maxScriptArtifactFiles = 20               // cap on how many output files are picked up per run
+	maxScriptArtifactBytes = 25 * 1024 * 1024 // matches the Worker's per-file upload limit
+)
+
 // runScriptForDevice fetches a pending script for deviceID from Portal and runs it.
 // The script always executes on this machine regardless of which logical device
 // deviceID refers to — Bridge-Ground and the floor-guide app it manages share one
@@ -515,11 +530,19 @@ func (m *Manager) runScriptForDevice(bgToken, deviceID string) {
 		return
 	}
 
+	outDir := resolveSettingsDir(scriptOutputDirRaw)
+	if err := os.RemoveAll(outDir); err != nil {
+		logging.Warn("PORTAL", fmt.Sprintf("Failed to clear script output dir %s: %v", outDir, err))
+	}
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		logging.Warn("PORTAL", fmt.Sprintf("Failed to create script output dir %s: %v", outDir, err))
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), scriptExecTimeout)
 	defer cancel()
 
 	start := time.Now()
-	stdout, stderr, exitCode, runErr := runPowerShellScript(ctx, pending.Script)
+	stdout, stderr, exitCode, runErr := runPowerShellScript(ctx, pending.Script, outDir)
 	durationMs := time.Since(start).Milliseconds()
 	if runErr != nil {
 		if stderr != "" {
@@ -528,17 +551,63 @@ func (m *Manager) runScriptForDevice(bgToken, deviceID string) {
 		stderr += runErr.Error()
 	}
 
+	artifacts := m.collectScriptArtifacts(bgToken, deviceID, pending.Seq, outDir)
+	_ = os.RemoveAll(outDir) // best-effort cleanup; next run recreates it
+
 	if err := m.client.SendScriptResult(bgToken, deviceID, ScriptResultRequest{
 		Seq:        pending.Seq,
 		ExitCode:   exitCode,
 		Stdout:     stdout,
 		Stderr:     stderr,
 		DurationMs: durationMs,
+		Artifacts:  artifacts,
 	}); err != nil {
 		logging.Warn("PORTAL", fmt.Sprintf("Script result upload failed for %s: %v", deviceID, err))
 	} else {
-		logging.Info("PORTAL", fmt.Sprintf("Script executed for %s (exit=%d, %dms)", deviceID, exitCode, durationMs))
+		logging.Info("PORTAL", fmt.Sprintf("Script executed for %s (exit=%d, %dms, %d artifact(s))", deviceID, exitCode, durationMs, len(artifacts)))
 	}
+}
+
+// collectScriptArtifacts uploads each top-level file found in dir and returns
+// metadata for the ones that succeeded. Oversized or excess files are skipped
+// with a warning log rather than failing the whole result.
+func (m *Manager) collectScriptArtifacts(bgToken, deviceID string, seq int64, dir string) []ScriptArtifact {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	var artifacts []ScriptArtifact
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if len(artifacts) >= maxScriptArtifactFiles {
+			logging.Warn("PORTAL", fmt.Sprintf("Script output dir has more than %d files for %s — remaining files skipped", maxScriptArtifactFiles, deviceID))
+			break
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.Size() > maxScriptArtifactBytes {
+			logging.Warn("PORTAL", fmt.Sprintf("Script artifact %s (%d bytes) exceeds %d bytes — skipped", entry.Name(), info.Size(), maxScriptArtifactBytes))
+			continue
+		}
+
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Failed to read script artifact %s: %v", entry.Name(), err))
+			continue
+		}
+		if err := m.client.UploadScriptArtifact(bgToken, deviceID, seq, entry.Name(), data); err != nil {
+			logging.Warn("PORTAL", fmt.Sprintf("Failed to upload script artifact %s: %v", entry.Name(), err))
+			continue
+		}
+		artifacts = append(artifacts, ScriptArtifact{Name: entry.Name(), Size: info.Size()})
+	}
+	return artifacts
 }
 
 // resolveSettingsDir expands environment variables and resolves relative paths

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"time"
 )
@@ -106,13 +107,20 @@ type ScriptPendingResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// ScriptArtifact is metadata for one file uploaded via UploadScriptArtifact.
+type ScriptArtifact struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
 // ScriptResultRequest is the body for POST /v1/script/result.
 type ScriptResultRequest struct {
-	Seq        int64  `json:"seq"`
-	ExitCode   int    `json:"exitCode"`
-	Stdout     string `json:"stdout"`
-	Stderr     string `json:"stderr"`
-	DurationMs int64  `json:"durationMs"`
+	Seq        int64            `json:"seq"`
+	ExitCode   int              `json:"exitCode"`
+	Stdout     string           `json:"stdout"`
+	Stderr     string           `json:"stderr"`
+	DurationMs int64            `json:"durationMs"`
+	Artifacts  []ScriptArtifact `json:"artifacts,omitempty"`
 }
 
 // Register calls POST /v1/register with a registration token.
@@ -320,6 +328,34 @@ func (c *Client) SendScriptResult(deviceToken, deviceID string, req ScriptResult
 		}
 		json.NewDecoder(resp.Body).Decode(&result)
 		return fmt.Errorf("script result upload failed (status %d): %s", resp.StatusCode, result.Error)
+	}
+	return nil
+}
+
+// UploadScriptArtifact calls POST /v1/script/artifact?deviceId=xxx&seq=xxx&name=xxx with
+// the raw bytes of one file the script wrote to its output directory.
+func (c *Client) UploadScriptArtifact(deviceToken, deviceID string, seq int64, name string, data []byte) error {
+	reqURL := fmt.Sprintf("%s/v1/script/artifact?deviceId=%s&seq=%d&name=%s",
+		c.baseURL, neturl.QueryEscape(deviceID), seq, neturl.QueryEscape(name))
+	httpReq, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/octet-stream")
+	httpReq.Header.Set("Authorization", "Bearer "+deviceToken)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var result struct {
+			Error string `json:"error"`
+		}
+		json.NewDecoder(resp.Body).Decode(&result)
+		return fmt.Errorf("script artifact upload failed (status %d): %s", resp.StatusCode, result.Error)
 	}
 	return nil
 }

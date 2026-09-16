@@ -162,13 +162,20 @@ func (r *AppRegistry) persistApp(a AppInfo) {
 	}
 }
 
-// Heartbeat updates the last-seen timestamp for an app.
+// Heartbeat updates the last-seen timestamp for an app. Returns false if the
+// app is unknown, or if it has no StartedAt on record — which happens right
+// after a Bridge-Ground restart, since appRecordToInfo intentionally does not
+// restore StartedAt from DB. Returning false here makes the caller treat this
+// like a failed heartbeat and fall back to Register(), which resupplies the
+// app's real startup time so uptime reporting recovers instead of staying
+// stuck reporting zero uptime forever.
 func (r *AppRegistry) Heartbeat(id string) bool {
 	r.mu.Lock()
 	a, ok := r.apps[id]
 	if ok {
 		a.LastSeen = time.Now()
 	}
+	needsReregister := ok && a.StartedAt == nil
 	r.mu.Unlock()
 	if !ok {
 		return false
@@ -177,7 +184,7 @@ func (r *AppRegistry) Heartbeat(id string) bool {
 		lastSeen := a.LastSeen.UTC().Format(time.RFC3339)
 		go r.db.UpdateAppLastSeen(id, lastSeen)
 	}
-	return true
+	return !needsReregister
 }
 
 // List returns all registered apps with computed Online status.
@@ -347,7 +354,9 @@ func (s *Server) handleAppsDetail(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(sub, "/heartbeat") && r.Method == http.MethodPost {
 		id := strings.TrimSuffix(sub, "/heartbeat")
 		if !s.Apps.Heartbeat(id) {
-			http.Error(w, "app not found", http.StatusNotFound)
+			// Also returned when the app is known but missing StartedAt (see
+			// Heartbeat's doc comment) so the client falls back to Register().
+			http.Error(w, "app not found or needs re-registration", http.StatusNotFound)
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})

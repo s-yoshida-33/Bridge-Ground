@@ -926,7 +926,11 @@ func (m *Manager) syncShopNews() (int, error) {
 
 			if item.Photo1 != "" {
 				item.Photo1RemoteURL = m.resolveURL(item.Photo1)
-				item.Photo1LocalPath = m.resolveImageLocalPath(baseFileDir, "news", item.ShopID, item.Photo1)
+				// Keyed by ShopNewsID (not ShopID): a shop can post multiple news items
+				// whose photo filenames collide, so the news item's own unique ID keeps
+				// each one's image in a separate directory instead of overwriting a
+				// shared one. Matches the pattern syncEventNews() uses with EventID.
+				item.Photo1LocalPath = m.resolveImageLocalPath(baseFileDir, "news", item.ShopNewsID, item.Photo1)
 				downloadJobs = append(downloadJobs, DownloadJob{RemoteURL: item.Photo1RemoteURL, LocalPath: item.Photo1LocalPath})
 			}
 			if item.ShopLogo != "" {

@@ -69,6 +69,12 @@ func main() {
 	defer dbMgr.Close()
 	logging.Info("DB", "Database connected")
 
+	// Create tables up front: registered_apps must exist before the AppRegistry
+	// loads from DB, even on devices that never run a data sync.
+	if err := dbMgr.InitializeSchema(); err != nil {
+		logging.Error("DB", fmt.Sprintf("Failed to initialize schema: %v", err))
+	}
+
 	syncMgr = appSync.NewManager(globalCfg, dbMgr)
 
 	// 3. Start HTTP Server (Goroutine)

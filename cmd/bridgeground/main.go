@@ -6,6 +6,7 @@ import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
 	"bridge-ground/internal/logging"
+	"bridge-ground/internal/lorca"
 	"bridge-ground/internal/portal"
 	"bridge-ground/internal/server"
 	appSync "bridge-ground/internal/sync"
@@ -20,7 +21,6 @@ import (
 	"time"
 
 	"github.com/getlantern/systray"
-	"github.com/zserge/lorca"
 )
 
 // Globals
@@ -307,13 +307,14 @@ func openUI() {
 }
 
 const (
-	lorcaStartAttempts   = 3
+	lorcaStartAttempts   = 2
 	lorcaStartRetryDelay = 2 * time.Second
 )
 
-// startLorca launches the browser window, retrying because Edge sometimes
-// exits right after launch (Lorca then fails with EOF), most often right after
-// install or restartSelf while the previous instance's window is still closing.
+// startLorca launches the browser window, retrying once on failure. Edge
+// relaunching itself (formerly an EOF failure) is handled inside
+// internal/lorca, and each attempt may wait up to its DevTools timeout, so
+// attempts are kept low before falling back to the default browser.
 func startLorca() (lorca.UI, error) {
 	var err error
 	for attempt := 1; attempt <= lorcaStartAttempts; attempt++ {

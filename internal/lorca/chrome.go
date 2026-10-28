@@ -1,3 +1,13 @@
+// Vendored from github.com/zserge/lorca v0.1.10 (MIT, see LICENSE).
+//
+// Bridge-Ground changes (Issue #15): Edge sometimes relaunches itself right
+// after start, so the process we spawned exits (stderr EOF) while the
+// relaunched browser opens the window and the DevTools port. To survive that:
+//   - the DevTools URL is taken from stderr or from <user-data-dir>/DevToolsActivePort,
+//     whichever appears first, and our process exiting is not treated as failure
+//   - c.done is closed when the DevTools connection ends, not when our process exits
+//   - kill() asks the browser to close via Browser.close before killing our process
+
 package lorca
 
 import (
@@ -8,13 +18,21 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"golang.org/x/net/websocket"
 )
+
+// devToolsTimeout bounds how long newChromeWithArgs waits for the DevTools
+// endpoint to become available.
+const devToolsTimeout = 15 * time.Second
 
 type h = map[string]interface{}
 
@@ -45,15 +63,22 @@ type chrome struct {
 	window   int
 	pending  map[int]chan result
 	bindings map[string]bindingFunc
+	done     chan struct{} // closed when the DevTools connection ends
+	doneOnce sync.Once
 }
 
-func newChromeWithArgs(chromeBinary string, args ...string) (*chrome, error) {
+func newChromeWithArgs(chromeBinary, userDataDir string, args ...string) (*chrome, error) {
 	// The first two IDs are used internally during the initialization
 	c := &chrome{
 		id:       2,
 		pending:  map[int]chan result{},
 		bindings: map[string]bindingFunc{},
+		done:     make(chan struct{}),
 	}
+
+	// A stale file from an earlier run would point at a dead port.
+	activePortFile := filepath.Join(userDataDir, "DevToolsActivePort")
+	_ = os.Remove(activePortFile)
 
 	// Start chrome process
 	c.cmd = exec.Command(chromeBinary, args...)
@@ -64,15 +89,13 @@ func newChromeWithArgs(chromeBinary string, args ...string) (*chrome, error) {
 	if err := c.cmd.Start(); err != nil {
 		return nil, err
 	}
+	go c.cmd.Wait()
 
-	// Wait for websocket address to be printed to stderr
-	re := regexp.MustCompile(`^DevTools listening on (ws://.*?)\r?\n$`)
-	m, err := readUntilMatch(pipe, re)
+	wsURL, err := waitForDevTools(pipe, activePortFile, devToolsTimeout)
 	if err != nil {
 		c.kill()
 		return nil, err
 	}
-	wsURL := m[1]
 
 	// Open a websocket
 	c.ws, err = websocket.Dial(wsURL, "", "http://127.0.0.1")
@@ -105,7 +128,6 @@ func newChromeWithArgs(chromeBinary string, args ...string) (*chrome, error) {
 	} {
 		if _, err := c.send(method, args); err != nil {
 			c.kill()
-			c.cmd.Wait()
 			return nil, err
 		}
 	}
@@ -251,6 +273,7 @@ type targetMessage struct {
 }
 
 func (c *chrome) readLoop() {
+	defer c.doneOnce.Do(func() { close(c.done) })
 	for {
 		m := msg{}
 		if err := websocket.JSON.Receive(c.ws, &m); err != nil {
@@ -505,28 +528,75 @@ func (c *chrome) png(x, y, width, height int, bg uint32, scale float32) ([]byte,
 
 func (c *chrome) kill() error {
 	if c.ws != nil {
-		if err := c.ws.Close(); err != nil {
-			return err
-		}
+		// The browser may be a relaunched process we don't own, so killing
+		// c.cmd alone would leave its window open. Ask it to close itself.
+		id := atomic.AddInt32(&c.id, 1)
+		_ = websocket.JSON.Send(c.ws, h{"id": int(id), "method": "Browser.close"})
+		_ = c.ws.Close()
 	}
 	// TODO: cancel all pending requests
-	if state := c.cmd.ProcessState; state == nil || !state.Exited() {
-		return c.cmd.Process.Kill()
+	if c.cmd.Process != nil {
+		_ = c.cmd.Process.Kill() // fails harmlessly if it already exited
 	}
 	return nil
 }
 
-func readUntilMatch(r io.ReadCloser, re *regexp.Regexp) ([]string, error) {
-	br := bufio.NewReader(r)
+// waitForDevTools returns the browser's DevTools websocket URL, read from
+// either the "DevTools listening on" stderr line or the DevToolsActivePort
+// file in the profile directory. Our process exiting (stderr EOF) is not an
+// error, since a relaunched browser still writes the file.
+func waitForDevTools(stderr io.ReadCloser, activePortFile string, timeout time.Duration) (string, error) {
+	found := make(chan string, 1)
+	go func() {
+		re := regexp.MustCompile(`^DevTools listening on (ws://.*?)\r?\n$`)
+		br := bufio.NewReader(stderr)
+		for {
+			line, err := br.ReadString('\n')
+			if err != nil {
+				stderr.Close()
+				return
+			}
+			if m := re.FindStringSubmatch(line); m != nil {
+				found <- m[1]
+				io.Copy(ioutil.Discard, br)
+				return
+			}
+		}
+	}()
+
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	deadline := time.After(timeout)
 	for {
-		if line, err := br.ReadString('\n'); err != nil {
-			r.Close()
-			return nil, err
-		} else if m := re.FindStringSubmatch(line); m != nil {
-			go io.Copy(ioutil.Discard, br)
-			return m, nil
+		select {
+		case u := <-found:
+			return u, nil
+		case <-tick.C:
+			if u, ok := readActivePortFile(activePortFile); ok {
+				return u, nil
+			}
+		case <-deadline:
+			return "", fmt.Errorf("DevTools endpoint not available within %s", timeout)
 		}
 	}
+}
+
+// readActivePortFile parses DevToolsActivePort ("<port>\n<path>") into a
+// websocket URL. It reports false until the browser has written both lines.
+func readActivePortFile(path string) (string, bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if len(lines) < 2 {
+		return "", false
+	}
+	port, wsPath := strings.TrimSpace(lines[0]), strings.TrimSpace(lines[1])
+	if port == "" || !strings.HasPrefix(wsPath, "/devtools/browser/") {
+		return "", false
+	}
+	return "ws://127.0.0.1:" + port + wsPath, true
 }
 
 func contains(arr []string, x string) bool {

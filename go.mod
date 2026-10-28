@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/getlantern/systray v1.2.2
 	github.com/gorilla/websocket v1.5.3
-	github.com/zserge/lorca v0.1.10
+	golang.org/x/net v0.0.0-20200222125558-5a598a2470a0
 	golang.org/x/text v0.24.0
 	modernc.org/sqlite v1.40.1
 )
@@ -25,7 +25,6 @@ require (
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/net v0.0.0-20200222125558-5a598a2470a0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
 	modernc.org/libc v1.66.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

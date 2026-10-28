@@ -1,3 +1,6 @@
+// Vendored from github.com/zserge/lorca v0.1.10 (MIT, see LICENSE).
+// Bridge-Ground changes are described in chrome.go.
+
 package lorca
 
 import (
@@ -78,17 +81,17 @@ func New(url, dir string, width, height int, customArgs ...string) (UI, error) {
 	args = append(args, customArgs...)
 	args = append(args, "--remote-debugging-port=0")
 
-	chrome, err := newChromeWithArgs(ChromeExecutable(), args...)
-	done := make(chan struct{})
+	chrome, err := newChromeWithArgs(ChromeExecutable(), dir, args...)
 	if err != nil {
+		if tmpDir != "" {
+			os.RemoveAll(tmpDir) // best effort; the browser may still hold files briefly
+		}
 		return nil, err
 	}
 
-	go func() {
-		chrome.cmd.Wait()
-		close(done)
-	}()
-	return &ui{chrome: chrome, done: done, tmpDir: tmpDir}, nil
+	// Bridge-Ground: done follows the DevTools connection rather than our
+	// process, which may exit right away when the browser relaunches itself.
+	return &ui{chrome: chrome, done: chrome.done, tmpDir: tmpDir}, nil
 }
 
 func (u *ui) Done() <-chan struct{} {

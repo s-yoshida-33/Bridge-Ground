@@ -6,6 +6,7 @@ import (
 	"bridge-ground/internal/config"
 	"bridge-ground/internal/db"
 	"bridge-ground/internal/logging"
+	"bridge-ground/internal/lorca"
 	"bridge-ground/internal/portal"
 	"bridge-ground/internal/server"
 	appSync "bridge-ground/internal/sync"
@@ -20,7 +21,6 @@ import (
 	"time"
 
 	"github.com/getlantern/systray"
-	"github.com/zserge/lorca"
 )
 
 // Globals
@@ -30,6 +30,7 @@ var (
 	dbMgr     *db.Manager
 	srv       *server.Server
 	ui        lorca.UI
+	uiOpening bool // true while openUI is starting a window; guarded by uiMutex
 	uiMutex   sync.Mutex
 )
 
@@ -203,18 +204,30 @@ func onExit() {
 	uiMutex.Unlock()
 }
 
+// openUI opens the settings window. uiMutex is not held while the browser
+// starts or the server is polled, so ui.Eval callers (sync progress) are not
+// blocked for the duration; uiOpening prevents concurrent opens instead.
 func openUI() {
 	uiMutex.Lock()
-	defer uiMutex.Unlock()
-
-	if ui != nil {
+	if ui != nil || uiOpening {
+		uiMutex.Unlock()
 		return
 	}
+	uiOpening = true
+	uiMutex.Unlock()
+	defer func() {
+		uiMutex.Lock()
+		uiOpening = false
+		uiMutex.Unlock()
+	}()
 
-	var err error
-	newUI, err := lorca.New("data:text/html,<h1>Loading BridgeGround...</h1>", "", 1000, 800, "--remote-allow-origins=*")
+	port := globalCfg.ServerSettings.Port
+	url := fmt.Sprintf("http://localhost:%d/index.html", port)
+
+	newUI, err := startLorca()
 	if err != nil {
-		logging.Error("UI", fmt.Sprintf("Failed to start Lorca (Chrome/Edge not found?): %v", err))
+		logging.Error("UI", fmt.Sprintf("Failed to start settings window, opening %s in the default browser instead: %v", url, err))
+		openInDefaultBrowser(url)
 		return
 	}
 
@@ -277,9 +290,6 @@ func openUI() {
 		return restartSelf()
 	})
 
-	port := globalCfg.ServerSettings.Port
-	url := fmt.Sprintf("http://localhost:%d/index.html", port)
-
 	if !waitForServer(url, 10*time.Second) {
 		logging.Warn("SERVER", fmt.Sprintf("Server did not respond within timeout at %s", url))
 	}
@@ -287,7 +297,9 @@ func openUI() {
 	newUI.Load(url)
 	logging.Info("UI", fmt.Sprintf("UI window opened: %s", url))
 
+	uiMutex.Lock()
 	ui = newUI
+	uiMutex.Unlock()
 
 	go func(u lorca.UI) {
 		<-u.Done()
@@ -298,6 +310,40 @@ func openUI() {
 		uiMutex.Unlock()
 		logging.Info("UI", "UI window closed")
 	}(newUI)
+}
+
+const (
+	lorcaStartAttempts   = 2
+	lorcaStartRetryDelay = 2 * time.Second
+)
+
+// startLorca launches the browser window, retrying once on failure. Edge
+// relaunching itself (formerly an EOF failure) is handled inside
+// internal/lorca, and each attempt may wait up to its DevTools timeout, so
+// attempts are kept low before falling back to the default browser.
+func startLorca() (lorca.UI, error) {
+	var err error
+	for attempt := 1; attempt <= lorcaStartAttempts; attempt++ {
+		var u lorca.UI
+		u, err = lorca.New("data:text/html,<h1>Loading BridgeGround...</h1>", "", 1000, 800, "--remote-allow-origins=*")
+		if err == nil {
+			return u, nil
+		}
+		logging.Warn("UI", fmt.Sprintf("Failed to start settings window (attempt %d/%d, browser=%q): %v",
+			attempt, lorcaStartAttempts, lorca.ChromeExecutable(), err))
+		if attempt < lorcaStartAttempts {
+			time.Sleep(lorcaStartRetryDelay)
+		}
+	}
+	return nil, err
+}
+
+// openInDefaultBrowser opens url with the user's default browser as a
+// fallback when the Lorca window cannot be started.
+func openInDefaultBrowser(url string) {
+	if err := exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start(); err != nil {
+		logging.Error("UI", fmt.Sprintf("Failed to open %s in the default browser: %v", url, err))
+	}
 }
 
 func waitForServer(url string, timeout time.Duration) bool {
